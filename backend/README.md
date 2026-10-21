@@ -5,13 +5,32 @@ Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `eas
 
 ## 本地启动
 
-必须显式选择 `dev` 或 `prod`，无默认运行环境。数据库密码不写入仓库。
+必须显式选择 `dev` 或 `prod`，无默认运行环境。选定环境后自动读取对应的 `.env.dev` 或 `.env.prod`，数据库密码不写入仓库。
 
 ```powershell
-# 在backend目录运行；将占位值替换为本机凭证。
-$env:DB_PASSWORD = '<数据库密码>'
+# 在 backend 目录首次配置；编辑 .env.dev，填写本机数据库密码。
+Copy-Item .env.dev.example .env.dev
+# 配置完成后直接启动，无需每次手动设置数据库密码环境变量。
 mvn spring-boot:run '-Dspring-boot.run.profiles=dev'
 ```
+
+IDEA 首次启动：将 `backend/pom.xml` 添加为 Maven 项目，使用 JDK 25；
+在 `BackendApplication` 的运行配置中设置 Program arguments 为 `--spring.profiles.active=dev`，保存后即可点击运行。
+Working directory 可以是仓库根目录或 `backend` 目录，环境文件统一放在 `backend` 内；不需要安装 EnvFile 插件。
+
+| 文件 | 用途 | 是否提交 |
+|---|---|---|
+| `.env.dev.example` | 开发环境配置模板 | 是 |
+| `.env.prod.example` | 生产环境配置模板 | 是 |
+| `.env.dev` | 本机开发连接和密码 | 否 |
+| `.env.prod` | 服务器生产连接和密码 | 否 |
+
+环境先由启动参数或系统环境变量 `SPRING_PROFILES_ACTIVE` 选择，再加载对应文件；不要在这些文件内设置运行环境。
+两种环境不会主动加载对方的文件。没有环境文件时，仍可只使用系统环境变量启动，适合容器部署。
+文件使用 Java Properties 语法：`KEY=value`，无需给值添加引号，不支持 `export` 或 shell 变量展开；
+反斜杠需写成双反斜杠，密码中的 `$`、`#`、`=` 可直接出现在值中，避免在值前后添加无意义空格。
+系统环境变量优先于文件中的同名变量。不要同时在仓库根目录和 `backend` 目录存放同一环境文件；两处都存在时后者优先。
+此方式使用 [Spring Boot 配置导入](https://docs.spring.io/spring-boot/reference/features/external-config.html)，文件中的键属于应用配置，不会写入操作系统环境变量。
 
 开发环境默认 MySQL `127.0.0.1:3306/easy_community`、用户名 `root`、Redis `127.0.0.1:6379`。
 可覆盖 `DB_URL / DB_USERNAME / DB_PASSWORD / REDIS_HOST / REDIS_PORT / REDIS_PASSWORD / SERVER_PORT`。
@@ -27,9 +46,8 @@ Maven测试对应参数为 `mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' 
 初始化事务使用SERIALIZABLE；并发初始化最多一笔成功，另一笔可能因冲突或死锁失败，不自动重试。
 
 ```powershell
-# 凭证通过环境变量传递，初始化完成后主动清除。
+# 数据库连接沿用 .env.dev；管理员初始凭证通过临时环境变量传递。
 mvn -DskipTests package
-$env:DB_PASSWORD = '<数据库密码>'
 $env:ADMIN_USERNAME = '<管理员用户名>'
 $env:ADMIN_PASSWORD = '<管理员初始密码>'
 java -jar target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --spring.main.web-application-type=none --app.bootstrap.enabled=true
@@ -132,6 +150,9 @@ Redis使用Spring Session默认序列化，运行实例使用一致应用版本�
 - `TRUSTED_PROXY_REGEX` 示例：仅Nginx为172.31.0.2时使用 `172\.31\.0\.2`；不得配置 `.*` 或信任所有私网。
 
 首次部署数据库需预先创建，生产应用账号只授予业务库所需权限；迁移与运行目前共享数据源。
+直接运行 JAR 时，在服务器工作目录中由 `.env.prod.example` 创建 `.env.prod` 并填写实际值，
+执行 `java -jar /path/to/backend.jar --spring.profiles.active=prod`。
+容器可以由部署工具将 `.env.prod` 注入为系统环境变量，或者只读挂载到容器工作目录的 `.env.prod`，不要将文件打入镜像。
 生产默认同源API，不配置通配CORS。未来真实跨站部署需要另行确认Cookie的SameSite及来源白名单。
 
 ## 验证
