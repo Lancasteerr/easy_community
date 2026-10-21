@@ -1,9 +1,15 @@
 package com.febrie.backend.config;
 
 import com.febrie.backend.auth.LocalAuthenticationProvider;
+import com.febrie.backend.auth.RequestLimits;
+import com.febrie.backend.auth.SecurityRequestFilter;
+import com.febrie.backend.auth.SessionService;
+import com.febrie.backend.auth.SessionValidation;
+import com.febrie.backend.common.DependencyBoundaryFilter;
 import com.febrie.backend.common.ApiException;
 import com.febrie.backend.common.ProblemResponses;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,6 +21,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.session.web.http.SessionRepositoryFilter;
 import org.springframework.session.web.http.DefaultCookieSerializer;
 
 /** Cookie会话必须启用CSRF，包括匿名可访问的登录接口。 */
@@ -46,8 +54,17 @@ public class SecurityConfiguration {
     }
 
     @Bean
+    FilterRegistrationBean<DependencyBoundaryFilter> dependencyBoundary(ProblemResponses problems) {
+        var registration = new FilterRegistrationBean<>(new DependencyBoundaryFilter(problems));
+        registration.setOrder(SessionRepositoryFilter.DEFAULT_ORDER - 1);
+        return registration;
+    }
+
+    @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, HttpSessionSecurityContextRepository contexts,
-            HttpSessionCsrfTokenRepository csrf, ProblemResponses problems) throws Exception {
+            HttpSessionCsrfTokenRepository csrf, ProblemResponses problems, RequestLimits limits,
+            SessionValidation validation, SessionService sessions, AuthProperties properties) throws Exception {
+        http.addFilterBefore(new SecurityRequestFilter(limits, validation, sessions, properties), CsrfFilter.class);
         http.securityContext(config -> config.securityContextRepository(contexts).requireExplicitSave(true))
                 .sessionManagement(config -> config.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .csrf(config -> config.csrfTokenRepository(csrf))
