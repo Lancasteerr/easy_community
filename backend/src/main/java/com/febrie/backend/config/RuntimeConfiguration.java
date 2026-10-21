@@ -23,7 +23,8 @@ public class RuntimeConfiguration {
         if (selected != 1 || !Arrays.asList(env.getActiveProfiles()).contains(properties.environment())) {
             throw new IllegalStateException("必须且只能显式选择dev、prod或test运行环境");
         }
-        if (!properties.redisPrefix().startsWith("ec:" + properties.environment())
+        String basePrefix = "ec:" + properties.environment();
+        if (!(properties.redisPrefix().equals(basePrefix) || properties.redisPrefix().startsWith(basePrefix + ":"))
                 || properties.sessionTtl().isNegative() || properties.sessionTtl().isZero()) {
             throw new IllegalStateException("Redis命名空间与环境不一致，或Session有效期无效");
         }
