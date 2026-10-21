@@ -71,10 +71,10 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!-- 使用 Spring Security 官方 JWT 支持，令牌签发与校验规则后续实现。 -->
+        <!-- 使用已确认的Spring官方Session Redis集成，由Boot统一管理版本。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+            <artifactId>spring-boot-starter-session-data-redis</artifactId>
         </dependency>
 
         <!-- 为后续登录状态、验证码与缓存提供 Redis 访问能力。 -->
