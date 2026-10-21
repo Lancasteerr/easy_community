@@ -1,7 +1,8 @@
 package com.febrie.backend.user.web;
 
-import com.febrie.backend.auth.SessionPrincipal;
-import com.febrie.backend.auth.SessionService;
+import com.febrie.backend.auth.application.dto.SessionPrincipal;
+import com.febrie.backend.auth.web.session.SessionService;
+import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.UserService;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.user.domain.Role;
@@ -9,6 +10,7 @@ import com.febrie.backend.user.web.request.CreateRequest;
 import com.febrie.backend.user.web.request.PasswordRequest;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -41,5 +43,16 @@ class UserControllerTests {
         controller.delete(principal, 99);
         verify(users).createManaged(actor, "bob", "password-123", Role.PATROLLER);
         verify(users).deleteManaged(actor, 99);
+    }
+
+    @Test
+    void rejectedPasswordChangeDoesNotLogOutCurrentSession() {
+        var users = mock(UserService.class);
+        var sessions = mock(SessionService.class);
+        doThrow(ApiException.unauthorized()).when(users).changePassword(actor, "old", "new");
+        assertThrows(ApiException.class, () -> new UserController(users, sessions).password(
+                principal, new PasswordRequest("old", "new"),
+                new MockHttpServletRequest(), new MockHttpServletResponse()));
+        verifyNoInteractions(sessions);
     }
 }

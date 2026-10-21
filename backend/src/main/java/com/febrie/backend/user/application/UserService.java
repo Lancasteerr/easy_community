@@ -1,6 +1,6 @@
 package com.febrie.backend.user.application;
 
-import com.febrie.backend.common.ApiException;
+import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.user.application.dto.UserView;
 import com.febrie.backend.user.domain.Role;

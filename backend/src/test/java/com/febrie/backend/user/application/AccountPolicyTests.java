@@ -1,6 +1,6 @@
 package com.febrie.backend.user.application;
 
-import com.febrie.backend.common.ApiException;
+import com.febrie.backend.shared.error.ApiException;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;

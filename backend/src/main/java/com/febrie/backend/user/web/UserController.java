@@ -1,7 +1,7 @@
 package com.febrie.backend.user.web;
 
-import com.febrie.backend.auth.SessionPrincipal;
-import com.febrie.backend.auth.SessionService;
+import com.febrie.backend.auth.application.dto.SessionPrincipal;
+import com.febrie.backend.auth.web.session.SessionService;
 import com.febrie.backend.user.application.UserService;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.user.application.dto.UserView;
@@ -30,7 +30,9 @@ public class UserController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void password(@AuthenticationPrincipal SessionPrincipal principal, @Valid @RequestBody PasswordRequest body,
                          HttpServletRequest request, HttpServletResponse response) {
-        users.changePassword(new UserActor(principal.userId(), principal.role(), principal.authVersion()), body.oldPassword(), body.newPassword());
+        // 用户服务只接收操作人所需字段，不依赖认证会话对象。
+        var actor = new UserActor(principal.userId(), principal.role(), principal.authVersion());
+        users.changePassword(actor, body.oldPassword(), body.newPassword());
         // SQL事务已提交，其余设备依靠版本比较失效；当前设备同时清除Cookie和成员。
         sessions.logout(request, response);
     }

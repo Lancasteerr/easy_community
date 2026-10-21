@@ -1,8 +1,11 @@
 package com.febrie.backend;
 
-import com.febrie.backend.auth.*;
-import com.febrie.backend.common.ApiException;
-import com.febrie.backend.config.AuthProperties;
+import com.febrie.backend.auth.application.SessionValidation;
+import com.febrie.backend.auth.application.dto.SessionPrincipal;
+import com.febrie.backend.auth.infrastructure.config.AuthProperties;
+import com.febrie.backend.auth.infrastructure.ratelimit.RequestLimits;
+import com.febrie.backend.auth.infrastructure.session.ActiveSessions;
+import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.UserService;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.user.application.dto.UserView;
@@ -127,11 +130,11 @@ class BackendApplicationTests {
         var one = new Browser(); one.login(view.username());
         var two = new Browser(); two.login(view.username());
         String oldId = one.sessionId();
-        var oldData = redis.opsForHash().entries(PREFIX + ":session:sessions:" + oldId);
+        var oldData = redis.opsForHash().entries(PREFIX + ":session:v2:sessions:" + oldId);
         assertEquals(204, one.call("POST", "/api/auth/logout", null).statusCode());
         // 模拟已通过鉴权的旧请求在退出后回写完整Hash，Set仍然拒绝它。
-        redis.opsForHash().putAll(PREFIX + ":session:sessions:" + oldId, oldData);
-        redis.expire(PREFIX + ":session:sessions:" + oldId, java.time.Duration.ofMinutes(2));
+        redis.opsForHash().putAll(PREFIX + ":session:v2:sessions:" + oldId, oldData);
+        redis.expire(PREFIX + ":session:v2:sessions:" + oldId, java.time.Duration.ofMinutes(2));
         assertThrows(ApiException.class, () -> validation.validate(principal(view, 1), oldId));
         assertEquals(200, two.call("GET", "/api/users/me", null).statusCode());
     }

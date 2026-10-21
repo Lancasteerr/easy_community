@@ -1,6 +1,6 @@
 package com.febrie.backend.user.web;
 
-import com.febrie.backend.auth.SessionPrincipal;
+import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.user.application.UserService;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.user.application.dto.UserView;
@@ -23,13 +23,16 @@ public class AdminUserController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public UserView create(@AuthenticationPrincipal SessionPrincipal principal, @Valid @RequestBody CreateRequest body) {
-        return users.createManaged(new UserActor(principal.userId(), principal.role(), principal.authVersion()), body.username(), body.password(), body.role());
+        // 操作人来自已经通过校验的认证身份，不能使用请求体提供的身份信息。
+        var actor = new UserActor(principal.userId(), principal.role(), principal.authVersion());
+        return users.createManaged(actor, body.username(), body.password(), body.role());
     }
 
     @DeleteMapping("/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable @Positive long userId) {
-        users.deleteManaged(new UserActor(principal.userId(), principal.role(), principal.authVersion()), userId);
+        var actor = new UserActor(principal.userId(), principal.role(), principal.authVersion());
+        users.deleteManaged(actor, userId);
     }
 
 }

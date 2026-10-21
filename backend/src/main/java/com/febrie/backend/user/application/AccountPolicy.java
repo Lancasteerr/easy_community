@@ -1,6 +1,6 @@
 package com.febrie.backend.user.application;
 
-import com.febrie.backend.common.ApiException;
+import com.febrie.backend.shared.error.ApiException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import org.springframework.http.HttpStatus;
