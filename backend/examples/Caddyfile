@@ -1,0 +1,11 @@
+# PUBLIC_HOST设置为实际域名；本例假设Caddy直接面向公网，无额外CDN。
+{$PUBLIC_HOST} {
+    reverse_proxy nginx:80 {
+        # 以Caddy实际连接来源重建代理信息，不接受客户端伪造的转发链。
+        header_up -Forwarded
+        header_up -X-Real-IP
+        header_up X-Forwarded-For {http.request.remote.host}
+        header_up X-Forwarded-Proto {http.request.scheme}
+        header_up X-Forwarded-Host {http.request.host}
+    }
+}
