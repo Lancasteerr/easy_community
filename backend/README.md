@@ -1,5 +1,7 @@
 # 社区后端：Session 登录与用户管理
 
+代码组织与包职责见架构文档：[简体中文](../docs/zh-CN/backend-architecture.md) · [English](../docs/en-US/backend-architecture.md)。
+
 Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `easy_community`，Flyway 自动建表。
 只新增已确认的官方 `spring-boot-starter-session-data-redis`，移除了 JWT Resource Server starter；无 Lua、第三方 JWT 或限流依赖。
 
@@ -116,7 +118,7 @@ SQL是账号状态和authVersion的唯一权威；`users`和`user_auth_identity`
 
 | Key | 类型 | 生命周期 |
 |---|---|---|
-| `ec:<env>:session:sessions:<sessionId>` | Hash | 框架会话；认证主体含userId、username、role、authVersion、authenticatedAt、expiresAt |
+| `ec:<env>:session:v2:sessions:<sessionId>` | Hash | 框架会话；认证主体含userId、username、role、authVersion、authenticatedAt、expiresAt |
 | 同Hash中的 `sessionAttr:auth.csrfToken` | 框架序列化属性 | 同Session，不另建CSRF副本 |
 | 同Hash中的 `sessionAttr:auth.expiresAt` | 毫秒时间戳属性 | 即使框架续TTL，也必须校验绝对到期 |
 | `ec:<env>:auth:user:<userId>:v:<version>:sessions` | Set | member=Session ID；仅登录SADD，TTL为2小时 |
@@ -129,6 +131,8 @@ Session存在、绝对未过期、SQL为ACTIVE、版本一致、Set包含Session
 迟到登录使用旧版本桶，无法进入新版本的权限范围；旧桶自然到期即可，不依赖批量删除成功。
 每10分钟SCAN/SSCAN分批清理不存在或绝对过期的成员，SCARD不代表精确在线人数。
 Redis使用Spring Session默认序列化，运行实例使用一致应用版本；Redis不得对不可信写入者开放。
+本次认证类型分包后，Session 命名空间切换为 `ec:<env>:session:v2`。升级时停止全部旧实例后统一启动新版本，
+浏览器重新获取 CSRF 并登录；旧会话自然过期，不清空共享 Redis。迁移及回滚注意事项见架构文档。
 无Lua；仅用普通原子命令及MULTI/EXEC保持计数/集合写入和TTL同事务。
 
 默认限流：CSRF 60次/IP/分钟，登录30次/IP/分钟，已登录请求120次/userId/分钟，
