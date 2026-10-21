@@ -1,4 +1,4 @@
-package com.febrie.backend.user;
+package com.febrie.backend.user.application;
 
 import com.febrie.backend.common.ApiException;
 import java.nio.charset.StandardCharsets;

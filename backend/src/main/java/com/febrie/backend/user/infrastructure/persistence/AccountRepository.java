@@ -1,5 +1,8 @@
-package com.febrie.backend.user;
+package com.febrie.backend.user.infrastructure.persistence;
 
+import com.febrie.backend.user.application.dto.AccountAuthState;
+import com.febrie.backend.user.application.dto.AccountSnapshot;
+import com.febrie.backend.user.domain.Role;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.Optional;
@@ -31,9 +34,9 @@ public class AccountRepository {
     }
 
     /** 每次鉴权使用独立主库读取，不加载密码或重新读取角色。 */
-    public Optional<AuthState> authState(long userId) {
+    public Optional<AccountAuthState> authState(long userId) {
         return jdbc.query("SELECT status, auth_version FROM users WHERE id=?",
-                (rs, row) -> new AuthState(rs.getString(1), rs.getLong(2)), userId).stream().findFirst();
+                (rs, row) -> new AccountAuthState(rs.getString(1), rs.getLong(2)), userId).stream().findFirst();
     }
 
     public long insert(String username, Role role, String hash) {
@@ -69,5 +72,4 @@ public class AccountRepository {
         return !jdbc.queryForList("SELECT id FROM users WHERE role='ADMIN' LIMIT 1", Long.class).isEmpty();
     }
 
-    public record AuthState(String status, long authVersion) { }
 }

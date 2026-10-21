@@ -3,7 +3,11 @@ package com.febrie.backend;
 import com.febrie.backend.auth.*;
 import com.febrie.backend.common.ApiException;
 import com.febrie.backend.config.AuthProperties;
-import com.febrie.backend.user.*;
+import com.febrie.backend.user.application.UserService;
+import com.febrie.backend.user.application.dto.UserActor;
+import com.febrie.backend.user.application.dto.UserView;
+import com.febrie.backend.user.domain.Role;
+import com.febrie.backend.user.infrastructure.persistence.AccountRepository;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.URI;
@@ -30,6 +34,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /** 真MySQL、Redis、HTTP测试；只清理本次创建的账号和随机命名空间。 */
@@ -197,7 +202,7 @@ class BackendApplicationTests {
                 return principal;
             });
             assertTrue(snapshotReady.await(10, TimeUnit.SECONDS));
-            users.changePassword(principal(view, 1), PASSWORD, "updated-password-456");
+            users.changePassword(actor(principal(view, 1)), PASSWORD, "updated-password-456");
             changed.countDown();
             assertEquals(1, lateLogin.get(10, TimeUnit.SECONDS).authVersion());
             assertEquals(2, accounts.authState(Long.parseLong(view.userId())).orElseThrow().authVersion());
@@ -267,7 +272,7 @@ class BackendApplicationTests {
             for (int i = 0; i < 2; i++) {
                 futures.add(executor.submit(() -> {
                     start.await();
-                    try { return users.createManaged(admin, username.toUpperCase(), PASSWORD, Role.USER); }
+                    try { return users.createManaged(actor(admin), username.toUpperCase(), PASSWORD, Role.USER); }
                     catch (ApiException duplicate) { assertEquals(409, duplicate.status().value()); return null; }
                 }));
             }
@@ -298,11 +303,16 @@ class BackendApplicationTests {
     }
 
     private UserView create(Role role) {
-        var view = users.createManaged(admin, name(), PASSWORD, role);
+        var view = users.createManaged(actor(admin), name(), PASSWORD, role);
         created.add(Long.parseLong(view.userId())); return view;
     }
 
     static String name() { return "it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20); }
+
+    /** 从测试认证身份提取用户服务所需的信息，不向服务传入会话对象。 */
+    static UserActor actor(SessionPrincipal principal) {
+        return new UserActor(principal.userId(), principal.role(), principal.authVersion());
+    }
 
     static SessionPrincipal principal(UserView view, long version) {
         var now = Instant.now();

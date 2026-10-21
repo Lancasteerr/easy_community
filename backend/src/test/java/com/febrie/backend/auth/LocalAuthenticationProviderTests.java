@@ -1,9 +1,9 @@
 package com.febrie.backend.auth;
 
 import com.febrie.backend.config.AuthProperties;
-import com.febrie.backend.user.AccountRepository;
-import com.febrie.backend.user.AccountSnapshot;
-import com.febrie.backend.user.Role;
+import com.febrie.backend.user.application.AccountQueryService;
+import com.febrie.backend.user.application.dto.AccountSnapshot;
+import com.febrie.backend.user.domain.Role;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -20,7 +21,7 @@ import static org.mockito.Mockito.*;
 class LocalAuthenticationProviderTests {
     @Test
     void preservesSnapshotAndNeverCarriesPasswordIntoPrincipal() {
-        var accounts = mock(AccountRepository.class);
+        var accounts = mock(AccountQueryService.class);
         var encoder = mock(PasswordEncoder.class);
         when(encoder.encode(anyString())).thenReturn("dummy");
         when(encoder.matches("password", "secret-hash")).thenReturn(true);
@@ -43,7 +44,7 @@ class LocalAuthenticationProviderTests {
 
     @Test
     void unknownAccountStillVerifiesDummyHash() {
-        var accounts = mock(AccountRepository.class);
+        var accounts = mock(AccountQueryService.class);
         var encoder = mock(PasswordEncoder.class);
         when(encoder.encode(anyString())).thenReturn("dummy-hash");
         when(accounts.findByUsername("missing")).thenReturn(Optional.empty());

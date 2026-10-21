@@ -1,6 +1,6 @@
-package com.febrie.backend.config;
+package com.febrie.backend.user.infrastructure.bootstrap;
 
-import com.febrie.backend.user.UserService;
+import com.febrie.backend.user.application.UserService;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

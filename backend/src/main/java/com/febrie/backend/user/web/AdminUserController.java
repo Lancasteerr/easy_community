@@ -1,10 +1,12 @@
-package com.febrie.backend.user;
+package com.febrie.backend.user.web;
 
 import com.febrie.backend.auth.SessionPrincipal;
+import com.febrie.backend.user.application.UserService;
+import com.febrie.backend.user.application.dto.UserActor;
+import com.febrie.backend.user.application.dto.UserView;
+import com.febrie.backend.user.web.request.CreateRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.Size;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,18 +23,13 @@ public class AdminUserController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public UserView create(@AuthenticationPrincipal SessionPrincipal principal, @Valid @RequestBody CreateRequest body) {
-        return users.createManaged(principal, body.username(), body.password(), body.role());
+        return users.createManaged(new UserActor(principal.userId(), principal.role(), principal.authVersion()), body.username(), body.password(), body.role());
     }
 
     @DeleteMapping("/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable @Positive long userId) {
-        users.deleteManaged(principal, userId);
+        users.deleteManaged(new UserActor(principal.userId(), principal.role(), principal.authVersion()), userId);
     }
 
-    public record CreateRequest(@NotBlank @Size(max = 128) String username,
-                                @NotBlank @Size(max = 256) String password, Role role) {
-        @Override
-        public String toString() { return "CreateRequest[credentials=REDACTED]"; }
-    }
 }

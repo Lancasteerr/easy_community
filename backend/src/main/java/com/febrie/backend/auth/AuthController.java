@@ -1,8 +1,8 @@
 package com.febrie.backend.auth;
 
 import com.febrie.backend.common.ApiException;
-import com.febrie.backend.user.AccountPolicy;
-import com.febrie.backend.user.UserView;
+import com.febrie.backend.user.application.AccountPolicy;
+import com.febrie.backend.user.application.dto.UserView;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;

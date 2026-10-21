@@ -1,7 +1,7 @@
 package com.febrie.backend.auth;
 
 import com.febrie.backend.config.AuthProperties;
-import com.febrie.backend.user.AccountRepository;
+import com.febrie.backend.user.application.AccountQueryService;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.List;
@@ -16,13 +16,13 @@ import org.springframework.stereotype.Component;
 /** 密码、角色和版本取自同一SQL快照，后续创建Session不可重新读取版本。 */
 @Component
 public class LocalAuthenticationProvider implements AuthenticationProvider {
-    private final AccountRepository accounts;
+    private final AccountQueryService accounts;
     private final PasswordEncoder encoder;
     private final Clock clock;
     private final AuthProperties properties;
     private final String dummyHash;
 
-    public LocalAuthenticationProvider(AccountRepository accounts, PasswordEncoder encoder,
+    public LocalAuthenticationProvider(AccountQueryService accounts, PasswordEncoder encoder,
                                        Clock clock, AuthProperties properties) {
         this.accounts = accounts;
         this.encoder = encoder;

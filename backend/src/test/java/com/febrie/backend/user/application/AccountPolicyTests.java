@@ -1,7 +1,8 @@
-package com.febrie.backend.user;
+package com.febrie.backend.user.application;
 
 import com.febrie.backend.common.ApiException;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /** 覆盖用户名规范化和BCrypt字节边界，防止隐式截断密码。 */

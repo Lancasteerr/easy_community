@@ -1,7 +1,7 @@
 package com.febrie.backend.auth;
 
 import com.febrie.backend.common.ApiException;
-import com.febrie.backend.user.AccountRepository;
+import com.febrie.backend.user.application.AccountQueryService;
 import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.stereotype.Service;
@@ -10,11 +10,11 @@ import org.springframework.stereotype.Service;
 @Service
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class SessionValidation {
-    private final AccountRepository accounts;
+    private final AccountQueryService accounts;
     private final ActiveSessions sessions;
     private final Clock clock;
 
-    public SessionValidation(AccountRepository accounts, ActiveSessions sessions, Clock clock) {
+    public SessionValidation(AccountQueryService accounts, ActiveSessions sessions, Clock clock) {
         this.accounts = accounts;
         this.sessions = sessions;
         this.clock = clock;

@@ -1,7 +1,7 @@
 package com.febrie.backend.auth;
 
-import com.febrie.backend.user.Role;
-import com.febrie.backend.user.UserView;
+import com.febrie.backend.user.application.dto.UserView;
+import com.febrie.backend.user.domain.Role;
 import java.io.Serializable;
 import java.security.Principal;
 import java.time.Instant;

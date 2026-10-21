@@ -1,7 +1,10 @@
-package com.febrie.backend.user;
+package com.febrie.backend.user.application;
 
-import com.febrie.backend.auth.SessionPrincipal;
 import com.febrie.backend.common.ApiException;
+import com.febrie.backend.user.application.dto.UserActor;
+import com.febrie.backend.user.application.dto.UserView;
+import com.febrie.backend.user.domain.Role;
+import com.febrie.backend.user.infrastructure.persistence.AccountRepository;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,7 +21,7 @@ public class UserService {
     public UserService(AccountRepository accounts, PasswordEncoder encoder) { this.accounts = accounts; this.encoder = encoder; }
 
     @Transactional
-    public UserView createManaged(SessionPrincipal actor, String username, String password, Role role) {
+    public UserView createManaged(UserActor actor, String username, String password, Role role) {
         requireAdmin(actor);
         Role selected = role == null ? Role.USER : role;
         if (selected == Role.ADMIN) { throw forbidden("本接口不能创建管理员"); }
@@ -46,7 +49,7 @@ public class UserService {
     }
 
     @Transactional
-    public void changePassword(SessionPrincipal actor, String oldPassword, String newPassword) {
+    public void changePassword(UserActor actor, String oldPassword, String newPassword) {
         AccountPolicy.password(newPassword);
         var account = accounts.lockById(actor.userId()).orElseThrow(ApiException::unauthorized);
         if (!"ACTIVE".equals(account.status()) || account.authVersion() != actor.authVersion()) {
@@ -64,7 +67,7 @@ public class UserService {
     }
 
     @Transactional
-    public void deleteManaged(SessionPrincipal actor, long userId) {
+    public void deleteManaged(UserActor actor, long userId) {
         requireAdmin(actor);
         var account = accounts.lockById(userId).orElseThrow(() ->
                 new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
@@ -80,7 +83,7 @@ public class UserService {
         accounts.updateRole(userId, role);
     }
 
-    private static void requireAdmin(SessionPrincipal principal) {
+    private static void requireAdmin(UserActor principal) {
         if (principal == null || principal.role() != Role.ADMIN) { throw forbidden("仅管理员可执行此操作"); }
     }
 

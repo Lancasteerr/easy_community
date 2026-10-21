@@ -1,12 +1,14 @@
-package com.febrie.backend.user;
+package com.febrie.backend.user.web;
 
 import com.febrie.backend.auth.SessionPrincipal;
 import com.febrie.backend.auth.SessionService;
+import com.febrie.backend.user.application.UserService;
+import com.febrie.backend.user.application.dto.UserActor;
+import com.febrie.backend.user.application.dto.UserView;
+import com.febrie.backend.user.web.request.PasswordRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -28,14 +30,9 @@ public class UserController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void password(@AuthenticationPrincipal SessionPrincipal principal, @Valid @RequestBody PasswordRequest body,
                          HttpServletRequest request, HttpServletResponse response) {
-        users.changePassword(principal, body.oldPassword(), body.newPassword());
+        users.changePassword(new UserActor(principal.userId(), principal.role(), principal.authVersion()), body.oldPassword(), body.newPassword());
         // SQL事务已提交，其余设备依靠版本比较失效；当前设备同时清除Cookie和成员。
         sessions.logout(request, response);
     }
 
-    public record PasswordRequest(@NotBlank @Size(max = 256) String oldPassword,
-                                  @NotBlank @Size(max = 256) String newPassword) {
-        @Override
-        public String toString() { return "PasswordRequest[credentials=REDACTED]"; }
-    }
 }
