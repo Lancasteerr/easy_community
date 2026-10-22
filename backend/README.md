@@ -92,7 +92,9 @@ if (login.ok) csrf = await fetch('/api/auth/csrf').then(r => r.json());
 
 ADMIN只允许创建/删除USER和PATROLLER；role省略默认USER，不能通过该接口创建或删除ADMIN。
 PATROLLER目前没有用户管理权限，巡查权限留待内容模块。每用户单角色，不提供修改角色的HTTP接口。
-用户名去首尾空白、转小写，必须匹配 `[a-z0-9_]{4,32}`，创建后不可修改；删除后仍保留唯一性。
+用户名去首尾空白、保留大小写，必须匹配 `[A-Za-z0-9_]{4,32}`，创建后不可修改；创建判重和登录均区分大小写。
+`Alice_1` 与 `alice_1` 可以是两个独立账号，登录必须匹配实际大小写；删除后原用户名仍不可复用。
+用户名大小写规则直接更新 V1 建表定义中的注释，按新建数据库使用，不提供旧数据迁移或已有 Flyway 记录的兼容处理。
 userId为不可修改的自增BIGINT，JSON中使用字符串。密码至少8个Unicode字符，UTF-8最多72字节，使用强度12的BCrypt，不截断、不去空白。
 
 错误采用 `application/problem+json`，带稳定 `code`：
@@ -136,7 +138,8 @@ Redis使用Spring Session默认序列化，运行实例使用一致应用版本�
 无Lua；仅用普通原子命令及MULTI/EXEC保持计数/集合写入和TTL同事务。
 
 默认限流：CSRF 60次/IP/分钟，登录30次/IP/分钟，已登录请求120次/userId/分钟，
-认证失败5次/账号/15分钟及30次/IP/15分钟。成功登录不清空失败计数，不撤回已进入认证的并发请求。
+认证失败5次/账号/15分钟及30次/IP/15分钟。账号失败计数使用去首尾空白且保留大小写的用户名，大小写不同的账号分别计数，IP 限流仍共享。
+成功登录不清空失败计数，不撤回已进入认证的并发请求。
 固定窗口存在跨窗口边界突发，不宣称是滑动窗口或令牌桶算法。
 覆盖变量为 `AUTH_CSRF_PER_MINUTE / AUTH_LOGIN_PER_MINUTE / AUTH_USER_PER_MINUTE / AUTH_ACCOUNT_FAILURES / AUTH_IP_FAILURES`，均须大于零。
 

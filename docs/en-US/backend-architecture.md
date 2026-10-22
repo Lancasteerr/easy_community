@@ -64,12 +64,14 @@ Read repeated names with their parent packages: `auth.web.session` handles HTTP 
 
 1. `SecurityRequestFilter` limits login requests before CSRF processing. It reads only the client IP already processed by the servlet container.
 2. `AuthController` passes the username, original password, and client IP to `AuthService`.
-3. `AuthService` normalizes the username, checks failure limits, and calls the Spring Security authentication manager. Only authentication failures increment the failure counters; database and Redis failures propagate.
+3. `AuthService` trims leading and trailing username whitespace while preserving case, checks failure limits, and calls the Spring Security authentication manager. Only authentication failures increment the failure counters; database and Redis failures propagate.
 4. `LocalAuthenticationProvider` calls the user module through `AccountQueryService`. A single JOIN reads the password hash, role, status, and security version. A missing account still causes one password hash comparison.
 5. After successful authentication, `SessionService` rotates the HTTP session, immediately saves the authentication snapshot, and then registers its Redis set membership. The controller returns user information without credentials.
 6. For subsequent protected requests, `SessionValidation` checks the absolute expiry, primary database account status, security version, and set membership. It neither reloads roles nor upgrades session versions.
 
-`AccountSnapshot` contains a password hash. It is for internal authentication only and must never become an HTTP response or a Session attribute. `SessionPrincipal` contains the identity and expiry fixed at login, without a password. HTTP user information uses `UserView`, with user IDs represented as strings.
+`AccountPolicy` validates usernames against `[A-Za-z0-9_]{4,32}`. User creation, administrator bootstrap, and login all preserve case. `Alice_1` and `alice_1` are independent accounts; the existing `utf8mb4_bin` collation on username and local identity fields makes lookups and unique constraints case-sensitive. Account failure counters use the trimmed, case-preserved username, while IP limits remain shared. This change updates V1 schema comments directly for new databases; it provides no migration or compatibility handling for existing data or Flyway history.
+
+`AccountSnapshot` contains a password hash. It is for internal authentication only and must never become an HTTP response or a Session attribute. `SessionPrincipal` contains the identity and expiry fixed at login, without a password. HTTP user information uses `UserView`, with user IDs represented as strings and usernames preserving their stored case.
 
 ### User Changes and Session Cleanup
 

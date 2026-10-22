@@ -64,12 +64,14 @@ backend
 
 1. `SecurityRequestFilter` 在 CSRF 检查前限制登录入口的请求频率，只读取容器处理后的客户端 IP。
 2. `AuthController` 接收参数，将用户名、原始密码和 IP 交给 `AuthService`。
-3. `AuthService` 规范化用户名、检查失败次数，再调用 Spring Security 的认证管理器。仅认证失败增加失败计数，数据库或 Redis 故障继续向外传播。
+3. `AuthService` 去除用户名首尾空白并保留大小写、检查失败次数，再调用 Spring Security 的认证管理器。仅认证失败增加失败计数，数据库或 Redis 故障继续向外传播。
 4. `LocalAuthenticationProvider` 通过 `AccountQueryService` 调用用户模块；用户模块使用一次 JOIN 读取密码哈希、角色、状态和安全版本。账号不存在时仍执行一次密码哈希匹配。
 5. 验证成功后，`SessionService` 轮换 HTTP 会话，立即保存认证快照，再登记 Redis 集合成员。Controller 返回不含凭证的用户信息。
 6. 后续受保护请求由 `SessionValidation` 检查绝对到期时间、主库账户状态、安全版本及集合成员资格，不重新加载角色，也不自动升级会话版本。
 
-`AccountSnapshot` 含密码哈希，只能用于内部认证，不能作为 HTTP 响应或写入 Session。`SessionPrincipal` 保存登录时确定的身份和到期时间，不包含密码。HTTP 用户信息使用 `UserView`，用户 ID 保持字符串。
+用户名由 `AccountPolicy` 统一校验为 `[A-Za-z0-9_]{4,32}`，创建、管理员初始化和登录均保留大小写。`Alice_1` 与 `alice_1` 是独立账号，查询和唯一约束由用户名及本地身份标识字段现有的 `utf8mb4_bin` 排序规则保证大小写区分。账号失败计数使用去首尾空白后保留大小写的用户名，IP 限流仍共享。此次直接更新 V1 建表注释，按新建数据库使用，不提供旧数据或已有 Flyway 记录的兼容处理。
+
+`AccountSnapshot` 含密码哈希，只能用于内部认证，不能作为 HTTP 响应或写入 Session。`SessionPrincipal` 保存登录时确定的身份和到期时间，不包含密码。HTTP 用户信息使用 `UserView`，用户 ID 保持字符串，用户名保留账号实际大小写。
 
 ### 用户修改和会话清理
 
