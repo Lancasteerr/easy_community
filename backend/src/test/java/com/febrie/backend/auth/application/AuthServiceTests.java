@@ -3,6 +3,8 @@ package com.febrie.backend.auth.application;
 import com.febrie.backend.auth.infrastructure.ratelimit.RequestLimits;
 import com.febrie.backend.shared.error.ApiException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
@@ -14,38 +16,41 @@ import org.springframework.security.core.Authentication;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/** 登录流程提取后仍保持校验顺序、密码原值及认证失败的计数语义。 */
+/** 登录保持用户名大小写、校验顺序、密码原值及认证失败的计数语义。 */
 class AuthServiceTests {
     private final AuthenticationManager manager = mock(AuthenticationManager.class);
     private final RequestLimits limits = mock(RequestLimits.class);
     private final AuthService service = new AuthService(manager, limits);
 
-    @Test
-    void normalizesUsernameAndChecksLimitsBeforeAuthentication() {
-        var authenticated = UsernamePasswordAuthenticationToken.authenticated("alice", null, java.util.List.of());
+    @ParameterizedTest
+    @ValueSource(strings = {"Alice", "alice", "ALICE_1"})
+    void preservesUsernameCaseAndChecksLimitsBeforeAuthentication(String username) {
+        var authenticated = UsernamePasswordAuthenticationToken.authenticated(username, null, java.util.List.of());
         when(manager.authenticate(any())).thenReturn(authenticated);
-        assertSame(authenticated, service.authenticate(" Alice ", " password ", "127.0.0.1"));
+        assertSame(authenticated, service.authenticate(" " + username + " ", " password ", "127.0.0.1"));
         var order = inOrder(limits, manager);
-        order.verify(limits).checkFailures("alice", "127.0.0.1");
+        order.verify(limits).checkFailures(username, "127.0.0.1");
         var request = ArgumentCaptor.forClass(Authentication.class);
         order.verify(manager).authenticate(request.capture());
-        assertEquals("alice", request.getValue().getName());
+        assertEquals(username, request.getValue().getName());
         assertEquals(" password ", request.getValue().getCredentials());
         verify(limits, never()).failed(anyString(), anyString());
     }
 
-    @Test
-    void countsAuthenticationFailureAndReturnsStablePublicError() {
+    @ParameterizedTest
+    @ValueSource(strings = {"Alice", "alice", "ALICE_1"})
+    void countsAuthenticationFailureAndReturnsStablePublicError(String username) {
         when(manager.authenticate(any())).thenThrow(new BadCredentialsException("internal detail"));
         var error = assertThrows(ApiException.class,
-                () -> service.authenticate(" Alice ", "wrong", "127.0.0.1"));
+                () -> service.authenticate(" " + username + " ", "wrong", "127.0.0.1"));
         assertEquals(HttpStatus.UNAUTHORIZED, error.status());
         assertEquals("INVALID_CREDENTIALS", error.code());
         assertFalse(error.getMessage().contains("internal detail"));
         var order = inOrder(limits, manager);
-        order.verify(limits).checkFailures("alice", "127.0.0.1");
+        // 大小写变体分别使用各自的账号计数，不能被合并到小写用户名。
+        order.verify(limits).checkFailures(username, "127.0.0.1");
         order.verify(manager).authenticate(any());
-        order.verify(limits).failed("alice", "127.0.0.1");
+        order.verify(limits).failed(username, "127.0.0.1");
     }
 
     @Test

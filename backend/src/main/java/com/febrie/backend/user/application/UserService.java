@@ -37,12 +37,13 @@ public class UserService {
         return create(username, password, Role.ADMIN);
     }
 
+    /** 管理员初始化与用户创建共享规则，入库及返回的用户名均保留大小写。 */
     private UserView create(String username, String password, Role role) {
-        String normalized = AccountPolicy.username(username);
+        String trimmedUsername = AccountPolicy.username(username);
         AccountPolicy.password(password);
         try {
-            long userId = accounts.insert(normalized, role, encoder.encode(password));
-            return new UserView(Long.toString(userId), normalized, role);
+            long userId = accounts.insert(trimmedUsername, role, encoder.encode(password));
+            return new UserView(Long.toString(userId), trimmedUsername, role);
         } catch (DuplicateKeyException duplicate) {
             throw new ApiException(HttpStatus.CONFLICT, "USERNAME_EXISTS", "用户名已被使用");
         }

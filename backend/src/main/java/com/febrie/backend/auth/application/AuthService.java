@@ -23,15 +23,15 @@ public class AuthService {
         this.limits = limits;
     }
 
-    /** 密码保持原样；仅认证失败增加次数，数据库或 Redis 故障继续向外传播。 */
+    /** 用户名去首尾空白并保留大小写，密码保持原样；仅认证失败增加对应账号的次数。 */
     public Authentication authenticate(String username, String password, String ip) {
-        String normalized = AccountPolicy.username(username);
-        limits.checkFailures(normalized, ip);
+        String trimmedUsername = AccountPolicy.username(username);
+        limits.checkFailures(trimmedUsername, ip);
         try {
             return authenticationManager.authenticate(
-                    UsernamePasswordAuthenticationToken.unauthenticated(normalized, password));
+                    UsernamePasswordAuthenticationToken.unauthenticated(trimmedUsername, password));
         } catch (AuthenticationException error) {
-            limits.failed(normalized, ip);
+            limits.failed(trimmedUsername, ip);
             throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "用户名或密码错误");
         }
     }

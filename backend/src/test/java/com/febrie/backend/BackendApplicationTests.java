@@ -92,7 +92,7 @@ class BackendApplicationTests {
         var browser = new Browser(); browser.csrf();
         String anonymousId = browser.sessionId();
         String oldCsrf = browser.token;
-        assertEquals(200, browser.call("POST", "/api/auth/login", Map.of("username", view.username().toUpperCase(), "password", PASSWORD)).statusCode());
+        assertEquals(200, browser.call("POST", "/api/auth/login", Map.of("username", view.username(), "password", PASSWORD)).statusCode());
         assertNotEquals(anonymousId, browser.sessionId());
         assertNull(repository.findById(anonymousId));
         Session stored = repository.findById(browser.sessionId());
@@ -174,10 +174,10 @@ class BackendApplicationTests {
     }
 
     @Test
-    void administratorCreatesDefaultRoleAndRejectsNormalizedDuplicate() throws Exception {
+    void administratorCreatesDefaultRoleAndRejectsExactDuplicate() throws Exception {
         var operator = new Browser(); operator.login(admin.username());
-        String username = name();
-        var response = operator.call("POST", "/api/admin/users", Map.of("username", " " + username.toUpperCase() + " ", "password", PASSWORD));
+        String username = name().toUpperCase(Locale.ROOT);
+        var response = operator.call("POST", "/api/admin/users", Map.of("username", " " + username + " ", "password", PASSWORD));
         assertEquals(201, response.statusCode(), response.body());
         long id = mapper.readTree(response.body()).path("userId").asLong(); created.add(id);
         assertEquals("USER", mapper.readTree(response.body()).path("role").asText());
@@ -267,15 +267,15 @@ class BackendApplicationTests {
     }
 
     @Test
-    void concurrentNormalizedCreationCommitsOnlyOneUserAndIdentity() throws Exception {
-        String username = name();
+    void concurrentExactCreationCommitsOnlyOneUserAndIdentity() throws Exception {
+        String username = name().toUpperCase(Locale.ROOT);
         var start = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
             var futures = new ArrayList<Future<UserView>>();
             for (int i = 0; i < 2; i++) {
                 futures.add(executor.submit(() -> {
                     start.await();
-                    try { return users.createManaged(actor(admin), username.toUpperCase(), PASSWORD, Role.USER); }
+                    try { return users.createManaged(actor(admin), username, PASSWORD, Role.USER); }
                     catch (ApiException duplicate) { assertEquals(409, duplicate.status().value()); return null; }
                 }));
             }

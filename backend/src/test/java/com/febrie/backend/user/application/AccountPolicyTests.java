@@ -5,13 +5,30 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** 覆盖用户名规范化和BCrypt字节边界，防止隐式截断密码。 */
+/** 覆盖用户名大小写、空白和长度规则，以及BCrypt字节边界，防止隐式截断密码。 */
 class AccountPolicyTests {
     @Test
-    void normalizesUsernameAndRejectsUnsupportedCharacters() {
-        assertEquals("alice_1", AccountPolicy.username("  ALIce_1  "));
-        assertThrows(ApiException.class, () -> AccountPolicy.username("中文用户名"));
-        assertThrows(ApiException.class, () -> AccountPolicy.username("abc"));
+    void trimsUsernameAndPreservesCase() {
+        assertEquals("ALIce_1", AccountPolicy.username("  ALIce_1  "));
+        assertEquals("alice_1", AccountPolicy.username("alice_1"));
+        assertEquals("ALICE_1", AccountPolicy.username("ALICE_1"));
+    }
+
+    @Test
+    void acceptsUsernameLengthBoundaries() {
+        assertEquals("Aa0_", AccountPolicy.username("Aa0_"));
+        String maximum = "Aa0_".repeat(8);
+        assertEquals(maximum, AccountPolicy.username(maximum));
+    }
+
+    @Test
+    void rejectsMissingOutOfRangeAndUnsupportedUsernames() {
+        // 内部空白、非英文字符及越界长度均返回稳定的用户名错误码。
+        for (String invalid : new String[]{null, "", "   ", "abc", "a".repeat(33),
+                "中文用户名", "alice bob", "alice\tbob", "alice-bob", "alice.bob", "Ａlice", "alice!"}) {
+            var error = assertThrows(ApiException.class, () -> AccountPolicy.username(invalid));
+            assertEquals("INVALID_USERNAME", error.code());
+        }
     }
 
     @Test
