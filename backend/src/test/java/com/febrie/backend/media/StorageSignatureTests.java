@@ -2,6 +2,9 @@ package com.febrie.backend.media;
 
 import com.febrie.backend.media.infrastructure.config.MediaProperties;
 import com.febrie.backend.media.infrastructure.storage.MinioStorageProvider;
+import com.febrie.backend.media.infrastructure.storage.CosStorageProvider;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
@@ -36,5 +39,17 @@ class StorageSignatureTests {
         assertThrows(IllegalArgumentException.class, () -> new MediaProperties("minio", properties.endpoint(),
                 properties.uploadEndpoint(), "us-east-1", "test", "key", "secret", "../prod", properties.publicBaseUrl()));
         assertEquals("https://images.example.com/ec/test/public/a.png", properties.publicUrl("ec/test/public/a.png"));
+    }
+
+    @Test
+    void cosSignsNativeConditionHostAndContentType() {
+        try (var provider = new CosStorageProvider(properties("cos"))) {
+            var grant = provider.authorizeUpload("media-test", "ec/test/temp/test", "image/png", Instant.now().plusSeconds(300));
+            assertEquals("PUT", grant.method());
+            assertEquals("true", grant.headers().get("x-cos-forbid-overwrite"));
+            String query = URLDecoder.decode(URI.create(grant.url()).getRawQuery(), StandardCharsets.UTF_8);
+            assertTrue(query.contains("q-header-list=content-type;host;x-cos-forbid-overwrite"));
+            assertEquals("image/png", grant.headers().get("Content-Type"));
+        }
     }
 }

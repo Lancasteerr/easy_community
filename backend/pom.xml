@@ -34,6 +34,12 @@
         <aws-sdk.version>2.57.3</aws-sdk.version>
     </properties>
     <dependencies>
+        <!-- COS原生防覆盖头与签名规则由官方SDK处理，不假设与S3完全一致。 -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>cos_api</artifactId>
+            <version>5.6.283</version>
+        </dependency>
         <!-- MinIO适配器通过S3条件写入生成必须携带防覆盖头的PUT授权。 -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
