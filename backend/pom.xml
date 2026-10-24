@@ -30,8 +30,16 @@
         <java.version>25</java.version>
         <!-- 统一 MyBatis-Plus 主组件与分页解析组件的版本，避免组件版本不一致。 -->
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
+        <!-- 固定SDK版本，MinIO仅使用标准S3客户端和签名器，不引入第二套S3依赖。 -->
+        <aws-sdk.version>2.57.3</aws-sdk.version>
     </properties>
     <dependencies>
+        <!-- MinIO适配器通过S3条件写入生成必须携带防覆盖头的PUT授权。 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws-sdk.version}</version>
+        </dependency>
         <!-- 提供基于 Servlet 的 Web MVC 与 JSON 接口支持。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
