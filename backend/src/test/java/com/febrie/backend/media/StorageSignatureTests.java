@@ -1,6 +1,7 @@
 package com.febrie.backend.media;
 
 import com.febrie.backend.media.infrastructure.config.MediaProperties;
+import com.febrie.backend.media.infrastructure.config.MediaConfiguration;
 import com.febrie.backend.media.infrastructure.storage.MinioStorageProvider;
 import com.febrie.backend.media.infrastructure.storage.CosStorageProvider;
 import java.net.URLDecoder;
@@ -9,6 +10,7 @@ import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -51,5 +53,16 @@ class StorageSignatureTests {
             assertTrue(query.contains("q-header-list=content-type;host;x-cos-forbid-overwrite"));
             assertEquals("image/png", grant.headers().get("Content-Type"));
         }
+    }
+
+    @Test
+    void productionRequiresHttpsAndEnvironmentPrefix() {
+        var environment = new MockEnvironment(); environment.setActiveProfiles("prod");
+        assertThrows(IllegalStateException.class, () -> new MediaConfiguration(properties("minio"), environment));
+        var secure = new MediaProperties("cos", URI.create("https://bucket.example.com"), URI.create("https://upload.example.com"),
+                "ap-guangzhou", "bucket", "key", "secret", "ec/prod", URI.create("https://images.example.com"));
+        assertDoesNotThrow(() -> new MediaConfiguration(secure, environment));
+        environment.setActiveProfiles("dev");
+        assertThrows(IllegalStateException.class, () -> new MediaConfiguration(secure, environment));
     }
 }

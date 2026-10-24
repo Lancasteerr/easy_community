@@ -4,6 +4,8 @@ import com.febrie.backend.media.application.ObjectStorageProvider.ObjectMetadata
 import com.febrie.backend.media.domain.*;
 import com.febrie.backend.shared.error.ApiException;
 import java.time.Duration;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -66,5 +68,31 @@ class MediaUploadTests extends MediaTestSupport {
         String articleImage = uploaded(MediaPurpose.ARTICLE_IMAGE);
         assertEquals(409, assertThrows(ApiException.class, () -> media.prepareAvatar(owner, articleImage)).status().value());
         assertThrows(IllegalStateException.class, () -> transaction.executeWithoutResult(status -> media.complete(owner, articleImage)));
+    }
+
+    @Test
+    void oldCopyWorkerCannotOverwriteNewWorkersCommittedState() throws Exception {
+        String id = uploaded(MediaPurpose.AVATAR);
+        var copying = new CountDownLatch(1); var finish = new CountDownLatch(1); var calls = new AtomicInteger();
+        storage.beforeCopy = () -> {
+            if (calls.getAndIncrement() == 0) {
+                copying.countDown();
+                try { assertTrue(finish.await(10, TimeUnit.SECONDS)); }
+                catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(error); }
+            }
+        };
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var old = executor.submit(() -> media.prepareAvatar(owner, id));
+            try {
+                assertTrue(copying.await(10, TimeUnit.SECONDS));
+                clock.advance(Duration.ofMinutes(3));
+                media.prepareAvatar(owner, id);
+            } finally { finish.countDown(); }
+            var failure = assertThrows(ExecutionException.class, () -> old.get(10, TimeUnit.SECONDS));
+            assertEquals(409, ((ApiException) failure.getCause()).status().value());
+        }
+        var current = files.find(id).orElseThrow();
+        assertEquals(MediaStatus.READY, current.status());
+        assertNull(current.operationToken()); assertNull(current.nextRetryAt());
     }
 }

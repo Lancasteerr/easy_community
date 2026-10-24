@@ -44,8 +44,13 @@ class MediaHttpTests {
     @DynamicPropertySource
     static void isolate(DynamicPropertyRegistry registry) {
         registry.add("app.auth.redis-prefix", () -> PREFIX);
-        registry.add("spring.datasource.url", () -> System.getenv().getOrDefault("IT_MEDIA_DB_URL",
-                "jdbc:mysql://127.0.0.1:3306/easy_community_media_test?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"));
+        String url = System.getenv().getOrDefault("IT_MEDIA_DB_URL",
+                "jdbc:mysql://127.0.0.1:3306/easy_community_media_test?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true");
+        // 在Spring初始化和Flyway迁移之前拒绝业务库地址。
+        if (!url.matches("jdbc:mysql://[^/]+/easy_community_media_test(?:\\?.*)?")) {
+            throw new IllegalArgumentException("文件HTTP测试只能连接专用数据库");
+        }
+        registry.add("spring.datasource.url", () -> url);
     }
 
     @BeforeEach
@@ -91,7 +96,7 @@ class MediaHttpTests {
     }
 
     @Test
-    void anonymousCsrfAndForeignMediaCannotBypassSecurity() throws Exception {
+    void anonymousCsrfAndMissingMediaCannotBypassSecurity() throws Exception {
         assertEquals(401, request("GET", "/api/media/" + UUID.randomUUID(), null, false).statusCode());
         login();
         assertEquals(403, request("POST", "/api/media/uploads", Map.of(), false).statusCode());
