@@ -35,6 +35,17 @@ backend
 │     ├─ ratelimit
 │     ├─ redis
 │     └─ scheduling
+├─ media
+│  ├─ web
+│  │  └─ request
+│  ├─ application
+│  │  └─ dto
+│  ├─ domain
+│  └─ infrastructure
+│     ├─ config
+│     ├─ storage
+│     ├─ persistence
+│     └─ scheduling
 └─ shared
    ├─ error
    └─ web
@@ -116,6 +127,20 @@ package com.febrie.backend.user.web;
 ```
 
 这两份架构文档按 `zh-CN`、`en-US` 分开维护，章节与规则保持对应。代码注释继续使用中文。结构或边界变化时，同时更新包注释和两份文档。
+
+## 文件与实时头像
+
+新增`media`业务模块，子包为`web/request`、`application/dto`、`domain`、`infrastructure/config`、`infrastructure/storage`、`infrastructure/persistence`和`infrastructure/scheduling`。具体协议、部署及文章接入见[文件服务V1](media-service.md)。
+
+- `ObjectStorageProvider`是有MinIO/COS两个实现的应用层存储契约；业务模块不依赖SDK。`FileContentValidator`只预留接口，本版无实现、不调用。
+- `MediaService`负责上传申请、HEAD元数据确认与事务外复制准备；`MediaReferenceService`负责同一业务事务内维护引用；`MediaLifecycleService`恢复失败复制及回收无引用文件。
+- 引用表示实体与文件的有效集合，不记录正文出现次数。实体/文件联合唯一索引去重文章图片；头像生成列的唯一索引限制每个用户最多一条当前头像关联。封面和正文共同使用同一图片时仍为一行。
+- 文件绑定与清理锁定同一文件记录，按ID排序。维护事务使用READ_COMMITTED，在持有文件锁后读取最新提交引用，避免旧快照误删。
+- `UserProfileService`在事务外准备头像，然后先锁用户行、再锁文件，统一更新用户头像字段与引用。删除用户也经此服务解除头像；用户应用层允许依赖`media.application`，文件模块不反向依赖用户模块。
+- `UserProfileController`负责实时资料和头像，原`UserController`保留密码入口。`GET /api/users/me`读取主库资料；认证快照和登录响应仍只表示身份，头像变化不升级认证版本或重写Session。
+- 未来文章须在事务外准备文件，再在显式READ_COMMITTED事务锁定文章行，保存正文/封面并同步整个去重集合。本期不建立文章模块。
+
+结构变化新增Flyway V2，不修改V1。测试增加专用`easy_community_media_test`库，真实服务商测试必须显式提供`IT_MINIO_*`或`IT_COS_*`变量。普通初始化命令不运行文件回收；正常启动不修改桶规则。
 
 ## 会话迁移与验证
 

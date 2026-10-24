@@ -1,6 +1,9 @@
-# 社区后端：Session 登录与用户管理
+# 社区后端：Session 登录、用户与文件管理
 
 代码组织与包职责见架构文档：[简体中文](../docs/zh-CN/backend-architecture.md) · [English](../docs/en-US/backend-architecture.md)。
+
+文件上传、MinIO/COS桶配置、头像接口和文章接入见[文件服务V1](../docs/zh-CN/media-service.md)。
+升级已有本机环境文件时，必须补充示例中的全部`MEDIA_*`字段；应用只校验配置，不自动创建桶或修改权限。
 
 Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `easy_community`，Flyway 自动建表。
 只新增已确认的官方 `spring-boot-starter-session-data-redis`，移除了 JWT Resource Server starter；无 Lua、第三方 JWT 或限流依赖。
@@ -165,7 +168,7 @@ Redis使用Spring Session默认序列化，运行实例使用一致应用版本�
 ## 验证
 
 普通 `mvn test` 执行单元测试；真实集成测试需显式提供 `IT_DB_PASSWORD`。
-先创建专用空库 `easy_community_auth_test`，启动Redis，再运行：
+先创建专用空库 `easy_community_auth_test` 和 `easy_community_media_test`，启动Redis，再运行：
 
 ```powershell
 # 可覆盖IT_DB_URL、IT_DB_USERNAME、IT_REDIS_HOST、IT_REDIS_PORT、IT_REDIS_PASSWORD。
@@ -175,6 +178,7 @@ Remove-Item Env:IT_DB_PASSWORD
 ```
 
 集成测试自动执行Flyway迁移、使用随机Redis前缀、清理本次创建的用户，不清空共享Redis。
+文件引用、头像事务和HTTP测试使用`easy_community_media_test`；真实MinIO/COS验收所需的`IT_MINIO_*`、`IT_COS_*`参数见文件服务文档，未配置时相应契约测试跳过。
 不要把IT_DB_URL指向业务数据库。测试覆盖HTTP Cookie/CSRF、角色、改密、删号、并发认证、Set撤销、过期清理和计数事务。
 
 参考：[Spring Session](https://docs.spring.io/spring-session/reference/guides/boot-redis.html)、

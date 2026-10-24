@@ -35,6 +35,17 @@ backend
 │     ├─ ratelimit
 │     ├─ redis
 │     └─ scheduling
+├─ media
+│  ├─ web
+│  │  └─ request
+│  ├─ application
+│  │  └─ dto
+│  ├─ domain
+│  └─ infrastructure
+│     ├─ config
+│     ├─ storage
+│     ├─ persistence
+│     └─ scheduling
 └─ shared
    ├─ error
    └─ web
@@ -120,6 +131,20 @@ package com.febrie.backend.user.web;
 It describes receiving user and administrator requests, converting the authenticated identity into an actor, calling user services, and ending the current session after a password change without accessing the database directly.
 
 Maintain these architecture documents separately under `zh-CN` and `en-US`, with matching sections and rules. Code comments remain Chinese. Update package comments and both documents whenever structure or boundaries change.
+
+## Files and Live Avatar Profiles
+
+The new `media` module uses `web/request`, `application/dto`, `domain`, `infrastructure/config`, `infrastructure/storage`, `infrastructure/persistence`, and `infrastructure/scheduling`. See the [media service guide](../zh-CN/media-service.md) for deployment, protocols, and the article integration contract.
+
+- `ObjectStorageProvider` is an application-layer contract with MinIO and COS implementations; business modules never depend on SDKs. `FileContentValidator` is reserved only, with no V1 implementation or invocation.
+- `MediaService` issues upload grants, confirms HEAD metadata, and prepares copies outside business transactions. `MediaReferenceService` updates references inside the business transaction. `MediaLifecycleService` recovers copies and reclaims unreferenced objects.
+- References are entity/file sets, not individual body occurrences. An entity/file unique index deduplicates article images; a generated-column unique index allows at most one current avatar per user. Cover and body sharing one image still produce one association.
+- Binding and cleanup lock the same file rows in ID order. Maintenance uses READ_COMMITTED and reads the latest committed references after acquiring the file lock, preventing stale-snapshot deletion.
+- `UserProfileService` prepares avatars outside the transaction, then locks the user before files and updates the profile field and association together. User deletion detaches the avatar through this service. User application services may depend on `media.application`; media does not depend back on user infrastructure.
+- `UserProfileController` handles live profiles and avatars; `UserController` retains password changes. `GET /api/users/me` reads the database. Session snapshots and login responses remain identity-only; avatar changes do not increment the authentication version or rewrite sessions.
+- Future articles prepare files first, then lock their article row in an explicit READ_COMMITTED transaction, save body/cover data, and synchronize the full deduplicated set. No article module is introduced in V1.
+
+Flyway V2 adds these structures without changing V1. Tests additionally use the dedicated `easy_community_media_test` database. Real provider tests require explicit `IT_MINIO_*` or `IT_COS_*` variables. Non-web initialization commands do not run media cleanup, and normal startup never changes bucket policies.
 
 ## Session Migration and Verification
 

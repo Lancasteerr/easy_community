@@ -1,0 +1,11 @@
+{
+  "version": "2.0",
+  "statement": [
+    {
+      "effect": "allow",
+      "principal": { "qcs": ["qcs::cam::anyone:anyone"] },
+      "action": ["name/cos:GetObject", "name/cos:HeadObject"],
+      "resource": ["qcs::cos:REGION:uid/APPID:BUCKET_NAME/PROJECT_PREFIX/public/*"]
+    }
+  ]
+}

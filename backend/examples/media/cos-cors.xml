@@ -1,0 +1,13 @@
+<!-- 替换Origin为实际前端来源；应用到专用测试桶时可使用http://127.0.0.1:5173。 -->
+<CORSConfiguration>
+  <CORSRule>
+    <AllowedOrigin>https://community.example.com</AllowedOrigin>
+    <AllowedMethod>PUT</AllowedMethod>
+    <AllowedMethod>GET</AllowedMethod>
+    <AllowedMethod>HEAD</AllowedMethod>
+    <AllowedHeader>Content-Type</AllowedHeader>
+    <AllowedHeader>x-cos-forbid-overwrite</AllowedHeader>
+    <ExposeHeader>ETag</ExposeHeader>
+    <MaxAgeSeconds>600</MaxAgeSeconds>
+  </CORSRule>
+</CORSConfiguration>
