@@ -17,8 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
     private final AccountRepository accounts;
     private final PasswordEncoder encoder;
+    private final UserProfileService profiles;
 
-    public UserService(AccountRepository accounts, PasswordEncoder encoder) { this.accounts = accounts; this.encoder = encoder; }
+    public UserService(AccountRepository accounts, PasswordEncoder encoder, UserProfileService profiles) {
+        this.accounts = accounts; this.encoder = encoder; this.profiles = profiles;
+    }
 
     @Transactional
     public UserView createManaged(UserActor actor, String username, String password, Role role) {
@@ -67,13 +70,16 @@ public class UserService {
         accounts.updatePassword(actor.userId(), encoder.encode(newPassword));
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteManaged(UserActor actor, long userId) {
         requireAdmin(actor);
         var account = accounts.lockById(userId).orElseThrow(() ->
                 new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
         if (account.role() == Role.ADMIN) { throw forbidden("本接口不能删除管理员"); }
-        if (!"DELETED".equals(account.status())) { accounts.softDelete(userId); }
+        if (!"DELETED".equals(account.status())) {
+            profiles.detachFromLockedUser(userId);
+            accounts.softDelete(userId);
+        }
     }
 
     /** 仅供未来内部角色管理调用；本期不开放HTTP入口。 */

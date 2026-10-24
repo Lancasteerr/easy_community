@@ -2,6 +2,7 @@ package com.febrie.backend.user.infrastructure.persistence;
 
 import com.febrie.backend.user.application.dto.AccountAuthState;
 import com.febrie.backend.user.application.dto.AccountSnapshot;
+import com.febrie.backend.user.application.dto.UserProfileSnapshot;
 import com.febrie.backend.user.domain.Role;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -31,6 +32,19 @@ public class AccountRepository {
 
     public Optional<AccountSnapshot> lockById(long userId) {
         return jdbc.query(SNAPSHOT + " WHERE u.id=? FOR UPDATE", MAPPER, userId).stream().findFirst();
+    }
+
+    /** 资料查询不读取凭证表；锁用户行后才读取旧头像，避免并发替换使用过期ID。 */
+    public Optional<UserProfileSnapshot> profile(long userId, boolean lock) {
+        return jdbc.query("SELECT id,username,role,status,auth_version,avatar_media_id FROM users WHERE id=?"
+                        + (lock ? " FOR UPDATE" : ""),
+                (rs, row) -> new UserProfileSnapshot(rs.getLong("id"), rs.getString("username"),
+                        Role.valueOf(rs.getString("role")), rs.getString("status"), rs.getLong("auth_version"),
+                        rs.getString("avatar_media_id")), userId).stream().findFirst();
+    }
+
+    public void updateAvatar(long userId, String mediaId) {
+        jdbc.update("UPDATE users SET avatar_media_id=? WHERE id=?", mediaId, userId);
     }
 
     /** 每次鉴权使用独立主库读取，不加载密码或重新读取角色。 */

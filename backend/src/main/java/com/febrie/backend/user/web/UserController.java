@@ -4,7 +4,6 @@ import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.auth.web.session.SessionService;
 import com.febrie.backend.user.application.UserService;
 import com.febrie.backend.user.application.dto.UserActor;
-import com.febrie.backend.user.application.dto.UserView;
 import com.febrie.backend.user.web.request.PasswordRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,9 +21,6 @@ public class UserController {
     private final UserService users;
     private final SessionService sessions;
     public UserController(UserService users, SessionService sessions) { this.users = users; this.sessions = sessions; }
-
-    @GetMapping
-    public UserView me(@AuthenticationPrincipal SessionPrincipal principal) { return principal.view(); }
 
     @PutMapping("/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
