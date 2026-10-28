@@ -1,0 +1,71 @@
+{
+    # 本地上传入口使用HTTP，独立于生产站点代理。
+    auto_https off
+    admin off
+}
+
+:9002 {
+    @origin header Origin {$MEDIA_FRONTEND_ORIGIN:http://127.0.0.1:5173}
+    header @origin {
+        Access-Control-Allow-Origin {$MEDIA_FRONTEND_ORIGIN:http://127.0.0.1:5173}
+        Access-Control-Allow-Methods "POST, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type"
+        Vary Origin
+    }
+    @preflight {
+        method OPTIONS
+        path /{$MEDIA_STORAGE_BUCKET:easy-community-dev}
+        header Origin {$MEDIA_FRONTEND_ORIGIN:http://127.0.0.1:5173}
+    }
+    respond @preflight 204
+    @upload {
+        method POST
+        path /{$MEDIA_STORAGE_BUCKET:easy-community-dev}
+    }
+    handle @upload {
+        # 上限包含multipart边界与签名字段；文件本身长度仍由MinIO Policy约束。
+        request_body {
+            max_size 11MB
+        }
+        reverse_proxy {$MINIO_UPSTREAM:minio:9000} {
+            # 不重传POST，不等待Webhook；请求路径和正文原样交给MinIO。
+            lb_try_duration 0
+            @accepted {
+                status 200
+                header Etag *
+                header X-Amz-Request-Id *
+            }
+            handle_response @accepted {
+                header Content-Type application/json
+                header X-Media-Result SUCCESS
+                header X-Media-Stage COMPLETE
+                header X-Media-Code SUCCESS
+                respond `{"success":true,"stage":"COMPLETE","code":"SUCCESS"}` 200
+            }
+            @failed status 4xx 5xx
+            handle_response @failed {
+                header Content-Type application/json
+                header X-Media-Result FAILED
+                header X-Media-Stage UPLOAD
+                header X-Media-Code STORAGE_UPLOAD_FAILED
+                # 诊断只保留对象存储请求ID，不把签名或原始请求写入日志。
+                header X-Amz-Request-Id {rp.header.X-Amz-Request-Id}
+                respond `{"success":false,"stage":"UPLOAD","code":"STORAGE_UPLOAD_FAILED"}` {rp.status_code}
+            }
+            handle_response {
+                header Content-Type application/json
+                respond `{"success":false,"stage":"UPLOAD","code":"STORAGE_UPLOAD_FAILED"}` 502
+            }
+        }
+    }
+    handle {
+        respond 404
+    }
+    handle_errors {
+        header Content-Type application/json
+        header X-Media-Result FAILED
+        header X-Media-Stage UPLOAD
+        header X-Media-Code STORAGE_UPLOAD_FAILED
+        respond `{"success":false,"stage":"UPLOAD","code":"STORAGE_UPLOAD_FAILED"}` {err.status_code}
+    }
+}

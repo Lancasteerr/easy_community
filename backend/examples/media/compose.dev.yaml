@@ -1,0 +1,31 @@
+# 新建独立V2存储卷与端口，不复用或清空开发者已有的MinIO。
+name: easy-community-media-v2
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MEDIA_STORAGE_ACCESS_KEY:?请设置开发存储账号}
+      MINIO_ROOT_PASSWORD: ${MEDIA_STORAGE_SECRET_KEY:?请设置开发存储密码}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MEDIA_FRONTEND_ORIGIN:-http://127.0.0.1:5173}
+      MINIO_NOTIFY_WEBHOOK_ENABLE_MEDIA: "on"
+      MINIO_NOTIFY_WEBHOOK_ENDPOINT_MEDIA: http://host.docker.internal:8080/api/storage/minio/upload-webhook
+      MINIO_NOTIFY_WEBHOOK_AUTH_TOKEN_MEDIA: ${MEDIA_WEBHOOK_TOKEN:?请设置通知token}
+    ports:
+      - "127.0.0.1:19000:9000"
+      - "127.0.0.1:19001:9001"
+    volumes:
+      - media-v2-dev:/data
+  upload:
+    image: caddy:2.10.2-alpine
+    environment:
+      MEDIA_STORAGE_BUCKET: ${MEDIA_STORAGE_BUCKET:-easy-community-dev}
+      MEDIA_FRONTEND_ORIGIN: ${MEDIA_FRONTEND_ORIGIN:-http://127.0.0.1:5173}
+    ports:
+      - "127.0.0.1:19002:9002"
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - minio
+volumes:
+  media-v2-dev:
