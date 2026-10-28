@@ -2,6 +2,7 @@ package com.febrie.backend.media.web;
 
 import com.febrie.backend.media.application.ProcessingDeadline;
 import com.febrie.backend.media.infrastructure.config.MediaWorkflowProperties;
+import com.febrie.backend.media.infrastructure.config.NotificationDeadlineTimers;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import java.io.*;
@@ -14,8 +15,8 @@ import static com.febrie.backend.media.application.dto.UploadResult.*;
 public final class StorageNotificationFilter implements Filter {
     private final StorageNotificationHandler handler;
     private final MediaWorkflowProperties flow;
-    private final ScheduledExecutorService timers;
-    public StorageNotificationFilter(StorageNotificationHandler handler, MediaWorkflowProperties flow, ScheduledExecutorService timers) {
+    private final NotificationDeadlineTimers timers;
+    public StorageNotificationFilter(StorageNotificationHandler handler, MediaWorkflowProperties flow, NotificationDeadlineTimers timers) {
         this.handler = handler; this.flow = flow; this.timers = timers;
     }
     @Override public void doFilter(ServletRequest input, ServletResponse output, FilterChain chain) throws IOException {
@@ -53,7 +54,7 @@ public final class StorageNotificationFilter implements Filter {
             void timeout() { deadline.cancel(); fail(200, Code.PROCESS_TIMEOUT); }
         }
         Completion completion = new Completion();
-        timer.set(timers.schedule(completion::timeout, deadline.remainingMillis(0), TimeUnit.MILLISECONDS));
+        timer.set(timers.schedule(completion::timeout, deadline.remainingMillis(0)));
         context.addListener(new AsyncListener() {
             @Override public void onTimeout(AsyncEvent event) { completion.timeout(); }
             @Override public void onError(AsyncEvent event) { completion.fail(400, Code.INVALID_CALLBACK); }
