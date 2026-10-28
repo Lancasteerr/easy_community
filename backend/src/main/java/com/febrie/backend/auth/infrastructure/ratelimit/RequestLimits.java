@@ -3,6 +3,7 @@ package com.febrie.backend.auth.infrastructure.ratelimit;
 import com.febrie.backend.auth.infrastructure.config.AuthProperties;
 import com.febrie.backend.auth.infrastructure.redis.RedisAtomic;
 import com.febrie.backend.shared.error.ApiException;
+import com.febrie.backend.shared.ratelimit.FixedWindowCounter;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -20,23 +21,21 @@ public class RequestLimits {
     private final RedisAtomic atomic;
     private final AuthProperties properties;
     private final Clock clock;
+    private final FixedWindowCounter windows;
 
-    public RequestLimits(StringRedisTemplate redis, RedisAtomic atomic, AuthProperties properties, Clock clock) {
+    public RequestLimits(StringRedisTemplate redis, RedisAtomic atomic, AuthProperties properties, Clock clock, FixedWindowCounter windows) {
         this.redis = redis;
         this.atomic = atomic;
         this.properties = properties;
         this.clock = clock;
+        this.windows = windows;
     }
 
     public void consume(String rule, String subject, int maximum) {
         long window = clock.instant().getEpochSecond() / 60;
         String key = properties.redisPrefix() + ":auth:request:" + rule + ":" + digest(subject) + ":" + window;
         long remaining = 60 - clock.instant().getEpochSecond() % 60;
-        var result = atomic.execute(operations -> {
-            operations.opsForValue().increment(key);
-            operations.expire(key, Duration.ofSeconds(remaining + 60));
-        });
-        if (((Number) result.getFirst()).longValue() > maximum) { throw exceeded(remaining); }
+        if (windows.increment(key, Duration.ofSeconds(remaining + 60)) > maximum) { throw exceeded(remaining); }
     }
 
     public void checkFailures(String username, String ip) {
