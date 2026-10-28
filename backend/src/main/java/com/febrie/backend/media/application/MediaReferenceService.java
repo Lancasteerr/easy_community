@@ -55,7 +55,7 @@ public class MediaReferenceService {
         Set<String> target = new TreeSet<>(bodyIds);
         if (coverId != null) { target.add(coverId); }
         // 调用者必须先锁文章行；READ_COMMITTED避免更早查询创建的快照遗漏已提交关联。
-        Set<String> existing = files.references(ReferenceType.ARTICLE, articleId);
+        Set<String> existing = files.references(ReferenceType.ARTICLE_IMAGE, articleId);
         Set<String> affected = new TreeSet<>(existing); affected.addAll(target);
         Map<String, FileRecord> locked = lock(affected);
         for (String id : target) {
@@ -67,11 +67,11 @@ public class MediaReferenceService {
             }
         }
         for (String id : target) {
-            if (!existing.contains(id)) { files.addReference(ReferenceType.ARTICLE, articleId, id); }
+            if (!existing.contains(id)) { files.addReference(ReferenceType.ARTICLE_IMAGE, articleId, id); }
         }
         for (String id : existing) {
             if (!target.contains(id)) {
-                files.removeReference(ReferenceType.ARTICLE, articleId, id);
+                files.removeReference(ReferenceType.ARTICLE_IMAGE, articleId, id);
                 files.scheduleIfUnreferenced(id, clock.instant().plus(flow.unreferencedTtl()));
             }
         }
@@ -79,7 +79,11 @@ public class MediaReferenceService {
 
     private Map<String, FileRecord> lock(Set<String> ids) {
         Map<String, FileRecord> result = new HashMap<>();
-        for (String id : ids) { result.put(id, files.lock(id).orElseThrow(MediaErrors::notFound)); }
+        for (String id : ids) {
+            try { MediaIds.canonical(id); }
+            catch (IllegalArgumentException invalid) { throw MediaErrors.notFound(); }
+            result.put(id, files.lock(id).orElseThrow(MediaErrors::notFound));
+        }
         return result;
     }
 

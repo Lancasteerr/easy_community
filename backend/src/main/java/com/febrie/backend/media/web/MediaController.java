@@ -25,13 +25,4 @@ public class MediaController {
         return media.create(principal.userId(), request.purpose(), request.filename(), request.contentType(), request.size());
     }
 
-    @PostMapping("/{id}/complete")
-    public MediaView complete(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable String id) {
-        return media.complete(principal.userId(), id);
-    }
-
-    @GetMapping("/{id}")
-    public MediaView get(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable String id) {
-        return media.get(principal.userId(), id);
-    }
 }

@@ -1,68 +1,34 @@
 package com.febrie.backend.media;
 
-import com.febrie.backend.media.infrastructure.config.MediaProperties;
-import com.febrie.backend.media.infrastructure.config.MediaConfiguration;
-import com.febrie.backend.media.infrastructure.storage.MinioStorageProvider;
-import com.febrie.backend.media.infrastructure.storage.CosStorageProvider;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
+import com.febrie.backend.media.infrastructure.config.*;
+import com.febrie.backend.media.infrastructure.storage.MinioUploadStorage;
 import java.net.URI;
-import java.time.Clock;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
-
 import static org.junit.jupiter.api.Assertions.*;
 
-/** 离线验证签名覆盖关键条件，不连接真实存储，不使用真实凭证。 */
+/** 离线检查统一POST描述与生产装配约束，不将离线签名等同于云端验收。 */
 class StorageSignatureTests {
     static MediaProperties properties(String provider) {
-        return new MediaProperties(provider, URI.create("http://127.0.0.1:9000"), URI.create("http://127.0.0.1:9000"),
+        return new MediaProperties(provider, URI.create("http://127.0.0.1:9000"), URI.create("http://127.0.0.1:19002"),
                 "us-east-1", "media-test", "test-access", "test-secret", "ec/test", URI.create("https://images.example.com"));
     }
-
-    @Test
-    void minioSignsConditionalHeaderAndContentType() {
-        try (var provider = new MinioStorageProvider(properties("minio"), Clock.systemUTC())) {
-            var grant = provider.authorizeUpload("media-test", "ec/test/temp/test", "image/png", Instant.now().plusSeconds(300));
-            assertEquals("PUT", grant.method());
-            assertEquals("*", grant.headers().get("if-none-match"));
-            assertEquals("image/png", grant.headers().get("content-type"));
-            assertTrue(grant.url().contains("X-Amz-SignedHeaders=content-type%3Bhost%3Bif-none-match"));
-            assertFalse(grant.headers().containsKey("host"));
-        }
+    @Test void minioGrantUsesPostFieldsAndDynamicUrl() {
+        var provider = new MinioUploadStorage(properties("minio"));
+        try {
+            Instant now = Instant.now();
+            var grant = provider.authorize("ec/test/temp/id", "image/png", 123, now, now.plusSeconds(300));
+            assertEquals("POST", grant.method());
+            assertEquals("http://127.0.0.1:19002/media-test", grant.url());
+            assertEquals("image/png", grant.fields().get("Content-Type"));
+            assertFalse(grant.fields().containsKey("If-None-Match"));
+        } finally { provider.close(); }
     }
-
-    @Test
-    void propertiesRejectUnscopedPrefixesAndNeverPrintCredentials() {
-        var properties = properties("minio");
-        assertFalse(properties.toString().contains("test-secret"));
-        assertFalse(properties.toString().contains("test-access"));
-        assertThrows(IllegalArgumentException.class, () -> new MediaProperties("minio", properties.endpoint(),
-                properties.uploadEndpoint(), "us-east-1", "test", "key", "secret", "../prod", properties.publicBaseUrl()));
-        assertEquals("https://images.example.com/ec/test/public/a.png", properties.publicUrl("ec/test/public/a.png"));
-    }
-
-    @Test
-    void cosSignsNativeConditionHostAndContentType() {
-        try (var provider = new CosStorageProvider(properties("cos"))) {
-            var grant = provider.authorizeUpload("media-test", "ec/test/temp/test", "image/png", Instant.now().plusSeconds(300));
-            assertEquals("PUT", grant.method());
-            assertEquals("true", grant.headers().get("x-cos-forbid-overwrite"));
-            String query = URLDecoder.decode(URI.create(grant.url()).getRawQuery(), StandardCharsets.UTF_8);
-            assertTrue(query.contains("q-header-list=content-type;host;x-cos-forbid-overwrite"));
-            assertEquals("image/png", grant.headers().get("Content-Type"));
-        }
-    }
-
-    @Test
-    void productionRequiresHttpsAndEnvironmentPrefix() {
-        var environment = new MockEnvironment(); environment.setActiveProfiles("prod");
-        assertThrows(IllegalStateException.class, () -> new MediaConfiguration(properties("minio"), environment));
-        var secure = new MediaProperties("cos", URI.create("https://bucket.example.com"), URI.create("https://upload.example.com"),
-                "ap-guangzhou", "bucket", "key", "secret", "ec/prod", URI.create("https://images.example.com"));
-        assertDoesNotThrow(() -> new MediaConfiguration(secure, environment));
-        environment.setActiveProfiles("dev");
-        assertThrows(IllegalStateException.class, () -> new MediaConfiguration(secure, environment));
+    @Test void productionRejectsDevelopmentProviderAndMissingRealModeration() {
+        var env = new MockEnvironment(); env.setActiveProfiles("prod");
+        assertThrows(IllegalStateException.class, () -> new MediaConfiguration(properties("minio"), PostPolicyTests.workflow(), env));
+        assertFalse(properties("cos").toString().contains("test-secret"));
+        assertFalse(PostPolicyTests.workflow().toString().contains("https://"));
     }
 }

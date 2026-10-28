@@ -44,5 +44,6 @@ public class NotificationFiles implements AutoCloseable {
             throw new IllegalStateException("通知不得被外层数据库事务包围");
         }
     }
+    @jakarta.annotation.PreDestroy
     @Override public void close() { source.close(); }
 }

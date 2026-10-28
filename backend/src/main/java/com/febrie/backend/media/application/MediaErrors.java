@@ -16,7 +16,7 @@ public final class MediaErrors {
     }
 
     public static ApiException conflict() {
-        return new ApiException(HttpStatus.CONFLICT, "MEDIA_STATE_CONFLICT", "文件正在处理或不可使用", 2);
+        return new ApiException(HttpStatus.CONFLICT, "MEDIA_STATE_CONFLICT", "文件尚未就绪或用途不匹配");
     }
 
     public static ApiException unavailable() {

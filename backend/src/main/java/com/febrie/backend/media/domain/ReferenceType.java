@@ -1,6 +1,4 @@
 package com.febrie.backend.media.domain;
 
-/** 关联按实体去重；ARTICLE统一包含正文和封面，不按出现位置建立多行。 */
-public enum ReferenceType {
-    USER_AVATAR, ARTICLE
-}
+/** 文章正文和封面合并成文章级去重集合，不记录出现位置。 */
+public enum ReferenceType { USER_AVATAR, ARTICLE_IMAGE }
