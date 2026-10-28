@@ -34,7 +34,7 @@
         <aws-sdk.version>2.57.3</aws-sdk.version>
     </properties>
     <dependencies>
-        <!-- COS原生防覆盖头与签名规则由官方SDK处理，不假设与S3完全一致。 -->
+        <!-- COS官方SDK负责真实审核、复制与删除，POST Policy遵循独立的COS签名规则。 -->
         <dependency>
             <groupId>com.qcloud</groupId>
             <artifactId>cos_api</artifactId>

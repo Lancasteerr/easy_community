@@ -2,11 +2,10 @@
 <CORSConfiguration>
   <CORSRule>
     <AllowedOrigin>https://community.example.com</AllowedOrigin>
-    <AllowedMethod>PUT</AllowedMethod>
+    <AllowedMethod>POST</AllowedMethod>
     <AllowedMethod>GET</AllowedMethod>
     <AllowedMethod>HEAD</AllowedMethod>
     <AllowedHeader>Content-Type</AllowedHeader>
-    <AllowedHeader>x-cos-forbid-overwrite</AllowedHeader>
     <ExposeHeader>ETag</ExposeHeader>
     <MaxAgeSeconds>600</MaxAgeSeconds>
   </CORSRule>

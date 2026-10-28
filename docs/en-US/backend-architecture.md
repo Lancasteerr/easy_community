@@ -134,17 +134,18 @@ Maintain these architecture documents separately under `zh-CN` and `en-US`, with
 
 ## Files and Live Avatar Profiles
 
-The new `media` module uses `web/request`, `application/dto`, `domain`, `infrastructure/config`, `infrastructure/storage`, `infrastructure/persistence`, and `infrastructure/scheduling`. See the [media service guide](../zh-CN/media-service.md) for deployment, protocols, and the article integration contract.
+The media module now implements V2. See the [media guide](../zh-CN/media-service.md) for the protocol and deployment.
 
-- `ObjectStorageProvider` is an application-layer contract with MinIO and COS implementations; business modules never depend on SDKs. `FileContentValidator` is reserved only, with no V1 implementation or invocation.
-- `MediaService` issues upload grants, confirms HEAD metadata, and prepares copies outside business transactions. `MediaReferenceService` updates references inside the business transaction. `MediaLifecycleService` recovers copies and reclaims unreferenced objects.
-- References are entity/file sets, not individual body occurrences. An entity/file unique index deduplicates article images; a generated-column unique index allows at most one current avatar per user. Cover and body sharing one image still produce one association.
-- Binding and cleanup lock the same file rows in ID order. Maintenance uses READ_COMMITTED and reads the latest committed references after acquiring the file lock, preventing stale-snapshot deletion.
-- `UserProfileService` prepares avatars outside the transaction, then locks the user before files and updates the profile field and association together. User deletion detaches the avatar through this service. User application services may depend on `media.application`; media does not depend back on user infrastructure.
-- `UserProfileController` handles live profiles and avatars; `UserController` retains password changes. `GET /api/users/me` reads the database. Session snapshots and login responses remain identity-only; avatar changes do not increment the authentication version or rewrite sessions.
-- Future articles prepare files first, then lock their article row in an explicit READ_COMMITTED transaction, save body/cover data, and synchronize the full deduplicated set. No article module is introduced in V1.
+- MediaService inserts ISSUED records and issues POST Policies. UploadStorage isolates provider signing, one copy, and idempotent deletion; there is no HEAD confirmation.
+- FinishUpload shares identity checks, a monotonic deadline, moderation, copy, and conditional READY commit. ContentModeration only returns a decision: real synchronous moderation in production and an immediate development bypass. Notification SQL uses a separate bounded connection pool.
+- Storage notifications have a stateless security chain and bounded asynchronous Servlet body reading. Production verifies COS signatures; development verifies MinIO Bearer tokens. The development Caddy proxy forwards uploads and normalizes JSON without waiting for publication.
+- FileRecord maps exactly eight columns; references have three columns. MediaIds handles standard BINARY(16) UUID conversion; MediaLocation derives extension-free keys from the configured prefix.
+- MediaReferenceService requires explicit READ_COMMITTED. Callers first lock the business entity, then files in ID order. Reference checks and the current next_action_at are re-read under file locks. User-row transactions enforce avatar uniqueness; article body and cover form one ARTICLE_IMAGE reference set.
+- UserProfileService binds only READY files and updates the avatar and references atomically. Deleting a user detaches their avatar. Avatar edits do not update authentication versions. Media does not depend on user infrastructure.
+- MediaLifecycleService only reclaims ISSUED, unreferenced READY, and DELETING records. It never resumes publication. Object deletion happens outside the short transaction and precedes metadata deletion; failures use a fixed rescheduling interval.
+- FixedWindowCounter is a shared Redis primitive. Authentication rules stay in auth and media consumes its own upload admission rule. Shared code never depends on business modules.
 
-Flyway V2 adds these structures without changing V1. Tests additionally use the dedicated `easy_community_media_test` database. Real provider tests require explicit `IT_MINIO_*` or `IT_COS_*` variables. Non-web initialization commands do not run media cleanup, and normal startup never changes bucket policies.
+The rewritten Flyway V2 definition is for new databases only. Old complete/prepare endpoints, leases, intermediate states, and compatibility modes are removed. Future article services must save content and synchronize references in the same RC transaction after locking the article row; no article module is introduced here. Non-web initialization does not run cleanup, and startup does not mutate bucket configuration.
 
 ## Session Migration and Verification
 

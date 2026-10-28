@@ -1,0 +1,10 @@
+{
+  "QueueConfigurations": [
+    {
+      "Id": "media-temp-post",
+      "QueueArn": "arn:minio:sqs::MEDIA:webhook",
+      "Events": ["s3:ObjectCreated:Post"],
+      "Filter": {"Key": {"FilterRules": [{"Name": "prefix", "Value": "easy-community/dev/temp/"}]}}
+    }
+  ]
+}

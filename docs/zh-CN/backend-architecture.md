@@ -130,17 +130,18 @@ package com.febrie.backend.user.web;
 
 ## 文件与实时头像
 
-新增`media`业务模块，子包为`web/request`、`application/dto`、`domain`、`infrastructure/config`、`infrastructure/storage`、`infrastructure/persistence`和`infrastructure/scheduling`。具体协议、部署及文章接入见[文件服务V1](media-service.md)。
+文件服务已整体切换V2，协议与部署见[文件服务V2](media-service.md)。
 
-- `ObjectStorageProvider`是有MinIO/COS两个实现的应用层存储契约；业务模块不依赖SDK。`FileContentValidator`只预留接口，本版无实现、不调用。
-- `MediaService`负责上传申请、HEAD元数据确认与事务外复制准备；`MediaReferenceService`负责同一业务事务内维护引用；`MediaLifecycleService`恢复失败复制及回收无引用文件。
-- 引用表示实体与文件的有效集合，不记录正文出现次数。实体/文件联合唯一索引去重文章图片；头像生成列的唯一索引限制每个用户最多一条当前头像关联。封面和正文共同使用同一图片时仍为一行。
-- 文件绑定与清理锁定同一文件记录，按ID排序。维护事务使用READ_COMMITTED，在持有文件锁后读取最新提交引用，避免旧快照误删。
-- `UserProfileService`在事务外准备头像，然后先锁用户行、再锁文件，统一更新用户头像字段与引用。删除用户也经此服务解除头像；用户应用层允许依赖`media.application`，文件模块不反向依赖用户模块。
-- `UserProfileController`负责实时资料和头像，原`UserController`保留密码入口。`GET /api/users/me`读取主库资料；认证快照和登录响应仍只表示身份，头像变化不升级认证版本或重写Session。
-- 未来文章须在事务外准备文件，再在显式READ_COMMITTED事务锁定文章行，保存正文/封面并同步整个去重集合。本期不建立文章模块。
+- MediaService只建档与签发POST Policy；UploadStorage隔离两家签名、一次复制与幂等删除，不提供HEAD确认。
+- FinishUpload共用通知身份检查、单调时钟预算、审核、复制和条件READY提交；ContentModeration只返回结论，生产真实审核，开发立即跳过。通知SQL使用独立短等待连接池，网络调用不在业务事务内。
+- 存储通知走独立无会话安全链，Servlet限量异步读取覆盖慢正文；生产COS验签，开发MinIO验证Bearer token。Caddy开发代理只转发上传和统一JSON，不等待发布。
+- FileRecord映射八字段文件表，引用表仅三字段；MediaIds统一BINARY(16)与API UUID转换，MediaLocation从固定前缀推导无扩展名Key。
+- MediaReferenceService要求显式READ_COMMITTED，调用者先锁业务实体，再按ID排序锁文件；最新引用与当前next_action_at必须在锁内复核。头像唯一由用户行锁事务保证，文章正文与封面去重为ARTICLE_IMAGE引用。
+- UserProfileService仅绑定READY，用户头像字段和引用同事务变更；删除用户同时解绑，头像变化不修改认证版本。文件模块不依赖用户基础设施。
+- MediaLifecycleService仅清理ISSUED、无引用READY和DELETING，不恢复发布。事务内决定删除，事务外删对象，最后删SQL；删除失败固定间隔调度。
+- 通用FixedWindowCounter位于shared.ratelimit，认证规则仍位于auth，上传签发频率由media自己的组件消费；shared不反向依赖业务模块。
 
-结构变化新增Flyway V2，不修改V1。测试增加专用`easy_community_media_test`库，真实服务商测试必须显式提供`IT_MINIO_*`或`IT_COS_*`变量。普通初始化命令不运行文件回收；正常启动不修改桶规则。
+Flyway V2定义直接重写，仅用于新建空库。不存在旧complete/prepare、租约、中间状态或兼容模式。文章模块尚未建立，未来须在锁文章行的同一RC事务中保存内容与引用，不提前搭建空业务模块。非Web初始化不运行定时回收，正常启动不改桶配置。
 
 ## 会话迁移与验证
 
