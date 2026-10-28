@@ -17,7 +17,8 @@ test('原样使用动态入口、原始字段及统一JSON结果', async () => {
   assert.deepEqual(value, { mediaId: grant.mediaId, publicUrl: grant.publicUrl });
 });
 
-for (const [status, body] of [[203, '{"success":true}'], [200, ''], [200, '<Error/>'], [200, '{"success":false,"code":"COPY_FAILED"}']]) {
+for (const [status, body] of [[203, '{"success":true}'], [203, '<Error><Code>CallbackFailed</Code></Error>'], [504, ''],
+  [200, ''], [200, '<Error/>'], [200, '{"success":false,"code":"COPY_FAILED"}']]) {
   test(`HTTP ${status}异常结果不能成功或自动重试：${body}`, async () => {
     let calls = 0;
     await assert.rejects(uploadFile(grant, file, async () => { calls++; return new Response(body, { status }); }));

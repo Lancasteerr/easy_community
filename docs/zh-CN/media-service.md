@@ -42,7 +42,7 @@
 
 开发成功只表示 MinIO 接收成功，可能早于公开可读与 READY。图片暂不可读可稍后刷新；即时绑定仍可能返回 409，按正常操作稍后重试，不能放宽 READY 约束。
 
-## 发布与五秒预算
+## 发布与协作式超时
 
 生产仅注册 `POST /api/storage/cos/upload-callback`，开发仅注册 `POST /api/storage/minio/upload-webhook`。独立安全链不加载 Session，不要求 CSRF，不执行用户限流。无效社区 Cookie 不影响通知。错误环境的通知入口返回 404。
 
@@ -50,9 +50,9 @@ COS 根据原始 body、路径、query 与约定密钥验证 `x-cos-callback-enc
 
 共用流程为：身份、状态与期限检查 → 同步审核 → CopyObject → 条件 UPDATE READY。审核与复制不在 SQL 事务内，均只调用一次，关闭 SDK 普通、复制专用及备用端点重试。生产对私有 ObjectKey 使用固定 biz-type，超过 5 MiB 开启 large-image-detect；非明确通过不发布。官方 SDK 完整解析复制响应，不只检查 HTTP 200。
 
-入口建立 4.5 秒单调时钟预算，预留约 0.5 秒响应余量。Servlet 非阻塞读取限制请求体并覆盖慢通知；独立精确定时器仅取消预算和结束响应，不执行任何发布工作。COS 每次操作独占 ClientConfig，MinIO 使用请求级总超时；通知连接池最多四条连接、获取等待 250ms、网络与语句上限 1 秒，发布前为最终 SQL 预留 1250ms。任何预算不足立即失败，迟到审核结果不能继续复制。内存中的预算不落库，不使用后台发布任务。
+通知Filter最开始记录一次System.nanoTime()，正文读取、验签和后续调用共用默认4.5秒预算。正文同步分段限量读取，调用前后检查期限；不使用Servlet异步、主动截止定时器、取消标记或响应竞争控制，也不再固定预留1250ms。阻塞读取由容器与代理读超时管理，不承诺处理线程恰好在第五秒退出。COS每次操作独占ClientConfig，MinIO使用请求级总超时，审核与复制SDK使用剩余预算且不重试；通知连接池最多四条连接、获取等待250ms、网络与语句上限1秒，SQL返回后仍须检查迟到。预算不落库，未过期的剩余时间可以继续使用。
 
-生产仅在复制完成、READY UPDATE 影响一行且提交成功后返回成功。有效回调业务失败也用 HTTP 200、小型 JSON 和准确 Content-Length，认证或格式失败用 4xx。结果头为 X-Media-Id、X-Media-Result、X-Media-Stage、X-Media-Code；浏览器以 JSON 为准，不能假定 COS 透传自定义回调头。
+生产仅在复制完成、READY UPDATE 影响一行且提交成功后返回成功。非超时业务失败也用HTTP200、小型JSON和准确Content-Length，认证或格式失败用4xx。整体期限耗尽或SDK/SQL明确超时返回HTTP504、Content-Length: 0，不生成200超时JSON；由COS向上传客户端生成203 CallbackFailed。超时的阶段、PROCESS_TIMEOUT和耗时只记日志。结果头为 X-Media-Id、X-Media-Result、X-Media-Stage、X-Media-Code；浏览器以 JSON 为准，不能假定 COS 透传自定义回调头。
 
 复制成功但 SQL 失败留下的孤儿由 ISSUED 回收。响应丢失可能实际已 READY，客户端仍按失败重新上传，旧对象无引用时回收。不恢复审核或复制，不立即补偿删除；极端迟到复制残留沿用设计接受的边界。
 
@@ -99,7 +99,7 @@ docker compose --env-file .env.dev -f examples/media/compose.dev.yaml up -d
 
 创建专用桶，套用填好桶名与前缀的 minio-public-policy.json，仅公开 public/ 读取；temp/ 保持私有。添加仅临时前缀、Expire Days=1 的生命周期。通过 S3 管理 API应用 minio-notification.json，只订阅临时前缀的 s3:ObjectCreated:Post，不能用整个 ObjectCreated 通配事件。FilterRules.Name 必须为小写 prefix。运行期应用不创建桶、不修改桶策略或通知。
 
-Webhook使用 `Authorization: Bearer <token>`。请求上限1 MiB、最多10条Records，共享预算并逐条记录结果；业务发布失败仍确认接收，不依赖MinIO重投恢复。READY、DELETING、过期或不存在的记录不复制；并发重复通知可能重复复制，不承诺开发恰好一次。
+Webhook使用 `Authorization: Bearer <token>`。请求上限1 MiB、最多10条Records，共享预算并逐条记录结果；整批期限耗尽后停止剩余发布并记录数量，业务发布失败或超时仍确认接收，不依赖MinIO重投恢复。READY、DELETING、过期或不存在的记录不复制；并发重复通知可能重复复制，不承诺开发恰好一次。
 
 Caddy只透传固定桶POST与必要OPTIONS，以 MinIO HTTP200、ETag和请求ID确认接收成功并输出统一JSON。错误保留失败状态和请求ID，连接失败同样失败；不查询数据库或等待Webhook。代理不处理公开GET，也不缓存尚未发布对象的404。CORS白名单为 MEDIA_FRONTEND_ORIGIN。
 
@@ -120,6 +120,6 @@ Windows Java25若出现 `Unable to establish loopback connection`，按本机已
 
 可设置 IT_COS_API_URL、IT_COS_USERNAME、IT_COS_PASSWORD、IT_COS_SMALL_IMAGE（PNG）和 IT_COS_LARGE_IMAGE（恰好10MiB的JPEG），运行 `node examples/media/verify-cos.mjs`。使用专用测试账号；脚本不绑定头像，成功上传的无引用图片交给正常GC。脚本不会把本地SDK响应替身视为真实云端。
 
-真实COS验收必须在已开通Callback并设置ckey、真实审核策略和可达回调地址的环境执行：验证POST约束、防覆盖、成功JSON转发、真实审核拒绝/复核、10MiB大图和回调五秒预算。离线SDK响应测试或MinIO通过都不能替代生产验收。
+真实COS验收必须在已开通Callback并设置ckey、真实审核策略和可达回调地址的环境执行：验证POST约束、防覆盖、成功JSON转发、真实审核拒绝/复核、10MiB大图、回调504到上传端203以及协作式超时丢弃语义。离线SDK响应测试或MinIO通过都不能替代生产验收。
 
 部署只使用新库，停止旧实例后统一切换应用、数据库和存储配置。不对旧Flyway历史自动repair/clean，不删除旧桶。回滚按旧应用、旧库和旧配置整体恢复。

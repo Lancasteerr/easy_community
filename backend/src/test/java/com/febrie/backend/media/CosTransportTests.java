@@ -14,6 +14,18 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** 通过真实SDK读取本地HTTP响应，验证200错误体、未知审核结论及关闭重试。 */
 class CosTransportTests {
+    @Test void realSdkReadTimeoutIsClassifiedWithoutRetry() throws Exception {
+        try (var server = new ResponseServer(200, "<RecognitionResult><State>Success</State><Result>0</Result></RecognitionResult>", 1000)) {
+            var moderation = new CosContentModeration(server.properties(), PostPolicyTests.workflow());
+            assertThrows(ProcessingDeadline.TimedOut.class, () -> moderation.review(object(), new ProcessingDeadline(Duration.ofMillis(500))));
+            assertEquals(1, server.requests.get());
+        }
+        try (var server = new ResponseServer(200, "<CopyObjectResult><ETag>test-etag</ETag></CopyObjectResult>", 1000)) {
+            var storage = new CosUploadStorage(server.properties(), PostPolicyTests.workflow());
+            assertThrows(ProcessingDeadline.TimedOut.class, () -> storage.copy(object(), "ec/test/public/id", new ProcessingDeadline(Duration.ofMillis(500))));
+            assertEquals(1, server.requests.get());
+        }
+    }
     @Test void copyRejectsErrorInsideHttp200WithoutRetry() throws Exception {
         try (var server = new ResponseServer(200, "<Error><Code>InternalError</Code><Message>test</Message></Error>")) {
             var storage = new CosUploadStorage(server.properties(), PostPolicyTests.workflow());
@@ -43,6 +55,9 @@ class CosTransportTests {
         private final ExecutorService executor = Executors.newSingleThreadExecutor();
         final AtomicInteger requests = new AtomicInteger();
         ResponseServer(int status, String body) throws IOException {
+            this(status, body, 0);
+        }
+        ResponseServer(int status, String body, long delayMillis) throws IOException {
             executor.submit(() -> {
                 try {
                     while (!socket.isClosed()) {
@@ -52,11 +67,13 @@ class CosTransportTests {
                             String line;
                             while ((line = reader.readLine()) != null && !line.isEmpty()) { /* 只读头，不记录签名。 */ }
                             requests.incrementAndGet(); byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+                            if (delayMillis > 0) { Thread.sleep(delayMillis); }
                             connection.getOutputStream().write(("HTTP/1.1 " + status + " Test\r\nContent-Type: application/xml\r\nContent-Length: " + bytes.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
                             connection.getOutputStream().write(bytes);
                         }
                     }
                 } catch (IOException ignored) { /* 测试结束时关闭accept。 */ }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
             });
         }
         MediaProperties properties() {

@@ -56,4 +56,4 @@ const tampered = await grant(small, 'AVATAR');
 tampered.upload.fields['x-cos-callback'] = btoa('{}');
 await assert.rejects(uploadFile(tampered, small));
 await uploadFile(await grant(large, 'ARTICLE_IMAGE'), large);
-console.log('COS成功上传、公开可读、原生防覆盖、回调参数签名约束及大图审核验收通过；回调五秒预算仍须核对服务端耗时日志。');
+console.log('COS成功上传、公开可读、原生防覆盖、回调参数签名约束及大图审核验收通过；协作式截止和回调504到上传端203仍须另行故障验收并核对服务端日志。');

@@ -5,6 +5,7 @@ import com.febrie.backend.media.application.dto.UploadResult;
 import com.febrie.backend.media.web.StorageNotificationHandler;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.bind.*;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
@@ -16,6 +17,27 @@ import static org.mockito.Mockito.*;
 
 /** 多条事件全部适配，非POST事件不能发布，认证与JSON解析相互独立。 */
 class MinioWebhookTests {
+    @Test void expiredBatchAcknowledgesAndDoesNotStartRemainingRecords() {
+        var flow = new Binder(new MapConfigurationPropertySource(Map.of("app.media.workflow.webhook-token", "test-token")))
+                .bindOrCreate("app.media.workflow", Bindable.of(MediaWorkflowProperties.class));
+        var finish = mock(FinishUpload.class);
+        var nanos = new AtomicLong();
+        var deadline = new ProcessingDeadline(Duration.ofMillis(4500), nanos::get);
+        when(finish.finishUpload(any(), any())).thenAnswer(call -> {
+            nanos.set(4_600_000_000L);
+            return UploadResult.failed(UploadResult.Stage.COPY, UploadResult.Code.PROCESS_TIMEOUT);
+        });
+        var env = new MockEnvironment(); env.setActiveProfiles("dev");
+        var handler = new StorageNotificationHandler(StorageSignatureTests.properties("minio"), flow, finish, env);
+        var request = new MockHttpServletRequest(); request.addHeader("Authorization", "Bearer test-token");
+        String record = """
+                {"eventName":"s3:ObjectCreated:Post","s3":{"bucket":{"name":"media-test"},"object":{
+                  "key":"ec/test/temp/id","size":123,"eTag":"etag","userMetadata":{"content-type":"image/png"}}}}
+                """;
+        var response = handler.handle(request, ("{\"Records\":[" + record + "," + record + "]}").getBytes(java.nio.charset.StandardCharsets.UTF_8), deadline);
+        assertEquals(200, response.status()); assertTrue(response.result().success());
+        verify(finish, times(1)).finishUpload(any(), eq(deadline));
+    }
     @Test void verifiesBearerAndProcessesEveryRecordWithoutCopyEvents() {
         var flow = new Binder(new MapConfigurationPropertySource(Map.of("app.media.workflow.webhook-token", "test-token")))
                 .bindOrCreate("app.media.workflow", Bindable.of(MediaWorkflowProperties.class));

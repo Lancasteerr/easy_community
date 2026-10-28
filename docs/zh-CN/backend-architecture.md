@@ -134,7 +134,7 @@ package com.febrie.backend.user.web;
 
 - MediaService只建档与签发POST Policy；UploadStorage隔离两家签名、一次复制与幂等删除，不提供HEAD确认。
 - FinishUpload共用通知身份检查、单调时钟预算、审核、复制和条件READY提交；ContentModeration只返回结论，生产真实审核，开发立即跳过。通知SQL使用独立短等待连接池，网络调用不在业务事务内。
-- 存储通知走独立无会话安全链，Servlet限量异步读取覆盖慢正文；生产COS验签，开发MinIO验证Bearer token。Caddy开发代理只转发上传和统一JSON，不等待发布。
+- 存储通知走独立无会话安全链，Filter入口计时、同步分段限量读取并在调用前后检查期限；超时返回504空正文，由COS报告上传端203，不再主动抢占响应；生产COS验签，开发MinIO验证Bearer token。Caddy开发代理只转发上传和统一JSON，不等待发布。
 - FileRecord映射八字段文件表，引用表仅三字段；MediaIds统一BINARY(16)与API UUID转换，MediaLocation从固定前缀推导无扩展名Key。
 - MediaReferenceService要求显式READ_COMMITTED，调用者先锁业务实体，再按ID排序锁文件；最新引用与当前next_action_at必须在锁内复核。头像唯一由用户行锁事务保证，文章正文与封面去重为ARTICLE_IMAGE引用。
 - UserProfileService仅绑定READY，用户头像字段和引用同事务变更；删除用户同时解绑，头像变化不修改认证版本。文件模块不依赖用户基础设施。

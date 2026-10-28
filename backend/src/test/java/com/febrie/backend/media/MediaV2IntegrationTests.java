@@ -47,7 +47,6 @@ class MediaV2IntegrationTests {
     @Autowired UserProfileService profiles;
     @Autowired PlatformTransactionManager manager;
     @Autowired com.febrie.backend.shared.ratelimit.FixedWindowCounter counter;
-    @Autowired org.springframework.scheduling.TaskScheduler scheduledMaintenance;
     private S3Client s3;
     private boolean createdBucket;
     private final ObjectMapper json = new ObjectMapper();
@@ -245,25 +244,25 @@ class MediaV2IntegrationTests {
             assertEquals(2, admitted);
         }
     }
-    @Test void slowNotificationBodyTimesOutWithoutWaitingForClientToFinish() throws Exception {
-        CountDownLatch busy = new CountDownLatch(1), release = new CountDownLatch(1);
-        var maintenance = scheduledMaintenance.schedule(() -> {
-            busy.countDown();
-            try { release.await(8, TimeUnit.SECONDS); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
-        }, Instant.now());
-        assertTrue(busy.await(2, TimeUnit.SECONDS));
+    /** 半包读取可阻塞到容器读超时；正文迟到后才协作式返回504，不再主动抢占响应。 */
+    @Test void lateCompletedBodyReturnsEmpty504() throws Exception {
         try (var socket = new Socket("127.0.0.1", port)) {
-            socket.setSoTimeout(5500);
-            String headers = "POST /api/storage/minio/upload-webhook HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nAuthorization: Bearer media-v2-test-token\r\nContent-Length: 10000\r\nConnection: close\r\n\r\n{";
-            long start = System.nanoTime();
+            socket.setSoTimeout(200);
+            String headers = "POST /api/storage/minio/upload-webhook HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nAuthorization: Bearer media-v2-test-token\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{";
             socket.getOutputStream().write(headers.getBytes(StandardCharsets.US_ASCII)); socket.getOutputStream().flush();
+            Thread.sleep(4700);
             var reader = new java.io.BufferedReader(new java.io.InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-            assertTrue(reader.readLine().contains("200"));
-            assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() < 5000);
-            String line; boolean timeout = false;
-            while ((line = reader.readLine()) != null && !line.isEmpty()) { if (line.contains("PROCESS_TIMEOUT")) { timeout = true; } }
-            assertTrue(timeout);
-        } finally { release.countDown(); maintenance.cancel(true); }
+            assertThrows(SocketTimeoutException.class, reader::readLine);
+            socket.getOutputStream().write('}'); socket.getOutputStream().flush();
+            socket.setSoTimeout(3000);
+            assertTrue(reader.readLine().contains("504"));
+            String line; boolean empty = false;
+            while ((line = reader.readLine()) != null && !line.isEmpty()) {
+                if (line.equalsIgnoreCase("Content-Length: 0")) { empty = true; }
+                assertFalse(line.contains("PROCESS_TIMEOUT"));
+            }
+            assertTrue(empty);
+        }
     }
     @Test void blockedReadyUpdateFailsWithinBudgetAndGcRemovesItsPublishedOrphan() throws Exception {
         var grant = media.create(owner, MediaPurpose.AVATAR, "a.png", "image/png", 5);
