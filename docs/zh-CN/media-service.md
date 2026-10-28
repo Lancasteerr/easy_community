@@ -2,6 +2,8 @@
 
 [后端架构](backend-architecture.md) · [启动说明](../../backend/README.md)
 
+本文描述当前 V1 实现。采用 COS 上传回调、同步审核及 MinIO 本地上传网关的后续方案见[文件服务 V2 设计](media-service-v2-design.md)，该设计尚未实现。
+
 ## 能力与限制
 
 后端负责签名、HEAD元数据确认、引用和回收。浏览器直接PUT到MinIO/COS；本版不读取文件正文，不检测真实格式、尺寸、动画或内容哈希。`FileContentValidator`只是预留接口，没有实现或默认通过逻辑。声明类型仅允许`image/jpeg`、`image/png`、`image/webp`；头像、封面、正文图片的声明大小上限分别是2、5、10 MiB。HEAD复核不能替代存储入口的大小限制。

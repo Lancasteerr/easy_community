@@ -3,6 +3,7 @@
 代码组织与包职责见架构文档：[简体中文](../docs/zh-CN/backend-architecture.md) · [English](../docs/en-US/backend-architecture.md)。
 
 文件上传、MinIO/COS桶配置、头像接口和文章接入见[文件服务V1](../docs/zh-CN/media-service.md)。
+后续重设计见[文件服务V2设计：上传回调、同步审核与延迟回收](../docs/zh-CN/media-service-v2-design.md)，其中包含本地MinIO同步上传网关方案；当前代码仍为V1。
 升级已有本机环境文件时，必须补充示例中的全部`MEDIA_*`字段；应用只校验配置，不自动创建桶或修改权限。
 
 Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `easy_community`，Flyway 自动建表。
