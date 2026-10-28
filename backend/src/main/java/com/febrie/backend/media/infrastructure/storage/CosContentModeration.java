@@ -2,6 +2,7 @@ package com.febrie.backend.media.infrastructure.storage;
 
 import com.febrie.backend.media.application.*;
 import com.febrie.backend.media.infrastructure.config.*;
+import com.febrie.backend.media.infrastructure.NotificationTimeouts;
 import com.qcloud.cos.model.ciModel.auditing.ImageAuditingRequest;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -14,7 +15,7 @@ public class CosContentModeration implements ContentModeration {
     private final MediaWorkflowProperties flow;
     public CosContentModeration(MediaProperties p, MediaWorkflowProperties flow) { this.p = p; this.flow = flow; }
     @Override public Decision review(UploadedObject object, ProcessingDeadline deadline) {
-        var client = CosClients.open(p, deadline.remainingMillis(ProcessingDeadline.COMMIT_RESERVE_MS));
+        var client = CosClients.open(p, deadline.remainingMillis());
         try {
             var request = new ImageAuditingRequest();
             request.setBucketName(p.bucket()); request.setObjectKey(object.key()); request.setBizType(flow.moderationBizType());
@@ -28,6 +29,7 @@ public class CosContentModeration implements ContentModeration {
                 case "2" -> Decision.REVIEW_REQUIRED;
                 default -> throw new IllegalStateException("未知审核结论");
             };
-        } finally { client.shutdown(); }
+        } catch (RuntimeException failure) { throw NotificationTimeouts.translate(failure); }
+        finally { client.shutdown(); }
     }
 }

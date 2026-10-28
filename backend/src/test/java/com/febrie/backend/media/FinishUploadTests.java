@@ -8,6 +8,8 @@ import java.time.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -67,14 +69,51 @@ class FinishUploadTests {
         }
         verifyNoInteractions(storage);
     }
-    @Test void commitExceptionAndRemainingBudgetCannotTurnIntoSuccess() {
+    @Test void commitExceptionCannotTurnIntoSuccess() {
         var service = service();
         when(moderation.review(any(), any())).thenReturn(ContentModeration.Decision.PASS);
         when(files.ready(anyString(), anyLong(), isNull(), any(), any(), any())).thenThrow(new IllegalStateException("SQL"));
         assertEquals(Code.COMMIT_FAILED, service.finishUpload(object, deadline).code());
-        reset(storage);
+    }
+    @Test void remainingUnder1250MillisStillAllowsCopyAndCommit() {
+        var service = service();
         when(moderation.review(any(), any())).thenAnswer(call -> { nanos.set(3_300_000_000L); return ContentModeration.Decision.PASS; });
+        when(files.ready(anyString(), anyLong(), isNull(), any(), any(), any())).thenReturn(true);
+        assertTrue(service.finishUpload(object, deadline).success());
+        verify(storage).copy(object, "ec/test/public/" + id, deadline);
+    }
+    @Test void lateCopyDoesNotStartReadyAndLateCommitIsNotReportedAsSuccess() {
+        var service = service();
+        when(moderation.review(any(), any())).thenReturn(ContentModeration.Decision.PASS);
+        doAnswer(call -> { nanos.set(4_600_000_000L); return null; }).when(storage).copy(any(), anyString(), any());
         assertEquals(Code.PROCESS_TIMEOUT, service.finishUpload(object, deadline).code());
-        verifyNoInteractions(storage);
+        verify(files, never()).ready(anyString(), anyLong(), any(), any(), any(), any());
+        reset(storage); nanos.set(0);
+        when(files.ready(anyString(), anyLong(), isNull(), any(), any(), any())).thenAnswer(call -> {
+            nanos.set(4_600_000_000L); return true;
+        });
+        var result = service.finishUpload(object, deadline);
+        assertFalse(result.success()); assertEquals(Stage.COMMIT, result.stage()); assertEquals(Code.PROCESS_TIMEOUT, result.code());
+        // UPDATE可能已经提交，流程只丢弃迟到结果，不补偿删除已公开对象。
+        verify(storage).copy(object, "ec/test/public/" + id, deadline);
+        verifyNoMoreInteractions(storage);
+    }
+    @ParameterizedTest @EnumSource(value = Stage.class, names = {"AUTH", "MODERATION", "COPY", "COMMIT"})
+    void explicitDownstreamTimeoutIsTerminalEvenWithTimeLeft(Stage stage) {
+        var service = service();
+        var timeout = new ProcessingDeadline.TimedOut(new java.net.SocketTimeoutException());
+        when(moderation.review(any(), any())).thenReturn(ContentModeration.Decision.PASS);
+        switch (stage) {
+            case AUTH -> when(files.find(eq(id), any())).thenThrow(timeout);
+            case MODERATION -> when(moderation.review(any(), any())).thenThrow(timeout);
+            case COPY -> doThrow(timeout).when(storage).copy(any(), anyString(), any());
+            case COMMIT -> when(files.ready(anyString(), anyLong(), isNull(), any(), any(), any())).thenThrow(timeout);
+            default -> fail("仅检查下游调用阶段");
+        }
+        var result = service.finishUpload(object, deadline);
+        assertEquals(Code.PROCESS_TIMEOUT, result.code()); assertEquals(stage, result.stage());
+        assertFalse(deadline.expired());
+        if (stage == Stage.AUTH || stage == Stage.MODERATION) { verifyNoInteractions(storage); }
+        if (stage != Stage.COMMIT) { verify(files, never()).ready(anyString(), anyLong(), any(), any(), any(), any()); }
     }
 }

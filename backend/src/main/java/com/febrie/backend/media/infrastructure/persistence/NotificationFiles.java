@@ -2,6 +2,7 @@ package com.febrie.backend.media.infrastructure.persistence;
 
 import com.febrie.backend.media.application.ProcessingDeadline;
 import com.febrie.backend.media.domain.*;
+import com.febrie.backend.media.infrastructure.NotificationTimeouts;
 import com.zaxxer.hikari.*;
 import java.time.Instant;
 import java.util.Optional;
@@ -28,18 +29,27 @@ public class NotificationFiles implements AutoCloseable {
         source = new HikariDataSource(config); jdbc = new JdbcTemplate(source); jdbc.setQueryTimeout(1);
     }
     public Optional<FileRecord> find(String id, ProcessingDeadline deadline) {
-        requireSqlBudget(deadline);
-        return FileRepository.find(jdbc, id, false);
+        requireOutsideTransaction(deadline);
+        try {
+            var file = FileRepository.find(jdbc, id, false);
+            deadline.check();
+            return file;
+        } catch (RuntimeException failure) { throw NotificationTimeouts.translate(failure); }
     }
     public boolean ready(String id, long size, String mime, Instant now, Instant collectAt, ProcessingDeadline deadline) {
-        requireSqlBudget(deadline);
-        return jdbc.update("""
+        requireOutsideTransaction(deadline);
+        try {
+            boolean updated = jdbc.update("""
                 UPDATE media_file SET status='READY',size_bytes=?,mime_type=?,next_action_at=?
                 WHERE id=? AND status='ISSUED' AND next_action_at>?
                 """, size, mime, timestamp(collectAt), MediaIds.bytes(id), timestamp(now)) == 1;
+            // 已发出的隐式提交无法撤销；迟到时只报告超时，不把结果当成本次成功。
+            deadline.check();
+            return updated;
+        } catch (RuntimeException failure) { throw NotificationTimeouts.translate(failure); }
     }
-    private static void requireSqlBudget(ProcessingDeadline deadline) {
-        deadline.remainingMillis(ProcessingDeadline.COMMIT_RESERVE_MS);
+    private static void requireOutsideTransaction(ProcessingDeadline deadline) {
+        deadline.check();
         if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException("通知不得被外层数据库事务包围");
         }

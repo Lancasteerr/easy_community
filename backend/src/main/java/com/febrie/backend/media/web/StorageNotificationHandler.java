@@ -38,18 +38,23 @@ public class StorageNotificationHandler {
     }
     public Response handle(HttpServletRequest request, byte[] body, ProcessingDeadline deadline) {
         if (!production) { return webhook(request, body, deadline); }
-        String signature = request.getHeader("x-cos-callback-encrypted-auth");
-        if (!CosCallbackAuth.verify(request.getRequestURI(), request.getQueryString(), body, signature, flow.callbackKey())) {
-            return new Response(403, null, failed(Stage.AUTH, Code.INVALID_CALLBACK));
-        }
         try {
             deadline.check();
+            String signature = request.getHeader("x-cos-callback-encrypted-auth");
+            boolean authenticated = CosCallbackAuth.verify(request.getRequestURI(), request.getQueryString(), body, signature, flow.callbackKey());
+            deadline.check();
+            if (!authenticated) { return new Response(403, null, failed(Stage.AUTH, Code.INVALID_CALLBACK)); }
             JsonNode root = json.readTree(body);
             var object = new UploadedObject(text(root, "bucket"), text(root, "key"), size(root.get("size")),
                     text(root, "mimeType"), text(root, "etag"));
             String id = new MediaLocation(p.keyPrefix()).idFromTempKey(object.key());
-            return new Response(200, id, finish.finishUpload(object, deadline));
-        } catch (ProcessingDeadline.TimedOut error) { return new Response(200, null, failed(deadline.stage(), Code.PROCESS_TIMEOUT)); }
+            deadline.check();
+            UploadResult result = finish.finishUpload(object, deadline);
+            return new Response(result.code() == Code.PROCESS_TIMEOUT ? 504 : 200, id, result);
+        } catch (ProcessingDeadline.TimedOut error) {
+            log.info("COS通知结束：stage=AUTH code=PROCESS_TIMEOUT elapsedMs={}", deadline.elapsedMillis());
+            return new Response(504, null, failed(Stage.AUTH, Code.PROCESS_TIMEOUT));
+        }
         catch (RuntimeException error) { return new Response(400, null, failed(Stage.AUTH, Code.INVALID_CALLBACK)); }
     }
     private Response webhook(HttpServletRequest request, byte[] body, ProcessingDeadline deadline) {
@@ -63,9 +68,13 @@ public class StorageNotificationHandler {
         } catch (RuntimeException error) { return new Response(400, null, failed(Stage.AUTH, Code.INVALID_CALLBACK)); }
         int index = 0;
         for (JsonNode record : records) {
+            if (deadline.expired()) {
+                log.info("MinIO批次期限耗尽：processed={} unprocessed={} code=PROCESS_TIMEOUT elapsedMs={}",
+                        index, records.size() - index, deadline.elapsedMillis());
+                break;
+            }
             UploadResult result;
             try {
-                deadline.stage(Stage.AUTH);
                 deadline.check();
                 if (!"s3:ObjectCreated:Post".equals(text(record, "eventName"))) { throw new IllegalArgumentException("非POST事件"); }
                 JsonNode s3 = record.get("s3");
@@ -80,7 +89,7 @@ public class StorageNotificationHandler {
                 }
                 result = finish.finishUpload(new UploadedObject(text(s3.get("bucket"), "name"), key,
                         size(object.get("size")), mime, text(object, "eTag")), deadline);
-            } catch (ProcessingDeadline.TimedOut error) { result = failed(deadline.stage(), Code.PROCESS_TIMEOUT); }
+            } catch (ProcessingDeadline.TimedOut error) { result = failed(Stage.AUTH, Code.PROCESS_TIMEOUT); }
             catch (RuntimeException error) { result = failed(Stage.AUTH, Code.INVALID_CALLBACK); }
             log.info("MinIO批次项目：index={} stage={} code={}", index++, result.stage(), result.code());
         }

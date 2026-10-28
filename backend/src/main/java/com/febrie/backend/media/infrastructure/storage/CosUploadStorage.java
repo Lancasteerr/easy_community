@@ -2,6 +2,7 @@ package com.febrie.backend.media.infrastructure.storage;
 
 import com.febrie.backend.media.application.*;
 import com.febrie.backend.media.infrastructure.config.*;
+import com.febrie.backend.media.infrastructure.NotificationTimeouts;
 import com.qcloud.cos.model.*;
 import java.time.Instant;
 import java.util.List;
@@ -19,7 +20,7 @@ public class CosUploadStorage implements UploadStorage {
         return new Descriptor("POST", p.uploadEndpoint().toString(), PostPolicies.cos(p, flow, key, mime, size, created, expires), expires);
     }
     @Override public void copy(UploadedObject source, String target, ProcessingDeadline deadline) {
-        var client = CosClients.open(p, deadline.remainingMillis(ProcessingDeadline.COMMIT_RESERVE_MS));
+        var client = CosClients.open(p, deadline.remainingMillis());
         try {
             var request = new CopyObjectRequest(p.bucket(), source.key(), p.bucket(), target);
             request.setMatchingETagConstraints(List.of(source.etag()));
@@ -27,7 +28,8 @@ public class CosUploadStorage implements UploadStorage {
             metadata.setContentType(source.declaredContentType()); metadata.setCacheControl("public, max-age=3600");
             request.setNewObjectMetadata(metadata);
             if (client.copyObject(request).getETag() == null) { throw new IllegalStateException("复制结果缺少对象标识"); }
-        } finally { client.shutdown(); }
+        } catch (RuntimeException failure) { throw NotificationTimeouts.translate(failure); }
+        finally { client.shutdown(); }
     }
     @Override public void delete(String key) {
         var client = CosClients.open(p, 3000);

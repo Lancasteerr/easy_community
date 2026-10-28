@@ -27,7 +27,6 @@ public class FinishUpload {
     }
     public UploadResult finishUpload(UploadedObject object, ProcessingDeadline deadline) {
         Stage stage = Stage.AUTH;
-        deadline.stage(stage);
         String id = null;
         UploadResult result;
         try {
@@ -38,12 +37,12 @@ public class FinishUpload {
                     || !Set.of("image/jpeg", "image/png", "image/webp").contains(object.declaredContentType() == null ? "" : object.declaredContentType())
                     || object.etag() == null || object.etag().isBlank()) { throw new IllegalArgumentException("通知元数据无效"); }
             var file = files.find(id, deadline).orElseThrow(() -> new IllegalArgumentException("通知文件不存在"));
+            deadline.check();
             if (file.status() != MediaStatus.ISSUED || !clock.instant().isBefore(file.createdAt().plus(flow.notificationTtl()))
                     || file.nextActionAt() == null || !clock.instant().isBefore(file.nextActionAt())
                     || object.size() > file.purpose().maximumSize()) { throw new IllegalArgumentException("通知状态或期限无效"); }
             stage = Stage.MODERATION;
-            deadline.stage(stage);
-            deadline.remainingMillis(ProcessingDeadline.COMMIT_RESERVE_MS);
+            deadline.check();
             var decision = moderation.review(object, deadline);
             deadline.check();
             if (decision != ContentModeration.Decision.PASS) {
@@ -51,12 +50,11 @@ public class FinishUpload {
                         : decision == ContentModeration.Decision.REVIEW_REQUIRED ? Code.MODERATION_REVIEW_REQUIRED : Code.MODERATION_FAILED);
             } else {
                 stage = Stage.COPY;
-                deadline.stage(stage);
-                deadline.remainingMillis(ProcessingDeadline.COMMIT_RESERVE_MS);
+                deadline.check();
                 storage.copy(object, location.publicKey(id), deadline);
                 deadline.check();
                 stage = Stage.COMMIT;
-                deadline.stage(stage);
+                deadline.check();
                 var now = clock.instant();
                 // 目前两个审核适配器均不提供真实格式结论，不能把声明MIME填成已验证结果。
                 boolean updated = files.ready(id, object.size(), null, now, now.plus(flow.unreferencedTtl()), deadline);

@@ -2,6 +2,7 @@ package com.febrie.backend.media.infrastructure.storage;
 
 import com.febrie.backend.media.application.*;
 import com.febrie.backend.media.infrastructure.config.MediaProperties;
+import com.febrie.backend.media.infrastructure.NotificationTimeouts;
 import jakarta.annotation.PreDestroy;
 import java.time.*;
 import org.springframework.context.annotation.Profile;
@@ -32,15 +33,17 @@ public class MinioUploadStorage implements UploadStorage {
         return new Descriptor("POST", url, PostPolicies.minio(p, key, mime, size, created, expires), expires);
     }
     @Override public void copy(UploadedObject source, String target, ProcessingDeadline deadline) {
-        Duration remaining = Duration.ofMillis(deadline.remainingMillis(ProcessingDeadline.COMMIT_RESERVE_MS));
-        var response = client.copyObject(CopyObjectRequest.builder().sourceBucket(p.bucket()).sourceKey(source.key())
-                .destinationBucket(p.bucket()).destinationKey(target).copySourceIfMatch(source.etag())
-                .metadataDirective(MetadataDirective.REPLACE).contentType(source.declaredContentType())
-                .cacheControl("public, max-age=3600")
-                .overrideConfiguration(config -> config.apiCallTimeout(remaining).apiCallAttemptTimeout(remaining)).build());
-        if (response.copyObjectResult() == null || response.copyObjectResult().eTag() == null) {
-            throw new IllegalStateException("复制结果缺少对象标识");
-        }
+        Duration remaining = Duration.ofMillis(deadline.remainingMillis());
+        try {
+            var response = client.copyObject(CopyObjectRequest.builder().sourceBucket(p.bucket()).sourceKey(source.key())
+                    .destinationBucket(p.bucket()).destinationKey(target).copySourceIfMatch(source.etag())
+                    .metadataDirective(MetadataDirective.REPLACE).contentType(source.declaredContentType())
+                    .cacheControl("public, max-age=3600")
+                    .overrideConfiguration(config -> config.apiCallTimeout(remaining).apiCallAttemptTimeout(remaining)).build());
+            if (response.copyObjectResult() == null || response.copyObjectResult().eTag() == null) {
+                throw new IllegalStateException("复制结果缺少对象标识");
+            }
+        } catch (RuntimeException failure) { throw NotificationTimeouts.translate(failure); }
     }
     @Override public void delete(String key) { client.deleteObject(request -> request.bucket(p.bucket()).key(key)); }
     @PreDestroy public void close() { client.close(); }
