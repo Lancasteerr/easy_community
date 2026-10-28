@@ -20,7 +20,7 @@ public record MediaProperties(String provider, URI endpoint, URI uploadEndpoint,
         validateUrl(publicBaseUrl, true);
     }
 
-    /** 生成公开地址时保留记录中的完整对象Key；不在数据库保存域名。 */
+    /** 拼接由固定规则推导的完整对象Key；不在数据库保存域名或路径。 */
     public String publicUrl(String key) {
         return publicBaseUrl.toString().replaceAll("/+$", "") + "/" + key;
     }

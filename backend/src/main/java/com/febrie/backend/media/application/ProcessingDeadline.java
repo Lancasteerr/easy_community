@@ -9,6 +9,7 @@ public final class ProcessingDeadline {
     private final LongSupplier ticker;
     private final long start;
     private final long budget;
+    private volatile boolean cancelled;
     private volatile com.febrie.backend.media.application.dto.UploadResult.Stage stage = com.febrie.backend.media.application.dto.UploadResult.Stage.AUTH;
     public ProcessingDeadline(Duration duration) { this(duration, System::nanoTime); }
     public ProcessingDeadline(Duration duration, LongSupplier ticker) {
@@ -16,10 +17,11 @@ public final class ProcessingDeadline {
     }
     public int remainingMillis(int reserve) {
         long remaining = (budget - (ticker.getAsLong() - start)) / 1_000_000 - reserve;
-        if (remaining <= 0) { throw new TimedOut(); }
+        if (cancelled || remaining <= 0) { throw new TimedOut(); }
         return (int) Math.min(Integer.MAX_VALUE, remaining);
     }
     public void check() { remainingMillis(0); }
+    public void cancel() { cancelled = true; }
     public void stage(com.febrie.backend.media.application.dto.UploadResult.Stage value) { stage = value; }
     public com.febrie.backend.media.application.dto.UploadResult.Stage stage() { return stage; }
     public long elapsedMillis() { return (ticker.getAsLong() - start) / 1_000_000; }

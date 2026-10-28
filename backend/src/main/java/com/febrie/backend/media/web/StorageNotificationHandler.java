@@ -65,6 +65,7 @@ public class StorageNotificationHandler {
         for (JsonNode record : records) {
             UploadResult result;
             try {
+                deadline.stage(Stage.AUTH);
                 deadline.check();
                 if (!"s3:ObjectCreated:Post".equals(text(record, "eventName"))) { throw new IllegalArgumentException("非POST事件"); }
                 JsonNode s3 = record.get("s3");

@@ -8,20 +8,29 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.*;
+import java.util.concurrent.*;
 
 /** 存储通知先匹配，拒绝加载Cookie中的安全上下文或访问社区会话。 */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class StorageSecurityConfiguration {
+    /** 定时器只截止响应，不执行审核、复制、提交或发布恢复。 */
+    @Bean(destroyMethod = "shutdownNow")
+    ScheduledThreadPoolExecutor mediaDeadlineTimers() {
+        var timers = new ScheduledThreadPoolExecutor(1, Thread.ofPlatform().daemon(true).name("media-deadline-", 0).factory());
+        timers.setRemoveOnCancelPolicy(true);
+        return timers;
+    }
     @Bean @Order(0)
-    SecurityFilterChain storageNotifications(HttpSecurity http, StorageNotificationHandler handler, MediaWorkflowProperties flow) throws Exception {
+    SecurityFilterChain storageNotifications(HttpSecurity http, StorageNotificationHandler handler, MediaWorkflowProperties flow,
+                                             ScheduledThreadPoolExecutor mediaDeadlineTimers) throws Exception {
         http.securityMatcher("/api/storage/**")
                 .securityContext(config -> config.securityContextRepository(new NullSecurityContextRepository()))
                 .sessionManagement(config -> config.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .csrf(config -> config.disable()).requestCache(config -> config.disable())
                 .formLogin(config -> config.disable()).httpBasic(config -> config.disable()).logout(config -> config.disable())
                 .authorizeHttpRequests(config -> config.anyRequest().denyAll());
-        http.addFilterBefore(new StorageNotificationFilter(handler, flow), SecurityContextHolderFilter.class);
+        http.addFilterBefore(new StorageNotificationFilter(handler, flow, mediaDeadlineTimers), SecurityContextHolderFilter.class);
         return http.build();
     }
 }

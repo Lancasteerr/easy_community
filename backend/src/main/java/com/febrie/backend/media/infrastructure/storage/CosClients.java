@@ -19,6 +19,7 @@ public final class CosClients {
         config.setMaxErrorRetry(0); config.setMaxErrorRetryForCopyRequest(0);
         config.setChangeEndpointRetry(false); config.setRetryAfterPreflight(false);
         config.setRedirectsEnabled(false); config.setShutdownTimeout(0);
+        config.setPrintShutdownStackTrace(false);
         config.setEndpointBuilder(new EndpointBuilder() {
             @Override public String buildGeneralApiEndpoint(String bucket) { return p.endpoint().getRawAuthority(); }
             @Override public String buildGetServiceApiEndpoint() { return p.endpoint().getRawAuthority(); }

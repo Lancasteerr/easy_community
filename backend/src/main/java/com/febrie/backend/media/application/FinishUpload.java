@@ -27,6 +27,7 @@ public class FinishUpload {
     }
     public UploadResult finishUpload(UploadedObject object, ProcessingDeadline deadline) {
         Stage stage = Stage.AUTH;
+        deadline.stage(stage);
         String id = null;
         UploadResult result;
         try {

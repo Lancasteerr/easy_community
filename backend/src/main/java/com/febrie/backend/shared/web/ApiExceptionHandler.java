@@ -12,10 +12,16 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /** 不向客户端透传SQL、Redis地址、堆栈或原始请求凭证。 */
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    /** 已删除的接口直接返回404，避免再次ERROR分派被安全链转成403。 */
+    @ExceptionHandler(NoResourceFoundException.class)
+    ResponseEntity<ProblemDetail> missing(NoResourceFoundException error) {
+        return business(new ApiException(HttpStatus.NOT_FOUND, "API_NOT_FOUND", "请求接口不存在"));
+    }
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ProblemDetail> business(ApiException error) {
         var builder = ResponseEntity.status(error.status());

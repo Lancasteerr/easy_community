@@ -57,4 +57,24 @@ class FinishUploadTests {
         reset(storage);
         assertEquals(Code.COMMIT_FAILED, service.finishUpload(object, deadline).code());
     }
+    @Test void committedOrDeletingFilesAndReviewRequiredCannotPublish() {
+        var service = service();
+        when(moderation.review(any(), any())).thenReturn(ContentModeration.Decision.REVIEW_REQUIRED);
+        assertEquals(Code.MODERATION_REVIEW_REQUIRED, service.finishUpload(object, deadline).code());
+        for (var state : new MediaStatus[]{MediaStatus.READY, MediaStatus.DELETING}) {
+            when(files.find(eq(id), any())).thenReturn(Optional.of(new FileRecord(id, 1, MediaPurpose.AVATAR, state, null, 123L, now, now.plusSeconds(86400))));
+            assertEquals(Code.INVALID_CALLBACK, service.finishUpload(object, deadline).code());
+        }
+        verifyNoInteractions(storage);
+    }
+    @Test void commitExceptionAndRemainingBudgetCannotTurnIntoSuccess() {
+        var service = service();
+        when(moderation.review(any(), any())).thenReturn(ContentModeration.Decision.PASS);
+        when(files.ready(anyString(), anyLong(), isNull(), any(), any(), any())).thenThrow(new IllegalStateException("SQL"));
+        assertEquals(Code.COMMIT_FAILED, service.finishUpload(object, deadline).code());
+        reset(storage);
+        when(moderation.review(any(), any())).thenAnswer(call -> { nanos.set(3_300_000_000L); return ContentModeration.Decision.PASS; });
+        assertEquals(Code.PROCESS_TIMEOUT, service.finishUpload(object, deadline).code());
+        verifyNoInteractions(storage);
+    }
 }

@@ -15,10 +15,11 @@ public class MediaConfiguration {
                 throw new IllegalStateException("生产必须配置COS、HTTPS回调、约定验签密钥与真实审核策略");
             }
         } else if (environment.matchesProfiles("dev") && (!"minio".equals(properties.provider())
-                || flow.webhookToken().isBlank() || flow.webhookToken().matches(".*\\s.*"))) {
+                || flow.webhookToken().isBlank() || flow.webhookToken().chars().anyMatch(Character::isWhitespace))) {
             throw new IllegalStateException("开发必须配置MinIO与单段通知token");
         }
-        if (environment.matchesProfiles("prod") && (!"https".equals(properties.uploadEndpoint().getScheme())
+        if (environment.matchesProfiles("prod") && (!"https".equals(properties.endpoint().getScheme())
+                || !"https".equals(properties.uploadEndpoint().getScheme())
                 || !"https".equals(properties.publicBaseUrl().getScheme()))) {
             throw new IllegalStateException("生产环境上传与公开文件地址必须使用HTTPS");
         }
