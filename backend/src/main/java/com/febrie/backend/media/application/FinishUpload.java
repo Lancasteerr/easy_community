@@ -41,6 +41,7 @@ public class FinishUpload {
                     || file.nextActionAt() == null || !clock.instant().isBefore(file.nextActionAt())
                     || object.size() > file.purpose().maximumSize()) { throw new IllegalArgumentException("通知状态或期限无效"); }
             stage = Stage.MODERATION;
+            deadline.stage(stage);
             deadline.remainingMillis(ProcessingDeadline.COMMIT_RESERVE_MS);
             var decision = moderation.review(object, deadline);
             deadline.check();
@@ -49,10 +50,12 @@ public class FinishUpload {
                         : decision == ContentModeration.Decision.REVIEW_REQUIRED ? Code.MODERATION_REVIEW_REQUIRED : Code.MODERATION_FAILED);
             } else {
                 stage = Stage.COPY;
+                deadline.stage(stage);
                 deadline.remainingMillis(ProcessingDeadline.COMMIT_RESERVE_MS);
                 storage.copy(object, location.publicKey(id), deadline);
                 deadline.check();
                 stage = Stage.COMMIT;
+                deadline.stage(stage);
                 var now = clock.instant();
                 // 目前两个审核适配器均不提供真实格式结论，不能把声明MIME填成已验证结果。
                 boolean updated = files.ready(id, object.size(), null, now, now.plus(flow.unreferencedTtl()), deadline);
