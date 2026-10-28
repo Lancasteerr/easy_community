@@ -1,77 +1,59 @@
 package com.febrie.backend.media.application;
 
 import com.febrie.backend.media.domain.*;
-import com.febrie.backend.media.infrastructure.persistence.MediaRepository;
+import com.febrie.backend.media.infrastructure.config.*;
+import com.febrie.backend.media.infrastructure.persistence.FileRepository;
 import java.time.*;
-import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.slf4j.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.*;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** 分批恢复复制、延迟回收及复查墓碑；临时文件字节主要由存储生命周期删除。 */
+/** 只回收未完成和无引用对象，不恢复审核或复制；远程删除在短事务之外。 */
 @Service
 public class MediaLifecycleService {
     private static final Logger log = LoggerFactory.getLogger(MediaLifecycleService.class);
-    private final MediaRepository files;
-    private final MediaService media;
-    private final ObjectStorageProvider storage;
+    private final FileRepository files;
+    private final UploadStorage storage;
+    private final MediaWorkflowProperties flow;
+    private final MediaLocation location;
     private final Clock clock;
     private final TransactionTemplate transaction;
-
-    public MediaLifecycleService(MediaRepository files, MediaService media, ObjectStorageProvider storage,
-                                 Clock clock, PlatformTransactionManager manager) {
-        this.files = files; this.media = media; this.storage = storage; this.clock = clock;
+    public MediaLifecycleService(FileRepository files, UploadStorage storage, MediaProperties p,
+                                 MediaWorkflowProperties flow, Clock clock, PlatformTransactionManager manager) {
+        this.files = files; this.storage = storage; this.flow = flow; this.clock = clock;
+        location = new MediaLocation(p.keyPrefix());
         transaction = new TransactionTemplate(manager);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
-
     public void maintain() {
-        Instant now = clock.instant();
-        for (String id : files.maintenanceCandidates(now, now.minus(Duration.ofDays(7)), 50)) {
-            try { maintainOne(id); }
-            catch (Exception failure) {
-                // 不打印SDK异常正文或签名，只记录可定位的文件身份和异常类型。
-                log.warn("文件维护稍后重试：mediaId={}，异常类型={}", id, failure.getClass().getSimpleName());
+        for (MediaStatus state : new MediaStatus[]{MediaStatus.ISSUED, MediaStatus.READY, MediaStatus.DELETING}) {
+            for (String id : files.candidates(state, clock.instant(), flow.cleanupBatchSize())) {
+                try { maintainOne(id); }
+                catch (RuntimeException failure) { log.warn("文件回收失败：mediaId={} exception={}", id, failure.getClass().getSimpleName()); }
             }
         }
     }
-
     public void maintainOne(String id) {
-        var snapshot = files.find(id).orElse(null);
-        if (snapshot == null) { return; }
-        media.requireCurrentStorage(snapshot);
-        if (snapshot.status() == MediaStatus.PROMOTING) {
-            media.prepare(snapshot.ownerUserId(), id);
-            return;
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("文件回收不能位于外层业务事务中");
         }
-        Deletion deletion = transaction.execute(status -> {
-            var file = files.lock(id).orElseThrow();
+        boolean delete = Boolean.TRUE.equals(transaction.execute(status -> {
+            var file = files.lock(id).orElse(null);
             Instant now = clock.instant();
-            if (file.status() == MediaStatus.ISSUED || file.status() == MediaStatus.UPLOADED) {
-                if (!file.expiresAt().isAfter(now)) { files.expire(id); }
-                return null;
-            }
-            boolean unreferenced = file.status() == MediaStatus.READY && file.unreferencedAt() != null
-                    && !file.unreferencedAt().plus(Duration.ofDays(7)).isAfter(now);
-            boolean recover = (file.status() == MediaStatus.DELETING || file.status() == MediaStatus.DELETED)
-                    && (file.leaseUntil() == null || !file.leaseUntil().isAfter(now))
-                    && (file.nextRetryAt() == null || !file.nextRetryAt().isAfter(now));
-            if ((!unreferenced && !recover) || files.hasReferences(id)) { return null; }
-            String token = UUID.randomUUID().toString();
-            files.claimDeletion(id, token, now.plus(Duration.ofMinutes(2)));
-            return new Deletion(file, token);
-        });
-        if (deletion == null) { return; }
+            // 重新检查当前维护时间，不能使用扫描前或绑定再解绑前的旧宽限期。
+            if (file == null || file.nextActionAt() == null || file.nextActionAt().isAfter(now) || files.hasReferences(id)) { return false; }
+            files.deleting(id, now);
+            return true;
+        }));
+        if (!delete) { return; }
         try {
-            storage.delete(deletion.file().bucket(), deletion.file().publicKey());
-            transaction.executeWithoutResult(status -> files.deleted(id, deletion.token(), clock.instant().plus(Duration.ofDays(1))));
+            storage.delete(location.publicKey(id));
         } catch (RuntimeException failure) {
-            transaction.executeWithoutResult(status -> files.failedOperation(deletion.file(), deletion.token(), media.retryAt(deletion.file())));
+            transaction.executeWithoutResult(status -> files.rescheduleDeletion(id, clock.instant().plus(flow.deleteRetryDelay())));
             throw failure;
         }
+        // 删除对象成功后才删记录；SQL失败仍留DELETING，下一轮重复DELETE即可。
+        transaction.executeWithoutResult(status -> files.deleteMetadata(id));
     }
-
-    private record Deletion(MediaFile file, String token) { }
 }

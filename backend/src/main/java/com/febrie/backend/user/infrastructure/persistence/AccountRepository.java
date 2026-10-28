@@ -1,5 +1,7 @@
 package com.febrie.backend.user.infrastructure.persistence;
 
+import com.febrie.backend.media.domain.MediaIds;
+
 import com.febrie.backend.user.application.dto.AccountAuthState;
 import com.febrie.backend.user.application.dto.AccountSnapshot;
 import com.febrie.backend.user.application.dto.UserProfileSnapshot;
@@ -40,11 +42,11 @@ public class AccountRepository {
                         + (lock ? " FOR UPDATE" : ""),
                 (rs, row) -> new UserProfileSnapshot(rs.getLong("id"), rs.getString("username"),
                         Role.valueOf(rs.getString("role")), rs.getString("status"), rs.getLong("auth_version"),
-                        rs.getString("avatar_media_id")), userId).stream().findFirst();
+                        MediaIds.text(rs.getBytes("avatar_media_id"))), userId).stream().findFirst();
     }
 
     public void updateAvatar(long userId, String mediaId) {
-        jdbc.update("UPDATE users SET avatar_media_id=? WHERE id=?", mediaId, userId);
+        jdbc.update("UPDATE users SET avatar_media_id=? WHERE id=?", mediaId == null ? null : MediaIds.bytes(mediaId), userId);
     }
 
     /** 每次鉴权使用独立主库读取，不加载密码或重新读取角色。 */

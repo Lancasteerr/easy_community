@@ -9,7 +9,7 @@ import org.springframework.transaction.*;
 import org.springframework.transaction.annotation.*;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** 当前头像字段和文件引用共享事务；复制准备在事务外，头像不改变认证版本。 */
+/** 当前头像字段和READY文件引用共享事务；头像变化不改变认证版本。 */
 @Service
 public class UserProfileService {
     private final AccountRepository accounts;
@@ -32,7 +32,6 @@ public class UserProfileService {
 
     public UserProfileView setAvatar(UserActor actor, String mediaId) {
         requireActive(actor, accounts.profile(actor.userId(), false).orElseThrow(ApiException::unauthorized));
-        media.prepareAvatar(actor.userId(), mediaId);
         return transaction.execute(status -> {
             var current = accounts.profile(actor.userId(), true).orElseThrow(ApiException::unauthorized);
             requireActive(actor, current);
