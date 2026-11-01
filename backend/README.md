@@ -6,6 +6,7 @@
 升级已有本机环境文件时，必须补充示例中的全部`MEDIA_*`字段；应用只校验配置，不自动创建桶或修改权限。
 
 Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `easy_community`，Flyway 自动建表。
+数据库访问统一使用 MyBatis-Plus：普通 CRUD 使用 BaseMapper/LambdaWrapper，复杂 SQL 放在 XML；Repository 接口与应用服务事务边界保持稳定。上传通知使用独立短等待执行器，不共享业务连接池或事务。
 只新增已确认的官方 `spring-boot-starter-session-data-redis`，移除了 JWT Resource Server starter；无 Lua、第三方 JWT 或限流依赖。
 
 ## 本地启动
@@ -178,6 +179,15 @@ Remove-Item Env:IT_DB_PASSWORD
 ```
 
 集成测试自动执行Flyway迁移、使用随机Redis前缀、清理本次创建的用户，不清空共享Redis。
+
+持久层专项测试只依赖 MySQL，不需要 Redis、MinIO 或 Caddy。设置 `IT_DB_PASSWORD`，可通过 `IT_DB_URL / IT_DB_USERNAME` 覆盖连接；数据库名必须为包含 test 的 `easy_community_*` 专用库：
+
+```powershell
+mvn '-Dtest=MysqlPersistenceTests' test
+```
+
+专项验证自增 ID、默认值、事务回滚、UUID/枚举/UTC 时间映射、显式清空头像、外键与组合引用键、RC 重复读取、维护排序，以及通知连接池隔离、连接耗尽、行锁超时和超时后恢复。此迁移不修改 Flyway 脚本或表结构。
+
 文件引用、头像事务和HTTP测试使用`easy_community_media_v2_test`；真实V2联调需显式设置`IT_MEDIA_V2=true`，参数见文件服务文档，未配置时相应契约测试跳过。
 不要把IT_DB_URL指向业务数据库。测试覆盖HTTP Cookie/CSRF、角色、改密、删号、并发认证、Set撤销、过期清理和计数事务。
 

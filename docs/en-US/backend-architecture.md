@@ -61,7 +61,7 @@ This is practical layering. A business module does not need all four layers. Aut
 | `application` | Coordinate an operation and its transactions; expose services to other modules | User creation, password changes, login, account queries |
 | `domain` | Business types or rules independent of databases, HTTP, and frameworks | The public `Role` enum |
 | `infrastructure` | Implement database access, Redis operations, and security configuration | Account SQL, rate counters, active session sets |
-| `persistence` | Read and write database records | `AccountRepository` uses JdbcTemplate |
+| `persistence` | Read and write database records | `AccountRepository` wraps MyBatis-Plus mappers |
 | `dto` | Transfer data between services and callers; DTO means data transfer object | `UserActor`, `UserView`, `AccountAuthState` |
 | `request` / `response` | HTTP request and response objects for an endpoint category | `LoginRequest`, `CsrfView` |
 | `scheduling` | Decide when scheduled work runs | `SessionCleanupTask` |
@@ -101,6 +101,16 @@ After a successful password change, the user Web layer calls `SessionService` to
 - `shared` must not depend on `user` or `auth`. Move code there only when multiple modules actually use it and it has no module-specific meaning. Authentication-only Redis helpers stay in authentication.
 
 There is no full domain model or dependency inversion interface for every component. A single implementation does not require a Service/ServiceImpl pair. Packages alone do not enforce dependency boundaries, so code review must check references. Account status still uses database strings; a dedicated status type and more general runtime configuration can evolve when needed.
+
+## Database Access
+
+Repositories retain business-oriented methods and use MyBatis-Plus internally. BaseMapper and LambdaWrapper handle ordinary single-table operations; XML contains joins, row locks, state transitions, authentication-version increments, and maintenance queries. Application services own transactions. Do not add generic IService/ServiceImpl layers or expose mappers to controllers.
+
+Persistence entities stay in infrastructure. Users and identities use AUTO IDs; files use INPUT binary UUIDs converted by MediaIds at repository boundaries. Reference mappers match all three columns of the composite key. Clearing avatars and collection schedules writes NULL explicitly rather than relying on entity update defaults.
+
+Main mappers explicitly bind to sqlSessionTemplate and load mapper/main XML. Notifications privately own a separate pool, MyBatis-Plus factory, and SqlSessionTemplate, loading only mapper/notification. These are not additional DataSource or session-factory beans. The notification pool keeps auto-commit, its 250ms acquisition wait, one-second statement timeout, and existing network limits. Timed-out SQL connections are evicted; the original update is not retried.
+
+Both executors use STATEMENT local-cache scope and disable second-level caching, preserving fresh authentication versions and READ_COMMITTED reference queries. No global logical-delete, optimistic-lock, or automatic-fill policy changes existing state transitions or database defaults. Test-only mappers and XML provide fixtures, cleanup, and database assertions without expanding production repository APIs.
 
 ## Where New Classes Belong
 

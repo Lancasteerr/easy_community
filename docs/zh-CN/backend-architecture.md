@@ -61,7 +61,7 @@ backend
 | `application` | 组织一次操作的步骤和事务，提供其他业务可调用的服务 | 创建用户、改密、登录流程、账户查询 |
 | `domain` | 不依赖数据库、HTTP 和框架的业务类型或规则 | 公开的 `Role` 枚举 |
 | `infrastructure` | 数据库、Redis、安全配置等具体实现 | 账户 SQL、限流计数、会话集合 |
-| `persistence` | 从数据库读取和保存数据 | `AccountRepository` 使用 JdbcTemplate |
+| `persistence` | 从数据库读取和保存数据 | `AccountRepository` 封装 MyBatis-Plus Mapper |
 | `dto` | 服务与调用方之间传递的数据；DTO 指数据传输对象 | `UserActor`、`UserView`、`AccountAuthState` |
 | `request` / `response` | 某类 HTTP 接口的请求、响应对象 | `LoginRequest`、`CsrfView` |
 | `scheduling` | 安排定时任务何时执行 | `SessionCleanupTask` |
@@ -101,6 +101,16 @@ backend
 - `shared` 不依赖 `user` 或 `auth`。只有多个业务实际使用且不含专属业务含义的代码才放进去；认证专用 Redis 工具留在认证模块。
 
 目前不引入完整的领域模型或依赖倒置接口，也不为单一实现创建 Service/ServiceImpl。包本身不能强制访问边界，代码评审仍需检查引用方向。账号状态仍使用数据库字符串；独立状态类型与更通用的运行配置可在实际需求出现时演进。
+
+## 数据库访问约定
+
+Repository 保留业务可读的方法，内部使用 MyBatis-Plus。普通单表操作采用 BaseMapper 和 LambdaWrapper；联表、行锁、状态转换、认证版本递增及维护候选查询放在 XML。应用服务负责事务，不引入通用 IService/ServiceImpl，也不让 Controller 直接调用 Mapper。
+
+数据库实体仅位于基础设施层。用户与身份使用 AUTO 自增 ID，文件使用 INPUT 二进制 UUID；Repository 通过 MediaIds 转换 API 字符串。引用的三列组合主键由专用 Mapper 完整匹配，不伪造单列主键。清空头像及回收时间必须显式写 NULL，不依赖实体更新的默认空值策略。
+
+主库扫描明确绑定 sqlSessionTemplate，XML 位于 mapper/main。通知执行器私有持有连接池、MyBatis-Plus 会话工厂和 SqlSessionTemplate，只加载 mapper/notification，不注册额外数据源或会话工厂 Bean。通知保留自动提交、250ms 连接等待、1秒语句超时与既有网络超时；SQL 超时连接会被淘汰，后续通知使用有效连接，不自动重试原更新。
+
+两个执行器均采用 STATEMENT 本地缓存范围并关闭二级缓存，认证版本和 READ_COMMITTED 引用查询每次都访问数据库。不启用全局逻辑删除、乐观锁或自动填充，以保留业务状态与数据库默认值。测试造数、清理与断言只使用测试专用 Mapper/XML，不扩充生产 Repository 接口。
 
 ## 新类放在哪里
 

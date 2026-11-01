@@ -34,6 +34,10 @@ class NotificationTimeoutTests {
         }
         var ordinary = new IllegalStateException("timeout is only a message");
         assertSame(ordinary, NotificationTimeouts.translate(ordinary));
+        // MyBatis 包装的普通 SQL 错误也不能被误归类为通知超时。
+        var sqlError = new org.mybatis.spring.MyBatisSystemException(
+                new org.apache.ibatis.exceptions.PersistenceException(new SQLSyntaxErrorException("ordinary SQL error")));
+        assertSame(sqlError, NotificationTimeouts.translate(sqlError));
     }
     @Test void onlyActualExpiryEndsTheBudget() {
         AtomicLong nanos = new AtomicLong();
