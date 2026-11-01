@@ -153,6 +153,16 @@ package com.febrie.backend.user.web;
 
 Flyway V2定义直接重写，仅用于新建空库。不存在旧complete/prepare、租约、中间状态或兼容模式。文章模块尚未建立，未来须在锁文章行的同一RC事务中保存内容与引用，不提前搭建空业务模块。非Web初始化不运行定时回收，正常启动不改桶配置。
 
+## Redis 原子操作
+
+窗口计数、账号/IP 登录失败计数、会话集合登记分别由三个短 Lua 脚本实现，资源位于 `backend/src/main/resources/redis/`，由 FixedWindowCounter、RequestLimits、ActiveSessions 直接调用。移除 RedisAtomic 通用事务回调；不引入脚本执行框架或新依赖。
+
+Java 负责 Key、窗口、业务阈值与正整数毫秒 TTL；脚本只做固定范围的原子操作。单例 RedisScript 由 Spring Data Redis 创建并缓存 SHA，EVALSHA 缓存缺失时回退 EVAL。计数以字符串返回后转换为 long，避免 Lua 数值精度损失；其余脚本只返回成功标记。每次写入均刷新 TTL，重复会话登记仍成功，超限请求仍计数。
+
+Redis 异常及无效返回沿现有依赖失败处理，不降级放行，不对不确定结果增加自动重试。Lua 不提供错误回滚保证。Key、TTL、数据格式和 Session 命名空间均不因这次迁移改变，无需清库，可直接回滚应用版本。运行账号须允许 EVAL/EVALSHA 及脚本内命令；沿用单 Redis 部署，双 Key 脚本未额外适配 Cluster 同槽约束。
+
+设置 `IT_REDIS=true` 后运行 `mvn '-Dtest=RedisLuaIntegrationTests' test`，使用 `IT_REDIS_HOST/PORT/PASSWORD` 配置，仅连接真实 Redis，不加载 MySQL、Web 或对象存储。测试用随机前缀隔离并清理本次数据，不执行 FLUSHDB 或 SCRIPT FLUSH。
+
 ## 会话迁移与验证
 
 `SessionPrincipal` 与 `Role` 移动后，Java 序列化中的类型名称发生变化。Session 命名空间从 `${app.auth.redis-prefix}:session` 改为 `${app.auth.redis-prefix}:session:v2`，避免读取旧类型数据。其他 Redis Key、TTL、SQL 表结构及接口行为不变。

@@ -1,8 +1,23 @@
 package com.febrie.backend.shared.ratelimit;
 
+import com.febrie.backend.auth.application.dto.SessionPrincipal;
+import com.febrie.backend.auth.infrastructure.config.AuthProperties;
+import com.febrie.backend.auth.infrastructure.ratelimit.RequestLimits;
+import com.febrie.backend.auth.infrastructure.session.ActiveSessions;
+import com.febrie.backend.shared.error.ApiException;
+import com.febrie.backend.user.domain.Role;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -19,6 +34,7 @@ import org.springframework.data.redis.connection.lettuce.LettuceClientConfigurat
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.session.MapSessionRepository;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -30,6 +46,9 @@ class RedisLuaIntegrationTests {
     private LettuceConnectionFactory connections;
     private StringRedisTemplate redis;
     private FixedWindowCounter counter;
+    private final Clock clock = Clock.fixed(Instant.parse("2026-11-01T00:00:30Z"), ZoneOffset.UTC);
+    private RequestLimits limits;
+    private ActiveSessions active;
 
     @BeforeAll
     void connect() {
@@ -42,6 +61,8 @@ class RedisLuaIntegrationTests {
         connections.afterPropertiesSet();
         redis = new StringRedisTemplate(connections);
         counter = new FixedWindowCounter(redis);
+        limits = new RequestLimits(redis, properties(), clock, counter);
+        active = new ActiveSessions(redis, properties(), new MapSessionRepository(new ConcurrentHashMap<>()), clock);
         try (var connection = connections.getConnection()) {
             assertEquals("PONG", connection.ping());
         }
@@ -108,5 +129,135 @@ class RedisLuaIntegrationTests {
         redis.opsForValue().set(key, Long.toString(Long.MAX_VALUE));
         assertThrows(DataAccessException.class, () -> counter.increment(key, Duration.ofSeconds(60)));
         assertEquals(Long.toString(Long.MAX_VALUE), redis.opsForValue().get(key));
+    }
+
+    @Test
+    void loginFailuresRefreshBothDimensionsAndPreserveUsernameCase() throws Exception {
+        String account = failureKey("account", "Alice_1");
+        String ip = failureKey("ip", "192.0.2.1");
+        limits.failed("Alice_1", "192.0.2.1");
+        assertEquals("1", redis.opsForValue().get(account));
+        assertEquals("1", redis.opsForValue().get(ip));
+        assertTrue(redis.getExpire(account, TimeUnit.MILLISECONDS) > 955000);
+        assertTrue(redis.getExpire(ip, TimeUnit.MILLISECONDS) > 955000);
+        redis.expire(account, Duration.ofSeconds(10));
+        redis.expire(ip, Duration.ofSeconds(10));
+        limits.failed("Alice_1", "192.0.2.1");
+        assertTrue(redis.getExpire(account, TimeUnit.MILLISECONDS) > 955000);
+        assertTrue(redis.getExpire(ip, TimeUnit.MILLISECONDS) > 955000);
+        limits.failed("alice_1", "192.0.2.1");
+        assertEquals("2", redis.opsForValue().get(account));
+        assertEquals("1", redis.opsForValue().get(failureKey("account", "alice_1")));
+        assertEquals("3", redis.opsForValue().get(ip));
+    }
+
+    @Test
+    void duplicateSessionRegistrationRefreshesTtlAndRemovalStaysRevoked() {
+        var principal = principal();
+        String key = active.key(principal);
+        active.register(principal, "session-id");
+        assertTrue(active.contains(principal, "session-id"));
+        assertTrue(redis.getExpire(key, TimeUnit.MILLISECONDS) > 7195000);
+        redis.expire(key, Duration.ofSeconds(10));
+        active.register(principal, "session-id");
+        assertEquals(1L, redis.opsForSet().size(key));
+        assertTrue(redis.getExpire(key, TimeUnit.MILLISECONDS) > 7195000);
+        active.remove(principal, "session-id");
+        assertFalse(active.contains(principal, "session-id"));
+        assertFalse(redis.hasKey(key));
+    }
+
+    @Test
+    void concurrentRateLimitCountsRejectionsAndStartsANewFixedWindow() throws Exception {
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(8)) {
+            var attempts = new ArrayList<Future<Boolean>>();
+            for (int i = 0; i < 12; i++) {
+                attempts.add(executor.submit(() -> {
+                    assertTrue(start.await(5, TimeUnit.SECONDS));
+                    try {
+                        limits.consume("probe", "shared", 3);
+                        return true;
+                    } catch (ApiException denied) {
+                        assertEquals(429, denied.status().value());
+                        assertEquals(30, denied.retryAfter());
+                        return false;
+                    }
+                }));
+            }
+            start.countDown();
+            int accepted = 0;
+            for (var attempt : attempts) { if (attempt.get(10, TimeUnit.SECONDS)) { accepted++; } }
+            assertEquals(3, accepted);
+        }
+        String key = prefix + ":auth:request:probe:" + digest("shared") + ":" + clock.instant().getEpochSecond() / 60;
+        assertEquals("12", redis.opsForValue().get(key));
+        assertTrue(redis.getExpire(key, TimeUnit.MILLISECONDS) > 85000);
+        var nextWindow = new RequestLimits(redis, properties(), Clock.offset(clock, Duration.ofSeconds(30)), counter);
+        assertDoesNotThrow(() -> nextWindow.consume("probe", "shared", 3));
+        assertEquals("12", redis.opsForValue().get(key));
+        String nextKey = key.substring(0, key.lastIndexOf(':') + 1) + (clock.instant().getEpochSecond() / 60 + 1);
+        assertEquals("1", redis.opsForValue().get(nextKey));
+    }
+
+    @Test
+    void invalidFailureCountersAndSessionTypesNeverReportSuccess() throws Exception {
+        // 逐一污染两个维度；只断言失败，不把 Lua 原子执行误当作错误回滚。
+        for (String key : new String[]{failureKey("account", "Alice_1"), failureKey("ip", "192.0.2.1")}) {
+            redis.delete(key);
+            redis.opsForSet().add(key, "wrong-type");
+            assertThrows(DataAccessException.class, () -> limits.failed("Alice_1", "192.0.2.1"));
+            redis.delete(key);
+            for (String invalid : new String[]{"invalid", Long.toString(Long.MAX_VALUE)}) {
+                redis.opsForValue().set(key, invalid);
+                assertThrows(DataAccessException.class, () -> limits.failed("Alice_1", "192.0.2.1"));
+            }
+            redis.delete(key);
+        }
+        redis.opsForValue().set(failureKey("account", "Alice_1"), "invalid");
+        assertThrows(DataAccessException.class, () -> limits.checkFailures("Alice_1", "192.0.2.1"));
+        redis.opsForValue().set(active.key(principal()), "wrong-type");
+        assertThrows(DataAccessException.class, () -> active.register(principal(), "session-id"));
+    }
+
+    @Test
+    void unavailableRedisNeverReportsSuccessfulWrites() throws Exception {
+        // 占用随机端口但不提供 Redis 协议响应，无需停机或修改真实 Redis 服务。
+        try (var unavailable = new ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))) {
+            var server = new RedisStandaloneConfiguration("127.0.0.1", unavailable.getLocalPort());
+            var client = LettuceClientConfiguration.builder().commandTimeout(Duration.ofMillis(200)).build();
+            var brokenConnections = new LettuceConnectionFactory(server, client);
+            brokenConnections.afterPropertiesSet();
+            try {
+                var brokenRedis = new StringRedisTemplate(brokenConnections);
+                var brokenCounter = new FixedWindowCounter(brokenRedis);
+                var brokenLimits = new RequestLimits(brokenRedis, properties(), clock, brokenCounter);
+                var brokenSessions = new ActiveSessions(brokenRedis, properties(),
+                        new MapSessionRepository(new ConcurrentHashMap<>()), clock);
+                assertThrows(DataAccessException.class,
+                        () -> brokenCounter.increment(prefix + ":unavailable", Duration.ofSeconds(60)));
+                assertThrows(DataAccessException.class, () -> brokenLimits.failed("Alice_1", "192.0.2.1"));
+                assertThrows(DataAccessException.class, () -> brokenSessions.register(principal(), "session-id"));
+            } finally {
+                brokenConnections.destroy();
+            }
+        }
+    }
+
+    private AuthProperties properties() {
+        return new AuthProperties("test", prefix, false, Duration.ofHours(2),
+                60, 30, 120, 5, 30, Duration.ofMinutes(10));
+    }
+
+    private SessionPrincipal principal() {
+        return new SessionPrincipal(1, "Alice_1", Role.USER, 1, clock.instant(), clock.instant().plusSeconds(7200));
+    }
+
+    private String failureKey(String kind, String value) throws Exception {
+        return prefix + ":auth:login-fail:" + kind + ":" + digest(value) + ":" + clock.instant().getEpochSecond() / 900;
+    }
+
+    private String digest(String value) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
     }
 }

@@ -7,7 +7,7 @@
 
 Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `easy_community`，Flyway 自动建表。
 数据库访问统一使用 MyBatis-Plus：普通 CRUD 使用 BaseMapper/LambdaWrapper，复杂 SQL 放在 XML；Repository 接口与应用服务事务边界保持稳定。上传通知使用独立短等待执行器，不共享业务连接池或事务。
-只新增已确认的官方 `spring-boot-starter-session-data-redis`，移除了 JWT Resource Server starter；无 Lua、第三方 JWT 或限流依赖。
+使用官方 `spring-boot-starter-session-data-redis`，移除了 JWT Resource Server starter；Redis 原子计数与会话登记通过 Spring Data Redis 执行短 Lua，无第三方 JWT 或限流依赖。
 
 ## 本地启动
 
@@ -139,7 +139,9 @@ Session存在、绝对未过期、SQL为ACTIVE、版本一致、Set包含Session
 Redis使用Spring Session默认序列化，运行实例使用一致应用版本；Redis不得对不可信写入者开放。
 本次认证类型分包后，Session 命名空间切换为 `ec:<env>:session:v2`。升级时停止全部旧实例后统一启动新版本，
 浏览器重新获取 CSRF 并登录；旧会话自然过期，不清空共享 Redis。迁移及回滚注意事项见架构文档。
-无Lua；仅用普通原子命令及MULTI/EXEC保持计数/集合写入和TTL同事务。
+三个短 Lua 位于 `src/main/resources/redis/`：窗口计数、账号/IP 失败计数、会话集合登记；Java 负责窗口、Key、阈值与 TTL，脚本仅负责原子写入和刷新过期时间。每次计数和登记均刷新 TTL，重复登记已有 Session 仍成功，超限请求仍计数。
+Spring Data Redis 复用单例脚本，优先 EVALSHA，缓存缺失时回退 EVAL；运行账号须允许这两种命令及脚本内的 INCR、GET、SADD、PEXPIRE。脚本失败不放行，Lua 不提供错误回滚，不对执行结果不确定的写入增加自动重试。
+本次 Lua 迁移不改变 Key、TTL、Session 命名空间或数据格式，无需清库；回滚应用无需数据回退。沿用单 Redis 部署，不新增 Cluster 支持；双 Key 的失败计数脚本与原事务一样受 Cluster 同槽限制。
 
 默认限流：CSRF 60次/IP/分钟，登录30次/IP/分钟，已登录请求120次/userId/分钟，
 认证失败5次/账号/15分钟及30次/IP/15分钟。账号失败计数使用去首尾空白且保留大小写的用户名，大小写不同的账号分别计数，IP 限流仍共享。
@@ -168,7 +170,18 @@ Redis使用Spring Session默认序列化，运行实例使用一致应用版本�
 
 ## 验证
 
-普通 `mvn test` 执行单元测试；真实集成测试需显式提供 `IT_DB_PASSWORD`。
+普通 `mvn test` 执行单元测试。仅验证 Redis Lua 时，不需要 MySQL、Web 或对象存储，显式启用专项集成测试：
+
+```powershell
+# 可覆盖 IT_REDIS_HOST、IT_REDIS_PORT、IT_REDIS_PASSWORD；连接有密码的 Redis 时必须提供密码。
+$env:IT_REDIS = 'true'
+mvn '-Dtest=RedisLuaIntegrationTests' test
+Remove-Item Env:IT_REDIS
+```
+
+专项测试使用随机 Redis 前缀，覆盖并发计数、TTL 刷新、整数精度、双维度失败计数、会话登记与异常，不清库或清空脚本缓存。Windows JDK 如遇临时套接字问题，使用上文的 JVM 参数。
+
+包含 MySQL 的真实集成测试需显式提供 `IT_DB_PASSWORD`。
 先创建专用空库 `easy_community_auth_test` 和 `easy_community_media_v2_test`，启动Redis，再运行：
 
 ```powershell
@@ -189,7 +202,7 @@ mvn '-Dtest=MysqlPersistenceTests' test
 专项验证自增 ID、默认值、事务回滚、UUID/枚举/UTC 时间映射、显式清空头像、外键与组合引用键、RC 重复读取、维护排序，以及通知连接池隔离、连接耗尽、行锁超时和超时后恢复。此迁移不修改 Flyway 脚本或表结构。
 
 文件引用、头像事务和HTTP测试使用`easy_community_media_v2_test`；真实V2联调需显式设置`IT_MEDIA_V2=true`，参数见文件服务文档，未配置时相应契约测试跳过。
-不要把IT_DB_URL指向业务数据库。测试覆盖HTTP Cookie/CSRF、角色、改密、删号、并发认证、Set撤销、过期清理和计数事务。
+不要把IT_DB_URL指向业务数据库。测试覆盖HTTP Cookie/CSRF、角色、改密、删号、并发认证、Set撤销、过期清理和Lua计数。
 
 参考：[Spring Session](https://docs.spring.io/spring-session/reference/guides/boot-redis.html)、
 [Spring CSRF](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html)、

@@ -1,7 +1,6 @@
 package com.febrie.backend.auth.infrastructure.ratelimit;
 
 import com.febrie.backend.auth.infrastructure.config.AuthProperties;
-import com.febrie.backend.auth.infrastructure.redis.RedisAtomic;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.shared.ratelimit.FixedWindowCounter;
 import java.nio.charset.StandardCharsets;
@@ -10,22 +9,29 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.List;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
-/** 固定窗口入口限制与认证失败计数；计数和过期时间使用Redis事务同步提交。 */
+/** 固定窗口入口限制与认证失败计数；Lua 原子更新计数及过期时间。 */
 @Component
 public class RequestLimits {
+    // KEYS 按账号、IP 排列；固定的 16 分钟 TTL 转为毫秒，无需每次校验。
+    private static final RedisScript<Long> RECORD_FAILURE = RedisScript.of(
+            new ClassPathResource("redis/record-login-failure.lua"), Long.class);
+    private static final String FAILURE_TTL_MILLIS = Long.toString(Duration.ofMinutes(16).toMillis());
+
     private final StringRedisTemplate redis;
-    private final RedisAtomic atomic;
     private final AuthProperties properties;
     private final Clock clock;
     private final FixedWindowCounter windows;
 
-    public RequestLimits(StringRedisTemplate redis, RedisAtomic atomic, AuthProperties properties, Clock clock, FixedWindowCounter windows) {
+    public RequestLimits(StringRedisTemplate redis, AuthProperties properties, Clock clock, FixedWindowCounter windows) {
         this.redis = redis;
-        this.atomic = atomic;
         this.properties = properties;
         this.clock = clock;
         this.windows = windows;
@@ -49,12 +55,11 @@ public class RequestLimits {
     public void failed(String username, String ip) {
         long window = clock.instant().getEpochSecond() / 900;
         // 两个维度统一计数；已有并发认证允许完成，不尝试撤回进行中的请求。
-        atomic.execute(operations -> {
-            for (String key : new String[]{failureKey("account", username, window), failureKey("ip", ip, window)}) {
-                operations.opsForValue().increment(key);
-                operations.expire(key, Duration.ofMinutes(16));
-            }
-        });
+        var keys = List.of(failureKey("account", username, window), failureKey("ip", ip, window));
+        Long result = redis.execute(RECORD_FAILURE, keys, FAILURE_TTL_MILLIS);
+        if (!Long.valueOf(1).equals(result)) {
+            throw new RedisSystemException("认证失败计数未成功写入", null);
+        }
     }
 
     private String failureKey(String kind, String value, long window) {
@@ -63,7 +68,12 @@ public class RequestLimits {
 
     private long count(String key) {
         String value = redis.opsForValue().get(key);
-        return value == null ? 0 : Long.parseLong(value);
+        try {
+            return value == null ? 0 : Long.parseLong(value);
+        } catch (NumberFormatException error) {
+            // 存量计数损坏属于 Redis 依赖故障，不泄露原值，也不放行认证。
+            throw new RedisSystemException("认证失败计数值无效", error);
+        }
     }
 
     private static ApiException exceeded(long remaining) {

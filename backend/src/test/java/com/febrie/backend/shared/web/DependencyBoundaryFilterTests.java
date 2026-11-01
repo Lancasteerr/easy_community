@@ -3,6 +3,7 @@ package com.febrie.backend.shared.web;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import tools.jackson.databind.json.JsonMapper;
@@ -15,6 +16,7 @@ class DependencyBoundaryFilterTests {
     void redisAndSqlFailuresDoNotLeakConnectionDetails() throws Exception {
         var filter = new DependencyBoundaryFilter(new ProblemResponses(JsonMapper.builder().build()));
         for (var failure : new RuntimeException[]{new RedisConnectionFailureException("secret-redis-password"),
+                new RedisSystemException("secret-script-result", null),
                 new DataAccessResourceFailureException("secret-jdbc-address")}) {
             var response = new MockHttpServletResponse();
             filter.doFilter(new MockHttpServletRequest("GET", "/api/users/me"), response,

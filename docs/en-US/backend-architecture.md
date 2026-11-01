@@ -157,6 +157,16 @@ The media module now implements V2. See the [media guide](../zh-CN/media-service
 
 The rewritten Flyway V2 definition is for new databases only. Old complete/prepare endpoints, leases, intermediate states, and compatibility modes are removed. Future article services must save content and synchronize references in the same RC transaction after locking the article row; no article module is introduced here. Non-web initialization does not run cleanup, and startup does not mutate bucket configuration.
 
+## Atomic Redis Operations
+
+Three short Lua scripts implement window increments, account/IP login failure recording, and active session registration. Resources live in `backend/src/main/resources/redis/` and are called directly by FixedWindowCounter, RequestLimits, and ActiveSessions. The generic RedisAtomic transaction callback is removed; no script execution framework or dependency is added.
+
+Java owns keys, windows, business thresholds, and positive integer TTLs in milliseconds. Scripts perform only bounded atomic operations. Spring Data Redis creates singleton RedisScript instances, caches their SHA, and falls back from EVALSHA to EVAL on a cache miss. Counters return strings parsed as long to preserve integer precision; other scripts return an explicit success marker. Every write refreshes the TTL, duplicate session registration succeeds, and rejected requests still increment the counter.
+
+Redis errors and invalid results retain existing dependency failure handling without allowing the request or automatically retrying writes with uncertain results. Lua does not provide error rollback. This migration keeps keys, TTLs, data formats, and the Session namespace unchanged; no data clearing is needed, and the application can be rolled back directly. Runtime accounts must permit EVAL/EVALSHA and the commands used by scripts. Deployment remains a single Redis instance; the two-key script does not add Cluster hash-slot support.
+
+Set `IT_REDIS=true` and run `mvn '-Dtest=RedisLuaIntegrationTests' test`, with `IT_REDIS_HOST/PORT/PASSWORD` supplying connection settings. These tests connect only to real Redis without loading MySQL, Web, or object storage. They isolate and clean up their own random key prefix without FLUSHDB or SCRIPT FLUSH.
+
 ## Session Migration and Verification
 
 Moving `SessionPrincipal` and `Role` changes the type names stored by Java serialization. The Session namespace changes from `${app.auth.redis-prefix}:session` to `${app.auth.redis-prefix}:session:v2` to avoid reading the old types. Other Redis keys, TTLs, SQL schemas, and API behavior remain unchanged.

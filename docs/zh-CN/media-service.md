@@ -86,7 +86,7 @@ GC 每五分钟按三个状态分别扫描最多 100 个候选。加文件行锁
 | MEDIA_UNREFERENCED_TTL / MEDIA_DELETE_RETRY_DELAY | 24h / 5m |
 | MEDIA_PROCESSING_BUDGET | 默认4500ms，不允许高于4500ms |
 
-签发限流使用 Redis MULTI/EXEC 原子更新计数与 TTL，超限429并返回 Retry-After；依赖失败不放行。这不是用户总量或审核费用配额，批量长期消耗仍是已知限制。
+签发限流复用 FixedWindowCounter，通过短 Lua 原子递增计数并刷新 TTL，超限请求仍计数，返回429及 Retry-After；依赖失败不放行。窗口、Key 与 TTL 由 Java 计算，保持固定窗口语义。这不是用户总量或审核费用配额，批量长期消耗仍是已知限制。
 
 开发使用固定 MinIO `RELEASE.2025-09-07T16-13-09Z` 和 Caddy `2.10.2-alpine`：
 
