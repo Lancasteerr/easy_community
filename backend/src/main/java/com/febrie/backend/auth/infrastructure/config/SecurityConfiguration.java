@@ -73,6 +73,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(config -> config
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/articles/*").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated().anyRequest().denyAll())
                 .exceptionHandling(config -> config

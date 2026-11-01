@@ -5,6 +5,7 @@ import com.febrie.backend.media.domain.MediaIds;
 import com.febrie.backend.user.application.dto.AccountAuthState;
 import com.febrie.backend.user.application.dto.AccountSnapshot;
 import com.febrie.backend.user.application.dto.UserProfileSnapshot;
+import com.febrie.backend.user.application.dto.UserDisplayView;
 import com.febrie.backend.user.domain.Role;
 import com.febrie.backend.user.infrastructure.persistence.entity.AccountRow;
 import com.febrie.backend.user.infrastructure.persistence.entity.AuthIdentityEntity;
@@ -12,6 +13,9 @@ import com.febrie.backend.user.infrastructure.persistence.entity.UserEntity;
 import com.febrie.backend.user.infrastructure.persistence.mapper.AuthIdentityMapper;
 import com.febrie.backend.user.infrastructure.persistence.mapper.UserMapper;
 import java.util.Optional;
+import java.util.Collection;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Repository;
 
 /** 封装数据库映射；事务继续由应用服务管理，业务层不接触 Mapper。 */
@@ -27,6 +31,14 @@ public class AccountRepository {
 
     public Optional<AccountSnapshot> findByUsername(String username) {
         return Optional.ofNullable(users.findAccountByUsername(username)).map(AccountRepository::snapshot);
+    }
+
+    /** 历史文章仍保留软删除账号的署名，不能以ACTIVE筛选代替作者存在性。 */
+    public Map<Long, UserDisplayView> displays(Collection<Long> ids) {
+        if (ids.isEmpty()) { return Map.of(); }
+        return users.selectList(Wrappers.<UserEntity>lambdaQuery().select(UserEntity::getId, UserEntity::getUsername)
+                .in(UserEntity::getId, ids)).stream().collect(Collectors.toMap(UserEntity::getId,
+                        row -> new UserDisplayView(row.getId(), row.getUsername())));
     }
 
     public Optional<AccountSnapshot> lockById(long userId) {
