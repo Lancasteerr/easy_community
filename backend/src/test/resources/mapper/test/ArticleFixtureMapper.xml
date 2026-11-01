@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.febrie.backend.support.persistence.ArticleFixtureMapper">
+    <delete id="deleteTagsForAuthor">
+        DELETE r FROM article_tag r JOIN article a ON a.id = r.article_id WHERE a.author_id = #{author}
+    </delete>
+    <delete id="deleteArticlesForAuthor">DELETE FROM article WHERE author_id = #{author}</delete>
+</mapper>
