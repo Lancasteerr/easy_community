@@ -65,8 +65,10 @@ class ArticleHttpIntegrationTests {
             fixtures.deleteIdentities(id); fixtures.deleteUser(id);
         }
         tags.forEach(articleFixtures::deleteTag);
-        try (var keys = redis.scan(ScanOptions.scanOptions().match(PREFIX + ":*").count(100).build())) {
-            while (keys.hasNext()) { redis.delete(keys.next()); }
+        for (String pattern : List.of(PREFIX + ":*", "{" + PREFIX + ":article:stats:v1}:*")) {
+            try (var keys = redis.scan(ScanOptions.scanOptions().match(pattern).count(100).build())) {
+                while (keys.hasNext()) { redis.delete(keys.next()); }
+            }
         }
     }
     @Test void visitorReadsAndAuthorCanSaveEditAndIrreversiblyDelete() throws Exception {
@@ -78,6 +80,8 @@ class ArticleHttpIntegrationTests {
         assertEquals(200, detail.statusCode(), detail.body());
         assertEquals("no-store", detail.headers().firstValue("Cache-Control").orElseThrow());
         assertTrue(mapper.readTree(detail.body()).path("contentHtml").asString().contains("&lt;safe&gt;"));
+        assertEquals(1, mapper.readTree(detail.body()).path("viewCount").asLong());
+        assertEquals(2, mapper.readTree(author.call("GET", "/api/articles/" + id, null, false).body()).path("viewCount").asLong());
         assertEquals(401, visitor.call("GET", "/api/articles/" + id + "/edit", null, false).statusCode());
         assertEquals(401, visitor.call("GET", "/api/users/me/articles", null, false).statusCode());
         assertEquals(401, visitor.call("GET", "/api/tags", null, false).statusCode());
@@ -87,10 +91,12 @@ class ArticleHttpIntegrationTests {
         var edit = mapper.readTree(author.call("GET", "/api/articles/" + id + "/edit", null, false).body());
         assertEquals("second", edit.get("title").asString());
         assertEquals(1, edit.path("content").path("schemaVersion").asInt());
+        assertFalse(edit.has("viewCount"));
         var page = mapper.readTree(author.call("GET", "/api/users/me/articles", null, false).body());
         assertEquals(1, page.path("items").size());
         assertFalse(page.path("items").get(0).has("hidden"));
         assertFalse(page.path("items").get(0).has("contentHtml"));
+        assertEquals(2, page.path("items").get(0).path("viewCount").asLong());
         assertEquals(204, author.call("DELETE", "/api/articles/" + id, null, true).statusCode());
         assertEquals(204, author.call("DELETE", "/api/articles/" + id, null, true).statusCode());
         assertEquals(404, visitor.call("GET", "/api/articles/" + id, null, false).statusCode());

@@ -2,7 +2,7 @@
 
 ## 范围
 
-同步保存、不可恢复隐藏、详情、作者编辑读取、本人公开文章管理、最小 Tag 目录及文章双投影缓存。不包含前端、公共信息流、计数、搜索、消息队列、修订或请求幂等。隐藏保留文件引用，不物理删除图片。
+同步保存、不可恢复隐藏、详情、作者编辑读取、本人公开文章管理、最小 Tag 目录、文章双投影缓存及浏览量 V1。不包含前端、公共信息流、搜索、消息队列、修订或请求幂等。隐藏保留文件引用，不物理删除图片。
 
 代码沿用按业务分包：article.web 处理 HTTP，article.application 组织用例和事务，article.infrastructure 管理持久化、配置与缓存。Controller 不直接访问数据库或 Redis。作者显示资料经用户应用层读取，文件引用复用媒体应用服务；不创建空 domain 包或 Service/ServiceImpl。
 
@@ -20,6 +20,10 @@
 
 所有响应 no-store，文章、作者和 Tag ID 为字符串。编辑权不因管理员/巡查员角色扩展。保存为完整替换；非法 ID 不回退新增，不存在不 UPSERT。
 
+普通详情与本人文章列表项均通过现有 DTO 返回数字字段 viewCount；管理列表和后续公共列表共用列表 DTO，不新增管理 DTO，展示取舍交给前端。详情取得可见内容后记录一次 PV，正常返回包含本次浏览的 Redis 实时总量；游客、作者本人及重复刷新同样计数。列表与编辑不计数，编辑响应不含 viewCount。
+
+浏览统计使用独立的日累计 Hash 和实时总量 Hash，同一 Lua 原子加一，SQL 每分钟按日累计差值持久化。实时统计失败回退 SQL 总量，SQL 也失败时返回依赖错误。正文缓存不保存 viewCount，旧缓存可直接读取并在返回前装配统计；浏览量变化不触发正文缓存失效。详见[浏览量 V1](article-view-statistics-v1-design.md)。
+
 保存体字段仅限 articleId、title、content、coverMediaId、tagIds。除 articleId 外必须显式提交，coverMediaId=null 清除封面，tagIds=[] 清除关联。content={schemaVersion:1,doc:受限Tiptap文档}。摘要从正文生成，不接收 HTML、身份、状态、时间或独立摘要。
 
 标题1～100个Unicode码点，摘要合并空白后取前200码点；纯图片允许，空白正文拒绝。请求最多1MiB，深度32、节点10000、图片节点50、Tag5。Tag名去首尾空白，1～32码点，区分大小写唯一，不支持改名/删除/排序。
@@ -29,6 +33,8 @@
 ## SQL 与错误
 
 Flyway V3新增 article、tag、article_tag，不重写历史迁移。JSON保存schemaVersion/doc，SQL仅存封面ID。主键AUTO，作者管理索引(author_id,hidden,id)。创建时间和发布时间为同一创建事务时间，编辑只改更新时间。
+
+Flyway V4 新增 article.view_count 与 article_view_stat，旧文章从 0 开始。统计 SQL 只更新总量，不修改正文、hidden 或 updated_at；正文编辑不覆盖统计。日统计和总量在同一日期事务内提交或回滚，所有统计 Redis 操作均位于 SQL 事务之外。
 
 无外层事务的保存服务先准备内容，再调用独立代理的RC写服务：创建INSERT取得ID；修改/隐藏先锁文章行，再锁内验权限和状态。保存调用现有syncArticle维护文件引用，内容/封面/Tag/引用同事务。隐藏只改状态。无版本、CAS、SQL自动重试或自动核对。
 
@@ -75,7 +81,11 @@ mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' '-Dtest=Article*Tests' test
 
 IT_DB_USERNAME、IT_DB_PASSWORD及IT_REDIS_HOST/PORT/PASSWORD沿用后端测试约定。普通mvn test不启用外部服务；最终启用这些变量执行mvn clean verify时，也会执行既有认证/持久层集成测试。Windows临时套接字参数仅为本地测试使用，其他平台可省略。
 
-## 本次验收记录（2026-11-01）
+## 浏览量 V1 增量验收（2026-11-02）
+
+专用 MySQL 与真实 Redis 下执行 `mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' clean verify` 成功，173 项通过，10 项真实对象存储测试跳过，零失败、零错误；文章模块 70 项全部通过。统计细项见[浏览量 V1 验收记录](article-view-statistics-v1-design.md#本次验收记录2026-11-02)。
+
+## 原 CRUD 验收记录（2026-11-01）
 
 在专用easy_community_article_test库及真实Redis上，启用IT_ARTICLE、IT_REDIS与数据库凭证后运行 `mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' clean verify`，构建成功：142项通过、0失败、0错误；文章模块39项全部通过。另有10项既有MediaV2IntegrationTests因未启用真实对象存储联调环境而跳过，未计入通过数量。
 

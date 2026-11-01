@@ -22,6 +22,9 @@ public class ArticleListCacheStore {
         return result;
     }
     public boolean publish(long id, String token, ArticleListView data) {
-        return cache.publish(id, token, "list", "D" + mapper.writeValueAsString(data));
+        // 列表内容投影与实时统计独立，兼容没有viewCount的旧缓存。
+        var content = (tools.jackson.databind.node.ObjectNode) mapper.valueToTree(data);
+        content.remove("viewCount");
+        return cache.publish(id, token, "list", "D" + mapper.writeValueAsString(content));
     }
 }

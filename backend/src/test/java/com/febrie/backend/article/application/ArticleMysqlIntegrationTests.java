@@ -82,6 +82,12 @@ class ArticleMysqlIntegrationTests {
         fixtures.deleteOwnedFiles(actor.userId());
         fixtures.deleteIdentities(actor.userId()); fixtures.deleteUser(actor.userId());
         createdTags.forEach(articleFixtures::deleteTag);
+        // 实时总量无TTL，测试必须同时清理正文和独立统计命名空间。
+        for (String pattern : List.of(PREFIX + ":*", "{" + PREFIX + ":article:stats:v1}:*")) {
+            try (var keys = redis.scan(org.springframework.data.redis.core.ScanOptions.scanOptions().match(pattern).count(100).build())) {
+                while (keys.hasNext()) { redis.delete(keys.next()); }
+            }
+        }
     }
     @Test void autoIdAndMediaCommitTogetherAndHidePreservesReferences() {
         assertTrue(AopUtils.isAopProxy(commits));

@@ -53,6 +53,6 @@ class ArticleListHydratorTests {
         verify(lists, never()).publish(anyLong(), anyString(), any());
     }
     private static ArticleListView view(long id) {
-        return new ArticleListView(Long.toString(id), "title", "9", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
+        return new ArticleListView(Long.toString(id), "title", "9", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH, null);
     }
 }

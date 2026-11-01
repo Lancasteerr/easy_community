@@ -19,11 +19,17 @@ public class ArticleQueryService {
     private final ArticleCache cache;
     private final ArticleDetailCacheStore details;
     private final ArticleListHydrator lists;
-    public ArticleQueryService(ArticleReader reader, ArticleCache cache, ArticleDetailCacheStore details, ArticleListHydrator lists) {
-        this.reader = reader; this.cache = cache; this.details = details; this.lists = lists;
+    private final ArticleViewService views;
+    public ArticleQueryService(ArticleReader reader, ArticleCache cache, ArticleDetailCacheStore details,
+                               ArticleListHydrator lists, ArticleViewService views) {
+        this.reader = reader; this.cache = cache; this.details = details; this.lists = lists; this.views = views;
     }
     public ArticleDetailView detail(long id) {
-        try { return cachedDetail(id); }
+        try {
+            var content = cachedDetail(id);
+            // 计数位于整个缓存重试流程之后，成功取得可见详情才执行一次。
+            return content.withViewCount(views.record(id));
+        }
         catch (ApiException error) { throw error; }
         catch (RuntimeException error) {
             log.warn("文章详情依赖异常 articleId={} error={}", id, error.getClass().getSimpleName());
@@ -34,7 +40,13 @@ public class ArticleQueryService {
     public ArticlePage page(UserActor actor, int page, int size) {
         if (page < 1 || size < 1 || size > 50) { throw ArticleErrors.invalid(); }
         var selected = reader.page(actor.userId(), page, size);
-        try { return new ArticlePage(lists.authorPage(actor.userId(), selected.ids()), page, size, selected.total()); }
+        try {
+            var content = lists.authorPage(actor.userId(), selected.ids());
+            var totals = views.totals(content.stream().map(item -> Long.parseLong(item.articleId())).toList());
+            var items = content.stream().map(item -> item.withViewCount(
+                    Objects.requireNonNull(totals.get(Long.parseLong(item.articleId())), "文章总量未装配"))).toList();
+            return new ArticlePage(items, page, size, selected.total());
+        }
         catch (ApiException error) { throw error; }
         catch (RuntimeException error) {
             log.warn("文章列表依赖异常 error={}", error.getClass().getSimpleName());

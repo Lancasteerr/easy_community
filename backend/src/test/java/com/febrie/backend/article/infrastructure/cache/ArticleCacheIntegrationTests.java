@@ -71,6 +71,18 @@ class ArticleCacheIntegrationTests {
         assertTrue(cache.hidden(1));
         assertTrue(cache.unlock(1, current));
     }
+
+    @Test void realtimeCountsAreExcludedFromBothContentProjections() {
+        String token = cache.tryLock(1);
+        assertNotNull(token);
+        assertTrue(details.publish(1, token, detail().withViewCount(100)));
+        assertTrue(lists.publish(1, token, list().withViewCount(100)));
+        assertFalse(Objects.requireNonNull(redis.opsForValue().get(cache.key(1, "detail"))).contains("viewCount"));
+        assertFalse(Objects.requireNonNull(redis.opsForValue().get(cache.key(1, "list"))).contains("viewCount"));
+        assertNull(details.get(1).data().viewCount());
+        assertNull(lists.get(List.of(1L)).get(1L).data().viewCount());
+        cache.release(1, token);
+    }
     @Test void lateInvalidationNeverDeletesTombstoneAndBothNegativeEntriesAreCleared() {
         String token = cache.tryLock(1);
         assertTrue(cache.missing(1, token));
@@ -107,10 +119,10 @@ class ArticleCacheIntegrationTests {
     }
     private static ArticleListView list() {
         return new ArticleListView("1", "title", "2", "author", "summary", "https://cover.test/1",
-                List.of(new TagView("3", "Java")), Instant.EPOCH, Instant.EPOCH);
+                List.of(new TagView("3", "Java")), Instant.EPOCH, Instant.EPOCH, null);
     }
     private static ArticleDetailView detail() {
         return new ArticleDetailView("1", "title", "2", "author", "summary", null, "https://cover.test/1",
-                List.of(new TagView("3", "Java")), Instant.EPOCH, Instant.EPOCH, "<p>text</p>");
+                List.of(new TagView("3", "Java")), Instant.EPOCH, Instant.EPOCH, "<p>text</p>", null);
     }
 }
