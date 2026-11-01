@@ -5,4 +5,6 @@
         DELETE r FROM article_tag r JOIN article a ON a.id = r.article_id WHERE a.author_id = #{author}
     </delete>
     <delete id="deleteArticlesForAuthor">DELETE FROM article WHERE author_id = #{author}</delete>
+    <delete id="deleteTag">DELETE FROM tag WHERE id = #{id}</delete>
+    <update id="lockWaitSeconds">SET SESSION innodb_lock_wait_timeout = #{seconds}</update>
 </mapper>

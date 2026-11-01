@@ -6,4 +6,6 @@ import org.apache.ibatis.annotations.Param;
 public interface ArticleFixtureMapper {
     int deleteTagsForAuthor(@Param("author") long author);
     int deleteArticlesForAuthor(@Param("author") long author);
+    int deleteTag(@Param("id") long id);
+    void lockWaitSeconds(@Param("seconds") int seconds);
 }
