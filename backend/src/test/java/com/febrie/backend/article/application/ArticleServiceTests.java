@@ -16,7 +16,8 @@ import static org.mockito.Mockito.*;
 class ArticleServiceTests {
     private final ArticleContentRenderer renderer = mock(ArticleContentRenderer.class);
     private final ArticleCommitService commits = mock(ArticleCommitService.class);
-    private final ArticleService service = new ArticleService(renderer, commits);
+    private final ArticleCacheMaintenance cache = mock(ArticleCacheMaintenance.class);
+    private final ArticleService service = new ArticleService(renderer, commits, cache);
     private final UserActor actor = new UserActor(1, Role.USER, 1);
     @Test void distinguishesBodyFailureFromUnconfirmedCommit() {
         doAnswer(call -> { throw new CannotAcquireLockException("deadlock"); }).when(commits).hide(eq(actor), eq(1L), any());
@@ -28,6 +29,7 @@ class ArticleServiceTests {
         }).when(commits).hide(eq(actor), eq(2L), any());
         assertEquals("ARTICLE_WRITE_RESULT_UNKNOWN", assertThrows(ApiException.class, () -> service.hide(actor, 2)).code());
         verify(commits, times(1)).hide(eq(actor), eq(2L), any());
+        verifyNoInteractions(cache);
     }
     @Test void preservesKnownCommitEvenWhenCleanupFails() {
         doAnswer(call -> {
@@ -35,6 +37,12 @@ class ArticleServiceTests {
             attempt.committed = true; attempt.id = 1;
             throw new TransactionSystemException("提交后清理失败");
         }).when(commits).hide(eq(actor), eq(1L), any());
+        assertDoesNotThrow(() -> service.hide(actor, 1));
+        verify(commits, times(1)).hide(eq(actor), eq(1L), any());
+        verify(cache).afterCommit(1, true);
+    }
+    @Test void unexpectedCacheExceptionDoesNotOverrideSqlSuccess() {
+        doThrow(new IllegalStateException("意外缓存异常")).when(cache).afterCommit(1, true);
         assertDoesNotThrow(() -> service.hide(actor, 1));
         verify(commits, times(1)).hide(eq(actor), eq(1L), any());
     }

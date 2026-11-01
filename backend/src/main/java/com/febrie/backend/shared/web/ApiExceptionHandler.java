@@ -2,6 +2,7 @@ package com.febrie.backend.shared.web;
 
 import com.febrie.backend.shared.error.ApiException;
 import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.TransactionException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -35,8 +36,8 @@ public class ApiExceptionHandler {
         return business(new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "请求参数格式不正确"));
     }
 
-    @ExceptionHandler(DataAccessException.class)
-    ResponseEntity<ProblemDetail> unavailable(DataAccessException error) {
+    @ExceptionHandler({DataAccessException.class, TransactionException.class})
+    ResponseEntity<ProblemDetail> unavailable(RuntimeException error) {
         return business(new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "DEPENDENCY_UNAVAILABLE", "服务暂不可用，请稍后重试"));
     }
 

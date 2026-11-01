@@ -18,21 +18,40 @@ public class ArticleService {
     private static final Logger log = LoggerFactory.getLogger(ArticleService.class);
     private final ArticleContentRenderer renderer;
     private final ArticleCommitService commits;
+    private final ArticleCacheMaintenance cache;
 
-    public ArticleService(ArticleContentRenderer renderer, ArticleCommitService commits) {
-        this.renderer = renderer; this.commits = commits;
+    public ArticleService(ArticleContentRenderer renderer, ArticleCommitService commits, ArticleCacheMaintenance cache) {
+        this.renderer = renderer; this.commits = commits; this.cache = cache;
     }
 
     public long save(UserActor actor, SaveArticleCommand command) {
+        long started = System.nanoTime();
         var content = renderer.prepare(command.title(), command.content(), command.coverMediaId(), command.tagIds());
+        long prepared = System.nanoTime();
         var attempt = new ArticleCommitService.Attempt();
-        return execute(attempt, () -> command.articleId() == null ? commits.create(actor, content, attempt)
+        long id = execute(attempt, () -> command.articleId() == null ? commits.create(actor, content, attempt)
                 : commits.update(actor, command.articleId(), content, attempt));
+        long committed = System.nanoTime();
+        maintain(id, false);
+        log.info("文章保存完成 articleId={} operation={} prepareMs={} transactionMs={} requestId={}", id,
+                command.articleId() == null ? "CREATE" : "UPDATE", (prepared - started) / 1_000_000,
+                (committed - prepared) / 1_000_000, MDC.get("requestId"));
+        return id;
     }
 
     public void hide(UserActor actor, long id) {
         var attempt = new ArticleCommitService.Attempt();
         execute(attempt, () -> { commits.hide(actor, id, attempt); return id; });
+        maintain(id, true);
+        log.info("文章隐藏完成 articleId={} requestId={}", id, MDC.get("requestId"));
+    }
+
+    private void maintain(long id, boolean hidden) {
+        try { cache.afterCommit(id, hidden); }
+        catch (RuntimeException error) {
+            // 编排边界再次隔离意外缓存错误，防止后续维护实现变化反向覆盖SQL成功。
+            log.warn("文章已提交但缓存维护中断 articleId={} error={}", id, error.getClass().getSimpleName());
+        }
     }
 
     private long execute(ArticleCommitService.Attempt attempt, LongSupplier operation) {

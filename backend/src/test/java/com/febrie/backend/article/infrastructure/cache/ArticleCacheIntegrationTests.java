@@ -2,6 +2,8 @@ package com.febrie.backend.article.infrastructure.cache;
 
 import com.febrie.backend.article.application.dto.*;
 import com.febrie.backend.article.infrastructure.config.ArticleCacheProperties;
+import com.febrie.backend.article.infrastructure.persistence.ArticleRepository;
+import com.febrie.backend.article.application.ArticleCacheRebuild;
 import java.time.*;
 import java.util.*;
 import org.junit.jupiter.api.*;
@@ -11,6 +13,7 @@ import org.springframework.data.redis.connection.lettuce.*;
 import org.springframework.data.redis.core.*;
 import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /** 真Redis验证Lua与租期协议；每次随机前缀，不执行FLUSHDB或SCRIPT FLUSH。 */
 @EnabledIfEnvironmentVariable(named = "IT_REDIS", matches = "true")
@@ -89,6 +92,18 @@ class ArticleCacheIntegrationTests {
         assertThrows(RuntimeException.class, () -> cache.hide(1, token));
         assertFalse(cache.hidden(1));
         assertNull(redis.opsForValue().get(cache.key(1, "detail")));
+    }
+    @Test void offlineRebuildRequiresFreshNamespaceAndPersistsTombstones() {
+        var articles = mock(ArticleRepository.class);
+        when(articles.hiddenIds(0, 500)).thenReturn(List.of(1L, 3L));
+        when(articles.hiddenIds(3, 500)).thenReturn(List.of());
+        var context = new org.springframework.context.support.GenericApplicationContext();
+        var rebuild = new ArticleCacheRebuild(articles, cache, context);
+        rebuild.run(new org.springframework.boot.DefaultApplicationArguments());
+        assertTrue(cache.hidden(1)); assertTrue(cache.hidden(3));
+        assertEquals("1", redis.opsForValue().get(namespace + ":rebuild-complete"));
+        assertThrows(IllegalStateException.class, () -> rebuild.run(new org.springframework.boot.DefaultApplicationArguments()));
+        context.close();
     }
     private static ArticleListView list() {
         return new ArticleListView("1", "title", "2", "author", "summary", "https://cover.test/1",

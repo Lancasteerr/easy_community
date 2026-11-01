@@ -5,6 +5,8 @@ import com.febrie.backend.shared.web.ProblemResponses;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import java.io.*;
+import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -19,7 +21,17 @@ public class ArticleRequestFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
         boolean article = path.equals("/api/articles") || path.startsWith("/api/articles/")
                 || path.equals("/api/users/me/articles") || path.equals("/api/tags") || path.equals("/api/admin/tags");
-        if (article) { response.setHeader("Cache-Control", "no-store"); }
+        if (!article) { chain.doFilter(request, response); return; }
+        response.setHeader("Cache-Control", "no-store");
+        String requestId = UUID.randomUUID().toString();
+        response.setHeader("X-Request-Id", requestId);
+        try (var ignored = MDC.putCloseable("requestId", requestId)) {
+            filterBody(request, response, chain, path);
+        }
+    }
+
+    private void filterBody(HttpServletRequest request, HttpServletResponse response, FilterChain chain, String path)
+            throws ServletException, IOException {
         if (!path.equals("/api/articles") || !request.getMethod().equals("POST")) {
             chain.doFilter(request, response); return;
         }
