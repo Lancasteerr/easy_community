@@ -46,8 +46,39 @@ Lua在同一原子动作内核token后发布、双负缓存、双失效、双隐
 
 Redis故障或争锁超限，读返回503；写入已确认则仍成功。返回前复查hidden，但不撤回在途响应。失效未执行时旧展示可持续到剩余TTL及有效在途回填预算。
 
-恢复必须停流量及旧实例，选择新的文章缓存版本，从SQL按ID分页重建隐藏墓碑，再启新实例；不得FLUSHDB，不恢复旧版本前缀。具体命令随恢复入口交付。
+恢复必须停流量及旧实例，选择新的文章缓存版本，从SQL按ID分页重建隐藏墓碑，再启新实例；不得FLUSHDB，不恢复旧版本前缀。
+
+先按后端README加载当前环境的数据库、Redis、媒体配置，再运行下列离线命令（示例为开发环境，生产使用prod及对应配置）：
+
+```powershell
+$env:ARTICLE_CACHE_VERSION = 'recovery_20261101_1'
+java '-Djdk.net.unixdomain.tmpdir=E:/temp' -jar backend/target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --spring.main.web-application-type=none --app.article.cache-rebuild.enabled=true
+```
+
+命令成功后自动退出，仅新文章命名空间写入墓碑与完成标记；已有Key的版本会被拒绝。失败时保持停流量，排除故障后选择另一个全新版本重建。全部Web实例使用同一个ARTICLE_CACHE_VERSION正常启动，**不携带cache-rebuild.enabled参数**，再恢复流量。下次恢复不得复用本次版本；Redis自身恢复还须遵循现有Session服务要求。
+
+GET响应附带服务端生成的X-Request-Id，写入日志包含操作、articleId、准备/事务耗时和关联ID。缓存日志分别记录详情三态、列表回源数量、token丢失及维护失败；不记录正文或凭证。
 
 ## 分批验证
 
 分别提交文档、模型/Tag、渲染、事务、HTTP/查询、缓存原子操作、缓存接入/恢复。测试随功能加入，每批mvn test，最终mvn clean verify。真实MySQL/Redis测试显式启用，仅使用专用库及随机前缀；跳过不算通过。用屏障控制并发，验证事务代理、双写覆盖、双向删写、GC、锁过期、提交结果未知及缓存失败隔离。
+
+在backend目录运行；凭证通过环境变量提供，不写入命令或提交：
+
+```powershell
+# IT_DB_URL必须指向easy_community_*test*专用库，IT_DB_PASSWORD必须显式提供。
+$env:IT_ARTICLE = 'true'
+$env:IT_REDIS = 'true'
+$env:IT_DB_URL = 'jdbc:mysql://127.0.0.1:3306/easy_community_article_test?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true'
+mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' '-Dtest=Article*Tests' test
+```
+
+IT_DB_USERNAME、IT_DB_PASSWORD及IT_REDIS_HOST/PORT/PASSWORD沿用后端测试约定。普通mvn test不启用外部服务；最终启用这些变量执行mvn clean verify时，也会执行既有认证/持久层集成测试。Windows临时套接字参数仅为本地测试使用，其他平台可省略。
+
+## 本次验收记录（2026-11-01）
+
+在专用easy_community_article_test库及真实Redis上，启用IT_ARTICLE、IT_REDIS与数据库凭证后运行 `mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' clean verify`，构建成功：142项通过、0失败、0错误；文章模块39项全部通过。另有10项既有MediaV2IntegrationTests因未启用真实对象存储联调环境而跳过，未计入通过数量。
+
+已实测安全正文/摘要/输入边界、HTTP/Session/CSRF/角色、不可恢复隐藏及公开管理列表、真实事务回滚/自增回填/媒体关联、完整修改覆盖、双向删写、一致读取视图、真实MySQL锁等待超时及死锁、双投影Lua与旧token拒绝、批量装配/负缓存核对、提交后缓存异常隔离，以及新命名空间恢复规则。
+
+COMMIT故障通过测试专用JDBC代理分别在真实提交前、真实提交后丢失确认，两种情况均返回ARTICLE_WRITE_RESULT_UNKNOWN，验证不自动查结果或重放。崩溃测试启动独立JVM，代理提交成功后立即halt，确认SQL已更新而两种缓存仍旧；将该次测试Key剩余TTL缩短为50ms并等待实际过期后，详情和列表均回源新内容。生产270～300秒TTL范围与命中不续期另由真实Redis测试断言。

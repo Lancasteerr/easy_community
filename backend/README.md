@@ -1,6 +1,8 @@
-# 社区后端：Session 登录、用户与文件管理
+# 社区后端：Session 登录、用户、文件与文章管理
 
 代码组织与包职责见架构文档：[简体中文](../docs/zh-CN/backend-architecture.md) · [English](../docs/en-US/backend-architecture.md)。
+
+文章CRUD已接入，接口、正文白名单、最终一致缓存及维护命令见[文章接入与恢复](../docs/zh-CN/article-crud-implementation.md)。删除不可恢复；本人管理列表只展示公开文章，游客仅可读取单篇详情。
 
 文件上传、MinIO/COS桶配置、头像接口和文章接入见[文件服务V2](../docs/zh-CN/media-service.md)。
 升级已有本机环境文件时，必须补充示例中的全部`MEDIA_*`字段；应用只校验配置，不自动创建桶或修改权限。

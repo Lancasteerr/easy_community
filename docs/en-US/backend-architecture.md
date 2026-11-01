@@ -35,6 +35,16 @@ backend
 │     ├─ ratelimit
 │     ├─ redis
 │     └─ scheduling
+├─ article
+│  ├─ web
+│  │  ├─ request
+│  │  └─ response
+│  ├─ application
+│  │  └─ dto
+│  └─ infrastructure
+│     ├─ persistence
+│     ├─ cache
+│     └─ config
 ├─ media
 │  ├─ web
 │  │  └─ request
@@ -120,7 +130,7 @@ Both executors use STATEMENT local-cache scope and disable second-level caching,
 | Database query for a user list | SQL in `user.infrastructure.persistence`, with an application service entry point for other modules |
 | User rule independent of databases | `user.domain`; keep rules coupled to HTTP errors or application conventions in the application layer |
 | Authentication rate limit rule | `auth.infrastructure.ratelimit`, called by authentication workflows or filters |
-| Post cache and expiry task | Create `post.infrastructure.cache` and `post.infrastructure.scheduling` when implemented, rather than global utility packages |
+| Article display cache | `article.infrastructure.cache`; per-article detail/list projections, with no page cache or scheduled compensation framework |
 
 Unit test packages generally mirror their subjects. Cross-module HTTP integration tests remain at the application root. Do not create empty packages, interfaces, or utility layers for hypothetical future needs.
 
@@ -155,7 +165,21 @@ The media module now implements V2. See the [media guide](../zh-CN/media-service
 - MediaLifecycleService only reclaims ISSUED, unreferenced READY, and DELETING records. It never resumes publication. Object deletion happens outside the short transaction and precedes metadata deletion; failures use a fixed rescheduling interval.
 - FixedWindowCounter is a shared Redis primitive. Authentication rules stay in auth and media consumes its own upload admission rule. Shared code never depends on business modules.
 
-The rewritten Flyway V2 definition is for new databases only. Old complete/prepare endpoints, leases, intermediate states, and compatibility modes are removed. Future article services must save content and synchronize references in the same RC transaction after locking the article row; no article module is introduced here. Non-web initialization does not run cleanup, and startup does not mutate bucket configuration.
+The rewritten Flyway V2 definition is for new databases only. Old complete/prepare endpoints, leases, intermediate states, and compatibility modes are removed. Articles are introduced through the additive V3 migration; content and references share one RC transaction after locking the article row. Non-web initialization does not run cleanup, and startup does not mutate bucket configuration.
+
+## Article writes, reads, and cache
+
+See the [article contract and recovery guide](../zh-CN/article-crud-implementation.md). Deletion sets an irreversible hidden flag and preserves media references. Author management SQL selects only that author's public articles; there is no recycle bin, restore API, or private hidden-row hydration.
+
+- ArticleService rejects surrounding transactions, prepares canonical JSON, safe HTML, summary and media through ArticleContentRenderer, then calls the independent ArticleCommitService proxy for one short RC transaction. Article locks precede media locks. Bounded post-commit cache maintenance cannot override confirmed SQL success.
+- Article permissions and hidden state are checked under the row lock. MediaReferenceService remains the binding gate. There are no SQL retries, editing versions, task tables or queues. Per-call in-memory commit observation classifies proxy failures; it is not persistent business state.
+- ArticleQueryService and ArticleListHydrator reject surrounding transactions. After obtaining cache locks they invoke ArticleReader to establish a short read-only RR snapshot. List SQL excludes large content fields. AccountQueryService.displays batches only IDs and usernames, including historical attribution for soft-deleted accounts.
+- Detail/list DTOs contain coverUrl, author name and tag names. Batch hydration separates cache checks, non-blocking lock acquisition, rechecks, combined SQL and per-token publication. It never blocks on another lock while holding one.
+- article.infrastructure.cache uses Spring Data Redis and fixed Lua resources directly. Three-state projections, the shared five-second lock, double invalidation and persistent tombstones stay article-specific; no generic scripting framework or second lock library is added.
+- ArticleRequestFilter bounds save bytes before conversion and sets no-store plus request correlation IDs. Only single-article GET is public; edit GET stays protected, and writes retain Session/CSRF.
+- ArticleCacheRebuild runs only through an explicitly enabled non-web command after traffic and old instances stop. It rebuilds tombstones into a fresh namespace, rejects used versions, and never runs FLUSHDB.
+
+Classes follow actual responsibilities within the existing layers, without empty domain packages or Service/ServiceImpl pairs. Used packages retain Chinese descriptions. Web does not access Mapper/Redis, and article does not access user/media infrastructure.
 
 ## Atomic Redis Operations
 
