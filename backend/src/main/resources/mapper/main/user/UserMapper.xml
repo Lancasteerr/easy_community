@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.febrie.backend.user.infrastructure.persistence.mapper.UserMapper">
+    <!-- 认证字段显式映射；资料查询不复用密码哈希。 -->
+    <resultMap id="account" type="com.febrie.backend.user.infrastructure.persistence.entity.AccountRow">
+        <id property="id" column="id"/>
+        <result property="username" column="username"/>
+        <result property="role" column="role"/>
+        <result property="status" column="status"/>
+        <result property="authVersion" column="auth_version"/>
+        <result property="passwordHash" column="password_hash"/>
+    </resultMap>
+    <sql id="accountColumns">
+        SELECT u.id, u.username, u.role, u.status, u.auth_version, i.password_hash
+        FROM users u
+        JOIN user_auth_identity i ON i.user_id = u.id AND i.provider = 'LOCAL'
+    </sql>
+    <select id="findAccountByUsername" resultMap="account">
+        <include refid="accountColumns"/>
+        WHERE u.username = #{username}
+    </select>
+    <select id="lockAccountById" resultMap="account">
+        <include refid="accountColumns"/>
+        WHERE u.id = #{userId}
+        FOR UPDATE
+    </select>
+    <select id="lockProfile" resultType="com.febrie.backend.user.infrastructure.persistence.entity.UserEntity">
+        SELECT id, username, role, status, auth_version, avatar_media_id
+        FROM users WHERE id = #{userId}
+        FOR UPDATE
+    </select>
+    <!-- 版本由数据库原子递增，不能改成先读后写。 -->
+    <update id="incrementAuthVersion">
+        UPDATE users SET auth_version = auth_version + 1 WHERE id = #{userId}
+    </update>
+    <update id="softDelete">
+        UPDATE users
+        SET status = 'DELETED', deleted_at = CURRENT_TIMESTAMP(6), auth_version = auth_version + 1
+        WHERE id = #{userId}
+    </update>
+    <update id="updateRole">
+        UPDATE users SET role = #{role}, auth_version = auth_version + 1 WHERE id = #{userId}
+    </update>
+</mapper>

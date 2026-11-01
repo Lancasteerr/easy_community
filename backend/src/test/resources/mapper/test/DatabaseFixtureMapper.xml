@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.febrie.backend.support.persistence.DatabaseFixtureMapper">
+    <!-- 按测试创建的用户逐个清理，禁止全表删除。 -->
+    <delete id="deleteIdentities">DELETE FROM user_auth_identity WHERE user_id = #{userId}</delete>
+    <delete id="deleteUser">DELETE FROM users WHERE id = #{userId}</delete>
+    <select id="countIdentities" resultType="int">
+        SELECT COUNT(*) FROM user_auth_identity WHERE user_id = #{userId}
+    </select>
+</mapper>

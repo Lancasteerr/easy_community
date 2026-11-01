@@ -26,7 +26,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.febrie.backend.support.PersistenceTestConfiguration;
+import com.febrie.backend.support.persistence.DatabaseFixtureMapper;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -43,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** 真MySQL、Redis、HTTP测试；只清理本次创建的账号和随机命名空间。 */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@Import(PersistenceTestConfiguration.class)
 @EnabledIfEnvironmentVariable(named = "IT_DB_PASSWORD", matches = ".+")
 class BackendApplicationTests {
     static final String PREFIX = "ec:test:" + UUID.randomUUID();
@@ -56,7 +59,7 @@ class BackendApplicationTests {
     @Autowired ActiveSessions active;
     @Autowired RequestLimits limits;
     @Autowired AuthenticationManager authentication;
-    @Autowired JdbcTemplate jdbc;
+    @Autowired DatabaseFixtureMapper fixtures;
     @Autowired TransactionTemplate transaction;
     @Autowired ObjectMapper mapper;
     @Autowired AuthProperties properties;
@@ -76,8 +79,8 @@ class BackendApplicationTests {
     @AfterEach
     void cleanup() {
         for (long id : created) {
-            jdbc.update("DELETE FROM user_auth_identity WHERE user_id=?", id);
-            jdbc.update("DELETE FROM users WHERE id=?", id);
+            fixtures.deleteIdentities(id);
+            fixtures.deleteUser(id);
         }
         // 不执行FLUSHDB或KEYS，绝不触及其他应用的数据。
         try (var keys = redis.scan(ScanOptions.scanOptions().match(PREFIX + ":*").count(100).build())) {
@@ -183,7 +186,7 @@ class BackendApplicationTests {
         assertEquals("USER", mapper.readTree(response.body()).path("role").asText());
         assertEquals(409, operator.call("POST", "/api/admin/users", Map.of("username", username, "password", PASSWORD)).statusCode());
         assertEquals(400, operator.call("POST", "/api/admin/users", Map.of("username", name(), "password", "中".repeat(25))).statusCode());
-        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM user_auth_identity WHERE user_id=?", Integer.class, id));
+        assertEquals(1, fixtures.countIdentities(id));
         assertThrows(ApiException.class, () -> users.bootstrapAdmin(name(), PASSWORD));
     }
 
@@ -288,7 +291,7 @@ class BackendApplicationTests {
             assertEquals(1, successful);
         }
         long id = accounts.findByUsername(username).orElseThrow().userId();
-        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM user_auth_identity WHERE user_id=?", Integer.class, id));
+        assertEquals(1, fixtures.countIdentities(id));
     }
 
     @Test

@@ -1,91 +1,95 @@
 package com.febrie.backend.user.infrastructure.persistence;
 
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.febrie.backend.media.domain.MediaIds;
-
 import com.febrie.backend.user.application.dto.AccountAuthState;
 import com.febrie.backend.user.application.dto.AccountSnapshot;
 import com.febrie.backend.user.application.dto.UserProfileSnapshot;
 import com.febrie.backend.user.domain.Role;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
+import com.febrie.backend.user.infrastructure.persistence.entity.AccountRow;
+import com.febrie.backend.user.infrastructure.persistence.entity.AuthIdentityEntity;
+import com.febrie.backend.user.infrastructure.persistence.entity.UserEntity;
+import com.febrie.backend.user.infrastructure.persistence.mapper.AuthIdentityMapper;
+import com.febrie.backend.user.infrastructure.persistence.mapper.UserMapper;
 import java.util.Optional;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
 
-/** 显式SQL保证认证快照和安全版本的事务边界，复用现有JDBC依赖。 */
+/** 封装数据库映射；事务继续由应用服务管理，业务层不接触 Mapper。 */
 @Repository
 public class AccountRepository {
-    private static final String SNAPSHOT = """
-            SELECT u.id, u.username, u.role, u.status, u.auth_version, i.password_hash
-            FROM users u JOIN user_auth_identity i ON i.user_id=u.id AND i.provider='LOCAL'
-            """;
-    private static final RowMapper<AccountSnapshot> MAPPER = (rs, row) -> new AccountSnapshot(
-            rs.getLong("id"), rs.getString("username"), Role.valueOf(rs.getString("role")),
-            rs.getString("status"), rs.getLong("auth_version"), rs.getString("password_hash"));
-    private final JdbcTemplate jdbc;
+    private final UserMapper users;
+    private final AuthIdentityMapper identities;
 
-    public AccountRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    public AccountRepository(UserMapper users, AuthIdentityMapper identities) {
+        this.users = users;
+        this.identities = identities;
+    }
 
     public Optional<AccountSnapshot> findByUsername(String username) {
-        return jdbc.query(SNAPSHOT + " WHERE u.username=?", MAPPER, username).stream().findFirst();
+        return Optional.ofNullable(users.findAccountByUsername(username)).map(AccountRepository::snapshot);
     }
 
     public Optional<AccountSnapshot> lockById(long userId) {
-        return jdbc.query(SNAPSHOT + " WHERE u.id=? FOR UPDATE", MAPPER, userId).stream().findFirst();
+        return Optional.ofNullable(users.lockAccountById(userId)).map(AccountRepository::snapshot);
     }
 
-    /** 资料查询不读取凭证表；锁用户行后才读取旧头像，避免并发替换使用过期ID。 */
+    /** 资料不读取凭证表；锁内取得旧头像，避免并发替换使用过期 ID。 */
     public Optional<UserProfileSnapshot> profile(long userId, boolean lock) {
-        return jdbc.query("SELECT id,username,role,status,auth_version,avatar_media_id FROM users WHERE id=?"
-                        + (lock ? " FOR UPDATE" : ""),
-                (rs, row) -> new UserProfileSnapshot(rs.getLong("id"), rs.getString("username"),
-                        Role.valueOf(rs.getString("role")), rs.getString("status"), rs.getLong("auth_version"),
-                        MediaIds.text(rs.getBytes("avatar_media_id"))), userId).stream().findFirst();
+        UserEntity user = lock ? users.lockProfile(userId) : users.selectOne(Wrappers.<UserEntity>lambdaQuery()
+                .select(UserEntity::getId, UserEntity::getUsername, UserEntity::getRole,
+                        UserEntity::getStatus, UserEntity::getAuthVersion, UserEntity::getAvatarMediaId)
+                .eq(UserEntity::getId, userId));
+        return Optional.ofNullable(user).map(row -> new UserProfileSnapshot(row.getId(), row.getUsername(),
+                row.getRole(), row.getStatus(), row.getAuthVersion(), MediaIds.text(row.getAvatarMediaId())));
     }
 
     public void updateAvatar(long userId, String mediaId) {
-        jdbc.update("UPDATE users SET avatar_media_id=? WHERE id=?", mediaId == null ? null : MediaIds.bytes(mediaId), userId);
+        // 显式 set 会写入 NULL，不能使用默认忽略空字段的 updateById。
+        users.update(null, Wrappers.<UserEntity>lambdaUpdate().eq(UserEntity::getId, userId)
+                .set(UserEntity::getAvatarMediaId, mediaId == null ? null : MediaIds.bytes(mediaId)));
     }
 
-    /** 每次鉴权使用独立主库读取，不加载密码或重新读取角色。 */
+    /** 每次鉴权读取主库当前状态和版本，不加载密码或角色。 */
     public Optional<AccountAuthState> authState(long userId) {
-        return jdbc.query("SELECT status, auth_version FROM users WHERE id=?",
-                (rs, row) -> new AccountAuthState(rs.getString(1), rs.getLong(2)), userId).stream().findFirst();
+        return Optional.ofNullable(users.selectOne(Wrappers.<UserEntity>lambdaQuery()
+                        .select(UserEntity::getStatus, UserEntity::getAuthVersion).eq(UserEntity::getId, userId)))
+                .map(row -> new AccountAuthState(row.getStatus(), row.getAuthVersion()));
     }
 
+    /** 调用方提供事务：用户 ID 回填后再创建身份，任一步失败均回滚。 */
     public long insert(String username, Role role, String hash) {
-        var keys = new GeneratedKeyHolder();
-        jdbc.update(connection -> {
-            PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO users(username,role) VALUES (?,?)", Statement.RETURN_GENERATED_KEYS);
-            statement.setString(1, username);
-            statement.setString(2, role.name());
-            return statement;
-        }, keys);
-        long id = keys.getKey().longValue();
-        jdbc.update("INSERT INTO user_auth_identity(user_id,provider,provider_uid,password_hash) VALUES (?,'LOCAL',?,?)",
-                id, username, hash);
-        return id;
+        var user = new UserEntity();
+        user.setUsername(username);
+        user.setRole(role);
+        users.insert(user);
+
+        var identity = new AuthIdentityEntity();
+        identity.setUserId(user.getId());
+        identity.setProvider("LOCAL");
+        identity.setProviderUid(username);
+        identity.setPasswordHash(hash);
+        identities.insert(identity);
+        return user.getId();
     }
 
     public void updatePassword(long userId, String hash) {
-        jdbc.update("UPDATE user_auth_identity SET password_hash=? WHERE user_id=? AND provider='LOCAL'", hash, userId);
-        jdbc.update("UPDATE users SET auth_version=auth_version+1 WHERE id=?", userId);
+        identities.update(null, Wrappers.<AuthIdentityEntity>lambdaUpdate()
+                .eq(AuthIdentityEntity::getUserId, userId).eq(AuthIdentityEntity::getProvider, "LOCAL")
+                .set(AuthIdentityEntity::getPasswordHash, hash));
+        users.incrementAuthVersion(userId);
     }
 
-    public void softDelete(long userId) {
-        jdbc.update("UPDATE users SET status='DELETED',deleted_at=CURRENT_TIMESTAMP(6),auth_version=auth_version+1 WHERE id=?", userId);
-    }
+    public void softDelete(long userId) { users.softDelete(userId); }
 
-    /** 未来内部角色调整也必须通过此版本递增路径，不对外开放修改接口。 */
-    public void updateRole(long userId, Role role) {
-        jdbc.update("UPDATE users SET role=?,auth_version=auth_version+1 WHERE id=?", role.name(), userId);
-    }
+    /** 角色调整必须同时递增认证版本，不对外提供通用角色更新入口。 */
+    public void updateRole(long userId, Role role) { users.updateRole(userId, role); }
 
     public boolean hasAdmin() {
-        return !jdbc.queryForList("SELECT id FROM users WHERE role='ADMIN' LIMIT 1", Long.class).isEmpty();
+        return users.exists(Wrappers.<UserEntity>lambdaQuery().eq(UserEntity::getRole, Role.ADMIN));
     }
 
+    private static AccountSnapshot snapshot(AccountRow row) {
+        return new AccountSnapshot(row.getId(), row.getUsername(), row.getRole(), row.getStatus(),
+                row.getAuthVersion(), row.getPasswordHash());
+    }
 }
