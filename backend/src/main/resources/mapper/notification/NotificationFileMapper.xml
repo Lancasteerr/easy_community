@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.febrie.backend.media.infrastructure.persistence.notification.NotificationFileMapper">
+    <!-- 通知 SQL 有独立超时，不借用业务事务或会话。 -->
+    <select id="find" timeout="1" resultType="com.febrie.backend.media.infrastructure.persistence.entity.MediaFileEntity">
+        SELECT id, uploader_id, purpose, status, mime_type, size_bytes, created_at, next_action_at
+        FROM media_file WHERE id = #{id}
+    </select>
+    <update id="ready" timeout="1">
+        UPDATE media_file SET status = 'READY', size_bytes = #{size}, mime_type = #{mime}, next_action_at = #{collectAt}
+        WHERE id = #{id} AND status = 'ISSUED' AND next_action_at &gt; #{now}
+    </update>
+</mapper>

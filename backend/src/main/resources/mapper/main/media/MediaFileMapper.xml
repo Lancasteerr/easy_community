@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.febrie.backend.media.infrastructure.persistence.mapper.MediaFileMapper">
+    <select id="lock" resultType="com.febrie.backend.media.infrastructure.persistence.entity.MediaFileEntity">
+        SELECT id, uploader_id, purpose, status, mime_type, size_bytes, created_at, next_action_at
+        FROM media_file WHERE id = #{id}
+        FOR UPDATE
+    </select>
+    <!-- 已绑定 READY 文件不再定时回收，NULL 必须显式写入。 -->
+    <update id="clearReadySchedule">
+        UPDATE media_file SET next_action_at = NULL WHERE id = #{id} AND status = 'READY'
+    </update>
+    <update id="scheduleReady">
+        UPDATE media_file SET next_action_at = #{collectAt} WHERE id = #{id} AND status = 'READY'
+    </update>
+    <select id="candidates" resultType="com.febrie.backend.media.infrastructure.persistence.entity.MediaFileEntity">
+        SELECT id FROM media_file
+        WHERE status = #{status} AND next_action_at &lt;= #{now}
+        ORDER BY next_action_at, id
+        LIMIT #{limit}
+    </select>
+    <update id="markDeleting">
+        UPDATE media_file SET status = 'DELETING', next_action_at = #{now} WHERE id = #{id}
+    </update>
+    <update id="rescheduleDeletion">
+        UPDATE media_file SET next_action_at = #{next} WHERE id = #{id} AND status = 'DELETING'
+    </update>
+    <!-- 删除前再次核对状态与引用，外键仍承担最后一道完整性保护。 -->
+    <delete id="deleteUnreferencedMetadata">
+        DELETE FROM media_file WHERE id = #{id} AND status = 'DELETING'
+        AND NOT EXISTS (SELECT 1 FROM media_reference WHERE file_id = #{id})
+    </delete>
+</mapper>

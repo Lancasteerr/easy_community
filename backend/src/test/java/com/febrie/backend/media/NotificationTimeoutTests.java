@@ -22,6 +22,9 @@ class NotificationTimeoutTests {
                 new CosClientException("test", new SocketTimeoutException()),
                 new QueryTimeoutException("test", new SQLTimeoutException()),
                 new CannotGetJdbcConnectionException("test", new SQLTransientConnectionException()),
+                new org.mybatis.spring.MyBatisSystemException(new org.apache.ibatis.exceptions.PersistenceException(
+                        new SQLTransientConnectionException("bounded pool wait"))),
+                new org.apache.ibatis.exceptions.PersistenceException(new SQLTimeoutException("statement timeout")),
                 ApiCallTimeoutException.create(10),
                 ApiCallAttemptTimeoutException.create(10));
         for (RuntimeException failure : failures) {

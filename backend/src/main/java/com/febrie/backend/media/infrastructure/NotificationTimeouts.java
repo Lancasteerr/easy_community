@@ -30,6 +30,10 @@ public final class NotificationTimeouts {
             if (cause instanceof CannotGetJdbcConnectionException && cause.getCause() instanceof SQLTransientConnectionException) {
                 return new ProcessingDeadline.TimedOut(failure);
             }
+            // MyBatis 的连接获取失败会保留 Hikari 的瞬时连接异常，可能不再包装为 Spring JDBC 异常。
+            if (cause instanceof SQLTransientConnectionException) {
+                return new ProcessingDeadline.TimedOut(failure);
+            }
         }
         return failure;
     }

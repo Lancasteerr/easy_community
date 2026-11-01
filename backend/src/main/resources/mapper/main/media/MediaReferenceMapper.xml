@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.febrie.backend.media.infrastructure.persistence.mapper.MediaReferenceMapper">
+    <!-- EXISTS 只返回是否存在，不加载完整引用集合。 -->
+    <select id="hasReferences" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM media_reference WHERE file_id = #{fileId})
+    </select>
+    <select id="references" resultType="com.febrie.backend.media.infrastructure.persistence.entity.MediaReferenceEntity">
+        SELECT file_id, ref_type, ref_id FROM media_reference
+        WHERE ref_type = #{type} AND ref_id = #{entity}
+    </select>
+    <insert id="insertReference">
+        INSERT INTO media_reference(file_id, ref_type, ref_id) VALUES (#{fileId}, #{type}, #{entity})
+    </insert>
+    <delete id="removeReference">
+        DELETE FROM media_reference WHERE file_id = #{fileId} AND ref_type = #{type} AND ref_id = #{entity}
+    </delete>
+</mapper>

@@ -17,7 +17,9 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.febrie.backend.support.PersistenceTestConfiguration;
+import com.febrie.backend.support.persistence.DatabaseFixtureMapper;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.*;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.*;
@@ -31,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** 显式启用后连接全新专用库、Redis、真实MinIO及Caddy；不会清空业务库或共享桶。 */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT, properties = {"server.port=18080", "server.address=0.0.0.0"})
 @ActiveProfiles("test")
+@Import(PersistenceTestConfiguration.class)
 @EnabledIfEnvironmentVariable(named = "IT_MEDIA_V2", matches = "true")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MediaV2IntegrationTests {
@@ -38,7 +41,7 @@ class MediaV2IntegrationTests {
     private static final String PASSWORD = "media-v2-test-password";
     private static String bucket() { return required("IT_MEDIA_BUCKET"); }
     @LocalServerPort int port;
-    @Autowired JdbcTemplate jdbc;
+    @Autowired DatabaseFixtureMapper fixtures;
     @Autowired FileRepository files;
     @Autowired MediaService media;
     @Autowired MediaReferenceService references;
@@ -105,11 +108,11 @@ class MediaV2IntegrationTests {
     @AfterEach void closeClient() { if (http != null) { http.close(); } }
     @AfterAll void cleanup() {
         for (long id : owners) {
-            jdbc.update("UPDATE users SET avatar_media_id=NULL WHERE id=?", id);
-            jdbc.update("DELETE r FROM media_reference r JOIN media_file f ON r.file_id=f.id WHERE f.uploader_id=?", id);
-            jdbc.update("DELETE FROM media_file WHERE uploader_id=?", id);
-            jdbc.update("DELETE FROM user_auth_identity WHERE user_id=?", id);
-            jdbc.update("DELETE FROM users WHERE id=?", id);
+            fixtures.clearAvatar(id);
+            fixtures.deleteOwnedReferences(id);
+            fixtures.deleteOwnedFiles(id);
+            fixtures.deleteIdentities(id);
+            fixtures.deleteUser(id);
         }
         if (s3 != null) {
             if (createdBucket) {
@@ -164,14 +167,14 @@ class MediaV2IntegrationTests {
         }
     }
     @Test void schemaIsMinimalAndReferencesProtectFiles() {
-        assertEquals(8, jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='media_file'", Integer.class));
-        assertEquals(3, jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='media_reference'", Integer.class));
+        assertEquals(8, fixtures.countColumns("media_file"));
+        assertEquals(3, fixtures.countColumns("media_reference"));
         String id = ready(MediaPurpose.ARTICLE_IMAGE, 100);
         TransactionTemplate tx = transaction();
         tx.executeWithoutResult(status -> references.syncArticle(11, owner, List.of(id, id), id));
         tx.executeWithoutResult(status -> references.syncArticle(12, owner, List.of(id), null));
-        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM media_reference WHERE file_id=?", Integer.class, MediaIds.bytes(id)));
-        assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> jdbc.update("DELETE FROM media_file WHERE id=?", MediaIds.bytes(id)));
+        assertEquals(2, fixtures.countReferences(MediaIds.bytes(id)));
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> fixtures.deleteFile(MediaIds.bytes(id)));
         tx.executeWithoutResult(status -> references.syncArticle(11, owner, List.of(), null));
         assertNull(files.find(id).orElseThrow().nextActionAt());
         tx.executeWithoutResult(status -> references.syncArticle(12, owner, List.of(), null));
@@ -182,7 +185,7 @@ class MediaV2IntegrationTests {
     }
     @Test void gcAndBindSerializeOnTheSameRow() throws Exception {
         String id = ready(MediaPurpose.ARTICLE_IMAGE, 100);
-        jdbc.update("UPDATE media_file SET next_action_at=UTC_TIMESTAMP(3)-INTERVAL 1 SECOND WHERE id=?", MediaIds.bytes(id));
+        fixtures.expireFile(MediaIds.bytes(id));
         CountDownLatch locked = new CountDownLatch(1), release = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
             var bind = executor.submit(() -> transaction().executeWithoutResult(status -> {
@@ -223,7 +226,7 @@ class MediaV2IntegrationTests {
         assertEquals(Set.of(current), files.references(ReferenceType.USER_AVATAR, owner));
         assertNull(files.find(current).orElseThrow().nextActionAt());
         assertNotNull(files.find(current.equals(first) ? second : first).orElseThrow().nextActionAt());
-        assertEquals(1L, jdbc.queryForObject("SELECT auth_version FROM users WHERE id=?", Long.class, owner));
+        assertEquals(1L, fixtures.authVersion(owner));
     }
     @Test void concurrentRedisAdmissionCannotLoseCounts() throws Exception {
         var flow = new org.springframework.boot.context.properties.bind.Binder(
@@ -290,7 +293,7 @@ class MediaV2IntegrationTests {
         }
         assertEquals(MediaStatus.ISSUED, files.find(id).orElseThrow().status());
         assertEquals(5L, s3.headObject(request -> request.bucket(bucket()).key("easy-community/test/public/" + id)).contentLength());
-        jdbc.update("UPDATE media_file SET next_action_at=UTC_TIMESTAMP(3)-INTERVAL 1 SECOND WHERE id=?", MediaIds.bytes(id));
+        fixtures.expireFile(MediaIds.bytes(id));
         lifecycle.maintainOne(id);
         assertTrue(files.find(id).isEmpty());
         assertThrows(NoSuchKeyException.class, () -> s3.headObject(request -> request.bucket(bucket()).key("easy-community/test/public/" + id)));
@@ -300,7 +303,7 @@ class MediaV2IntegrationTests {
     private String ready(MediaPurpose purpose, long size) {
         String id = UUID.randomUUID().toString();
         files.insert(new FileRecord(id, owner, purpose, MediaStatus.ISSUED, null, null, Instant.now(), Instant.now().plusSeconds(7200)));
-        jdbc.update("UPDATE media_file SET status='READY',size_bytes=?,next_action_at=UTC_TIMESTAMP(3)+INTERVAL 1 DAY WHERE id=?", size, MediaIds.bytes(id));
+        fixtures.makeReady(MediaIds.bytes(id), size);
         return id;
     }
     private TransactionTemplate transaction() { var tx = new TransactionTemplate(manager); tx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED); return tx; }

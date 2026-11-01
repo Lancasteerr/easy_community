@@ -7,4 +7,24 @@
     <select id="countIdentities" resultType="int">
         SELECT COUNT(*) FROM user_auth_identity WHERE user_id = #{userId}
     </select>
+    <update id="clearAvatar">UPDATE users SET avatar_media_id = NULL WHERE id = #{userId}</update>
+    <delete id="deleteOwnedReferences">
+        DELETE r FROM media_reference r JOIN media_file f ON r.file_id = f.id WHERE f.uploader_id = #{userId}
+    </delete>
+    <delete id="deleteOwnedFiles">DELETE FROM media_file WHERE uploader_id = #{userId}</delete>
+    <select id="countColumns" resultType="int">
+        SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = #{table}
+    </select>
+    <select id="countReferences" resultType="int">
+        SELECT COUNT(*) FROM media_reference WHERE file_id = #{fileId}
+    </select>
+    <delete id="deleteFile">DELETE FROM media_file WHERE id = #{fileId}</delete>
+    <update id="expireFile">
+        UPDATE media_file SET next_action_at = UTC_TIMESTAMP(3) - INTERVAL 1 SECOND WHERE id = #{fileId}
+    </update>
+    <select id="authVersion" resultType="long">SELECT auth_version FROM users WHERE id = #{userId}</select>
+    <update id="makeReady">
+        UPDATE media_file SET status = 'READY', size_bytes = #{size},
+        next_action_at = UTC_TIMESTAMP(3) + INTERVAL 1 DAY WHERE id = #{fileId}
+    </update>
 </mapper>
