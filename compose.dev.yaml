@@ -1,0 +1,122 @@
+# 仅编排本地基础依赖；Spring 和 Vite 均在宿主机运行。
+name: easy-community-dev
+
+services:
+  mysql:
+    image: mysql:8.4@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
+    restart: unless-stopped
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-time-zone=+00:00"]
+    environment:
+      MYSQL_DATABASE: easy_community
+      MYSQL_USER: ${DB_USERNAME:-ec_dev}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?请在 .env.compose.dev 中设置数据库开发账号密码}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请设置数据库管理密码}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-13306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # 使用业务账号实际查询，避免初始化期间仅进程存活就被判定为可用。
+      test:
+        - CMD-SHELL
+        - >-
+          MYSQL_PWD="$$MYSQL_PASSWORD"
+          mysql --protocol=TCP -h 127.0.0.1 -u "$$MYSQL_USER"
+          --database=easy_community --silent --skip-column-names --execute='SELECT 1'
+          | grep -qx 1
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+
+  redis:
+    image: redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?请设置 Redis 密码}
+    # 密码通过容器环境读取，避免 Compose 再次展开密码里的特殊字符。
+    command: ["sh", "-ec", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -qx PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MEDIA_STORAGE_ACCESS_KEY:?请设置 MinIO 开发账号}
+      MINIO_ROOT_PASSWORD: ${MEDIA_STORAGE_SECRET_KEY:?请设置 MinIO 开发密码}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MEDIA_FRONTEND_ORIGIN:-http://127.0.0.1:5173}
+      MINIO_NOTIFY_WEBHOOK_ENABLE_MEDIA: "on"
+      MINIO_NOTIFY_WEBHOOK_ENDPOINT_MEDIA: http://host.docker.internal:${SERVER_PORT:-8080}/api/storage/minio/upload-webhook
+      MINIO_NOTIFY_WEBHOOK_AUTH_TOKEN_MEDIA: ${MEDIA_WEBHOOK_TOKEN:?请设置单段 Webhook token}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-19000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-19001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  minio-init:
+    # 固定 AWS CLI 2.39.3；一次性管理工具，不运行代理，不要求宿主机安装 CLI。
+    image: amazon/aws-cli@sha256:d557b3524475d70dd3104cf44d96568ee3188897b73a6ece2b37aa50e1af362f
+    restart: "no"
+    entrypoint: ["/bin/sh", "/bootstrap/init-minio.sh"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${MEDIA_STORAGE_ACCESS_KEY:?请设置 MinIO 开发账号}
+      AWS_SECRET_ACCESS_KEY: ${MEDIA_STORAGE_SECRET_KEY:?请设置 MinIO 开发密码}
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+      AWS_PAGER: ""
+      AWS_MAX_ATTEMPTS: "2"
+      # 使用标准 S3 请求，兼容当前固定版本的 MinIO。
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      MEDIA_STORAGE_BUCKET: ${MEDIA_STORAGE_BUCKET:-easy-community-dev}
+      MEDIA_KEY_PREFIX: ${MEDIA_KEY_PREFIX:-easy-community/dev}
+    volumes:
+      - ./infra/dev/init-minio.sh:/bootstrap/init-minio.sh:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:4-management@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407
+    restart: unless-stopped
+    # 节点名称与卷内数据目录绑定，重建容器时保持身份稳定。
+    hostname: easy-community-dev-rabbitmq
+    environment:
+      RABBITMQ_NODENAME: rabbit@easy-community-dev-rabbitmq
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-ec_dev}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?请设置 RabbitMQ 密码}
+      RABBITMQ_DEFAULT_VHOST: easy_community_dev
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_port_connectivity"]
+      interval: 20s
+      timeout: 15s
+      start_period: 30s
+      retries: 6
+
+# 名称由项目名前缀隔离，不复用现有 MySQL、Redis 或 MinIO 的卷。
+volumes:
+  mysql-data:
+  redis-data:
+  minio-data:
+  rabbitmq-data:
