@@ -18,9 +18,6 @@ public class ArticleDetailCacheStore {
         return CacheValue.hit(mapper.readValue(value.substring(1), ArticleDetailView.class));
     }
     public boolean publish(long id, String token, ArticleDetailView data) {
-        // 即使传入已装配的响应，也不能把随时变化的浏览量写入正文缓存。
-        var content = (tools.jackson.databind.node.ObjectNode) mapper.valueToTree(data);
-        content.remove("viewCount");
-        return cache.publish(id, token, "detail", "D" + mapper.writeValueAsString(content));
+        return cache.publish(id, token, "detail", "D" + mapper.writeValueAsString(data));
     }
 }

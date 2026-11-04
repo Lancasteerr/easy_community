@@ -30,7 +30,7 @@ public class ArticleReader {
         var tags = articles.tags(List.of(id)).get(id);
         return LoadedArticle.visible(new ArticleDetailView(Long.toString(id), row.title(), Long.toString(row.authorId()),
                 author(names, row.authorId()), row.summary(), row.coverMediaId(), url(row), tags,
-                row.publishedAt(), row.updatedAt(), row.contentHtml(), null));
+                row.publishedAt(), row.updatedAt(), row.contentHtml()));
     }
     public Map<Long, LoadedArticle<ArticleListView>> lists(Collection<Long> ids) {
         Map<Long, ArticleSnapshot> rows = articles.listRows(ids);
@@ -45,7 +45,7 @@ public class ArticleReader {
             else if (row.hidden()) { result.put(id, LoadedArticle.hidden()); }
             else { result.put(id, LoadedArticle.visible(new ArticleListView(Long.toString(id), row.title(),
                     Long.toString(row.authorId()), author(names, row.authorId()), row.summary(), url(row),
-                    tags.get(id), row.publishedAt(), row.updatedAt(), null))); }
+                    tags.get(id), row.publishedAt(), row.updatedAt()))); }
         }
         return result;
     }
