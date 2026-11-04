@@ -2,6 +2,8 @@
 
 基于 [easy_blog](https://github.com/Lancasteerr/Easy_blog_full)，适配多用户，多角色改进
 
+本地开发使用 IDEA / Vite 运行应用，MySQL、Redis、MinIO、RabbitMQ 由根目录 Compose 统一管理，配置、Navicat 连接和启动命令见 [本地开发说明](docs/zh-CN/local-development.md)。
+
 功能：
 
 1. 文章crud，tag有限支持（文章元数据），浏览量 点赞量（可复用easy_blog相关逻辑），评论

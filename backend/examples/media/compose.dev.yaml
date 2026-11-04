@@ -1,3 +1,5 @@
+# 历史上传联调示例（含 Caddy）；日常开发改用根目录 compose.dev.yaml。
+# 两套方案的 19000/19001 端口冲突，不能同时启动；详见 docs/zh-CN/local-development.md。
 # 新建独立V2存储卷与端口，不复用或清空开发者已有的MinIO。
 name: easy-community-media-v2
 services:
