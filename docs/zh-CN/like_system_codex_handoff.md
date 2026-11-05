@@ -10,7 +10,7 @@
 
 1. **每个 `(user_id, article_id)` 在 MySQL `article_like_state` 中最多一行**；`liked` 保存当前状态，`version` 保存已经处理的最高版本；高版本直接覆盖这一行，**不保存逐次点击历史**。
 2. 取消点赞时保留 `liked=0` 的状态行，**不 DELETE**。它既是当前未点赞状态，又是抵御旧点赞消息的版本标记（逻辑上的墓碑，而非额外历史记录）。联合主键只防重复行，不能单独防“删行后旧消息重新插入”。
-3. 消费端：`msg.version <= sql.version` 直接跳过并 ACK；`msg.version > sql.version` 必须更新 `version` 和 `liked`，**即使 liked 与原值相同**；仅 `liked` 真正改变时才将 SQL 计数 `+1/-1`。关系更新和计数更新位于**同一 MySQL 事务**。
+3. 消费端先拒绝“同版本不同状态”的协议冲突；其余 `msg.version <= sql.version` 跳过并 ACK；高版本必须更新 `version` 和 `liked`，**即使 liked 与原值相同**；仅 `liked` 真正改变时才将 SQL 计数 `+1/-1`。关系更新和计数更新位于**同一 MySQL 事务**。
 4. RabbitMQ 消息包含完整目标状态与版本，不能仅存 Redis 引用；无需保证队列严格顺序，SQL 行锁 + 版本比较处理乱序和重复投递。
 5. MySQL 是最终事实来源；Redis 用户点赞状态、文章计数允许丢失，读时从 SQL 恢复；MQ 积压导致的短暂不一致可接受。**但版本分配器不能在同一纪元内回退或重复**。
 6. 当前**不使用计数分片**，一篇文章对应 MySQL 一条精确计数记录。MQ 缓冲不等于无限吞吐，热门文章计数行仍是需压测的潜在瓶颈。
@@ -56,6 +56,7 @@ INSERT INTO like_version_epoch (id, epoch) VALUES (1, 0);
 - `epoch` 持久存于 `like_version_epoch`；`seq` 由 Redis 原子 `INCR like:version:seq` 生成；Redis 同时存 `like:version:epoch`。
 - Java 组合：`version = ((long) epoch << 43) | seq`，约束 `0 <= epoch < 2^20`、`1 <= seq < 2^43`，始终为正的 Java long。版本顺序先比较 epoch，再比较 seq，相当于直接比较单个 version。
 - 用 Redis Lua 在**同一次调用**检查 `epoch`、`seq` 两个 key 都存在且合法，再 `INCR`，返回 epoch 和 seq；若任一缺失，**拒绝签发**，不能隐式将 seq 重置为 1。
+- 实际实现同时检查无TTL的guard：纪元、READY状态与当前Redis `run_id`必须匹配；Redis进程重启即拒签，完整恢复的旧key也不能绕过停写。初始化seq=0合法，正式签发seq必须大于0。
 - 这两个 key 不设置 TTL，禁止缓存淘汰策略把它们驱逐；故障切换可能回滚 Redis 序号时也必须触发恢复流程。
 - 恢复流程（管理操作）：关闭/阻塞所有点赞版本签发 → 协调唯一恢复执行者 → MySQL `epoch=epoch+1` 提交 → 用新 epoch 初始化 Redis `epoch/seq=0` → 确认所有 API 实例只从当前分配器领取版本 → 放开写入。**Spring 实例普通重启不得自动各自增加 epoch**。
 - 对发布确认尚未返回的旧版本消息，恢复后即使到达也不会覆盖新纪元消息；消费端按 DB version 判断。
@@ -105,6 +106,10 @@ public ApplyResult apply(LikeCommand m) {
     stateMapper.insertDefaultIfAbsent(m.userId(), m.articleId());
     LikeState old = stateMapper.selectForUpdate(m.userId(), m.articleId());
 
+    // 同版本不同状态不是普通重复消息，必须隔离告警。
+    if (m.version() == old.version() && m.desiredLiked() != old.liked()) {
+        throw new IllegalStateException("conflicting version");
+    }
     if (m.version() <= old.version()) {
         return ApplyResult.STALE_OR_DUPLICATE;
     }
@@ -121,21 +126,22 @@ public ApplyResult apply(LikeCommand m) {
 }
 ```
 
-- `insertDefaultIfAbsent`: `INSERT IGNORE INTO article_like_state(user_id,article_id,liked,version) VALUES (?, ?, 0, 0)`；正确处理 SQL 异常，不吞掉非预期数据错误。
+- `insertDefaultIfAbsent`: `INSERT INTO article_like_state(user_id,article_id,liked,version) VALUES (?, ?, 0, 0) ON DUPLICATE KEY UPDATE version=article_like_state.version`；只处理主键已存在，不使用IGNORE掩盖其他错误。
 - `selectForUpdate`: `SELECT liked,version FROM article_like_state WHERE user_id=? AND article_id=? FOR UPDATE`，必须在同一事务内执行。
 - `update`: `UPDATE article_like_state SET liked=?,version=?,updated_at=NOW(3) WHERE user_id=? AND article_id=?`。
 - `countMapper.addDelta`: `UPDATE article_like_count SET like_count=like_count+? WHERE article_id=? AND like_count+? >= 0`。未更新恰好一行则整个事务回滚、告警，不能悄悄继续。
-- 消费成功后，根据 `(version,liked)` 条件更新 Redis 为 C（Committed）；对文章 count key 执行 `DEL` 或延迟失效，避免乐观计数长期漂移；Redis 不可用不回滚 SQL。
+- APPLIED或DUPLICATE成功后，根据实际SQL `(version,liked)` 条件更新Redis为C并删除计数缓存；STALE分支不回写原消息。Redis不可用不回滚SQL。
 - **切忌**仅判断 `old.liked == desiredLiked` 就提前返回；高版本的同状态命令必须推进 version，否则中间的旧相反状态消息会翻转最终状态。
 
 ## 6. Redis 键及使用方式
 
 | Key | Type | Value | 目的 | 丢失/过期 |
 |---|---|---|---|---|
-| `like:state:{userId}` | Hash | `articleId -> {version19}|{liked0/1}|{P/C}` | 当前用户多篇文章的点赞状态，读时 `HMGET` | 整个 Hash 5～10 分钟 TTL；丢失从 SQL 批量回源 |
+| `like:state:{userId}` | Hash | `articleId -> {version19}|{liked0/1}|{P/C}` | 当前用户多篇文章的点赞状态，读时 `HMGET` | 整个Hash固定600秒；访问和字段更新不续期 |
 | `like:count:{articleId}` | String | 点赞总数 | 列表/详情总数，`MGET` 批量读 | 例如 30 秒 TTL，丢失从 SQL 计数表回源 |
 | `like:version:epoch` | String | 当前纪元 | 版本分配 | **不允许静默丢失/回退** |
 | `like:version:seq` | String | 当前纪元序号 | Redis INCR | **不允许静默丢失/回退** |
+| `like:version:guard` | Hash | epoch、runId、state | 运行标识和停写栅栏 | 无TTL；仅受控维护初始化 |
 
 ### 用户状态更新（Lua CAS）
 

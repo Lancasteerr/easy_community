@@ -1,0 +1,232 @@
+{
+  "recordedAt" : "2026-11-05T15:41:12.959683300Z",
+  "sampleSeconds" : 30,
+  "java" : "25.0.4.1",
+  "os" : "Windows 11",
+  "availableProcessors" : 28,
+  "mysql" : "8.4.11",
+  "applications" : 2,
+  "consumerCount" : 4,
+  "prefetch" : 20,
+  "maxObservedPendingAgeMs" : 5494,
+  "measurements" : [ {
+    "scenario" : "uniform",
+    "targetQps" : 20,
+    "sampleSeconds" : 30,
+    "completed" : 601,
+    "success" : 601,
+    "skippedBusyClient" : 0,
+    "actualQps" : 19.996093874520703,
+    "p95Ms" : 79.7401,
+    "p99Ms" : 121.3466,
+    "statusCounts" : {
+      "202" : 601
+    },
+    "acceptedPending" : 1,
+    "sqlRowLockWaits" : 3,
+    "sqlRowLockWaitMs" : 15
+  }, {
+    "scenario" : "uniform",
+    "targetQps" : 60,
+    "sampleSeconds" : 30,
+    "completed" : 1800,
+    "success" : 1800,
+    "skippedBusyClient" : 0,
+    "actualQps" : 59.968714921112806,
+    "p95Ms" : 64.4281,
+    "p99Ms" : 87.0974,
+    "statusCounts" : {
+      "202" : 1800
+    },
+    "acceptedPending" : 1,
+    "sqlRowLockWaits" : 66,
+    "sqlRowLockWaitMs" : 88
+  }, {
+    "scenario" : "uniform",
+    "targetQps" : 120,
+    "sampleSeconds" : 30,
+    "completed" : 3600,
+    "success" : 3600,
+    "skippedBusyClient" : 0,
+    "actualQps" : 119.88837273540189,
+    "p95Ms" : 53.8593,
+    "p99Ms" : 71.0959,
+    "statusCounts" : {
+      "202" : 3600
+    },
+    "acceptedPending" : 1,
+    "sqlRowLockWaits" : 885,
+    "sqlRowLockWaitMs" : 994
+  }, {
+    "scenario" : "uniform",
+    "targetQps" : 240,
+    "sampleSeconds" : 30,
+    "completed" : 7116,
+    "success" : 7116,
+    "skippedBusyClient" : 85,
+    "actualQps" : 236.87635662353313,
+    "p95Ms" : 51.2174,
+    "p99Ms" : 65.1301,
+    "statusCounts" : {
+      "202" : 7116
+    },
+    "acceptedPending" : 1055,
+    "sqlRowLockWaits" : 1304,
+    "sqlRowLockWaitMs" : 1205
+  }, {
+    "scenario" : "hot",
+    "targetQps" : 20,
+    "sampleSeconds" : 30,
+    "completed" : 601,
+    "success" : 601,
+    "skippedBusyClient" : 0,
+    "actualQps" : 20.013011720971626,
+    "p95Ms" : 65.2936,
+    "p99Ms" : 111.8946,
+    "statusCounts" : {
+      "202" : 601
+    },
+    "acceptedPending" : 1,
+    "sqlRowLockWaits" : 260,
+    "sqlRowLockWaitMs" : 238
+  }, {
+    "scenario" : "hot",
+    "targetQps" : 60,
+    "sampleSeconds" : 30,
+    "completed" : 1800,
+    "success" : 1800,
+    "skippedBusyClient" : 0,
+    "actualQps" : 59.93753250424875,
+    "p95Ms" : 49.3094,
+    "p99Ms" : 74.2739,
+    "statusCounts" : {
+      "202" : 1800
+    },
+    "acceptedPending" : 1,
+    "sqlRowLockWaits" : 31,
+    "sqlRowLockWaitMs" : 28
+  }, {
+    "scenario" : "hot",
+    "targetQps" : 120,
+    "sampleSeconds" : 30,
+    "completed" : 3602,
+    "success" : 3602,
+    "skippedBusyClient" : 0,
+    "actualQps" : 119.85838994105,
+    "p95Ms" : 48.0246,
+    "p99Ms" : 60.9074,
+    "statusCounts" : {
+      "202" : 3602
+    },
+    "acceptedPending" : 2,
+    "sqlRowLockWaits" : 990,
+    "sqlRowLockWaitMs" : 1201
+  }, {
+    "scenario" : "hot",
+    "targetQps" : 240,
+    "sampleSeconds" : 30,
+    "completed" : 7203,
+    "success" : 7203,
+    "skippedBusyClient" : 0,
+    "actualQps" : 239.6347315953939,
+    "p95Ms" : 40.9006,
+    "p99Ms" : 48.5504,
+    "statusCounts" : {
+      "202" : 7203
+    },
+    "acceptedPending" : 162,
+    "sqlRowLockWaits" : 2077,
+    "sqlRowLockWaitMs" : 1880
+  }, {
+    "scenario" : "warm",
+    "targetQps" : 60,
+    "sampleSeconds" : 30,
+    "completed" : 1800,
+    "success" : 1800,
+    "skippedBusyClient" : 0,
+    "actualQps" : 59.926771482807055,
+    "p95Ms" : 51.3345,
+    "p99Ms" : 78.2928,
+    "statusCounts" : {
+      "200" : 1800
+    },
+    "acceptedPending" : 0,
+    "sqlRowLockWaits" : 0,
+    "sqlRowLockWaitMs" : 0
+  }, {
+    "scenario" : "cold",
+    "targetQps" : 60,
+    "sampleSeconds" : 30,
+    "completed" : 1791,
+    "success" : 1791,
+    "skippedBusyClient" : 9,
+    "actualQps" : 59.64923929268512,
+    "p95Ms" : 95.428,
+    "p99Ms" : 173.9968,
+    "statusCounts" : {
+      "200" : 1791
+    },
+    "acceptedPending" : 0,
+    "sqlRowLockWaits" : 0,
+    "sqlRowLockWaitMs" : 0
+  }, {
+    "scenario" : "mixed",
+    "targetQps" : 60,
+    "sampleSeconds" : 30,
+    "completed" : 1801,
+    "success" : 1801,
+    "skippedBusyClient" : 0,
+    "actualQps" : 59.91852285251041,
+    "p95Ms" : 58.2606,
+    "p99Ms" : 92.0293,
+    "statusCounts" : {
+      "200" : 901,
+      "202" : 900
+    },
+    "acceptedPending" : 0,
+    "sqlRowLockWaits" : 4,
+    "sqlRowLockWaitMs" : 4
+  }, {
+    "scenario" : "backlog",
+    "targetQps" : 60,
+    "sampleSeconds" : 5,
+    "completed" : 301,
+    "success" : 301,
+    "skippedBusyClient" : 0,
+    "actualQps" : 59.82530335652349,
+    "p95Ms" : 76.8225,
+    "p99Ms" : 136.9918,
+    "statusCounts" : {
+      "202" : 301
+    },
+    "acceptedPending" : 301,
+    "sqlRowLockWaits" : 0,
+    "sqlRowLockWaitMs" : 0
+  }, {
+    "scenario" : "backlog_recovery",
+    "milliseconds" : 1355
+  } ],
+  "firstApplicationTimers" : [ {
+    "meanMs" : 7.6545164848862575,
+    "maxMs" : 102.85,
+    "count" : 3209,
+    "action" : "read"
+  }, {
+    "meanMs" : 15.943302375417696,
+    "maxMs" : 77.3259,
+    "count" : 13766,
+    "action" : "sql"
+  }, {
+    "meanMs" : 19.196586191620362,
+    "maxMs" : 137.3619,
+    "count" : 13318,
+    "action" : "api"
+  }, {
+    "meanMs" : 10.7675487535666,
+    "maxMs" : 65.9588,
+    "count" : 13318,
+    "action" : "confirm"
+  } ],
+  "sqlAuditConsistent" : true,
+  "qualification" : "本机短窗口容量实验，包含认证SQL；不代表生产SLA或长期极限吞吐"
+}
