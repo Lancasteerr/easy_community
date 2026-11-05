@@ -38,11 +38,14 @@ public class LikeQueryService implements DisposableBean {
             catch (RuntimeException unavailable) { telemetry.event("cache","count_failure"); }
             var missing=ids.stream().filter(id -> !totals.containsKey(id)).toList();
             telemetry.event("cache",missing.isEmpty()?"count_hit":"count_miss");
-            totals.putAll(counts.load(missing,keys -> {
-                telemetry.event("read","count_sql"); var loaded=reader.counts(keys);
-                try { cache.putCounts(loaded); } catch (RuntimeException ignored) { telemetry.event("cache","fill_failure"); }
-                return loaded;
-            }));
+            var loadedCounts=counts.load(missing,keys -> {
+                telemetry.event("read","count_sql"); return reader.counts(keys);
+            });
+            totals.putAll(loadedCounts);
+            // 先取得共享SQL结果并释放回源名额；慢缓存回填不能把已知SQL结果变成回源超时。
+            if(!loadedCounts.isEmpty()){
+                try { cache.putCounts(loadedCounts); } catch (RuntimeException ignored) { telemetry.event("cache","fill_failure"); }
+            }
             Map<Long,LikeState> mine=new LinkedHashMap<>();
             if (user!=null) {
                 try { mine.putAll(cache.states(user,ids)); }
@@ -52,12 +55,16 @@ public class LikeQueryService implements DisposableBean {
                     // 一次请求的领导者只属于同一用户，缺失关系由Reader补成version=0。
                     var articles=keys.stream().map(StateKey::article).toList();
                     telemetry.event("read","state_sql"); var sql=reader.states(user,articles);
-                    try { sql=cache.putStates(user,sql.values(),"C"); } catch (RuntimeException ignored) { telemetry.event("cache","fill_failure"); }
                     Map<StateKey,LikeState> result=new LinkedHashMap<>();
                     for (var key:keys) { result.put(key,sql.get(key.article())); }
                     return result;
                 });
-                loaded.forEach((key,state) -> mine.put(key.article(),state));
+                Map<Long,LikeState> sqlStates=new LinkedHashMap<>();
+                loaded.forEach((key,state) -> sqlStates.put(key.article(),state));
+                if(!sqlStates.isEmpty()){
+                    try { mine.putAll(cache.putStates(user,sqlStates.values(),"C")); }
+                    catch(RuntimeException ignored){telemetry.event("cache","fill_failure");mine.putAll(sqlStates);}
+                }
             }
             Map<Long,Summary> result=new LinkedHashMap<>();
             for (long id:ids) { result.put(id,new Summary(totals.get(id),user!=null && mine.get(id).liked())); }

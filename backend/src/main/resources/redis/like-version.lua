@@ -50,6 +50,7 @@ if action == 'ACTIVATE' then
     redis.call('HSET', KEYS[3], 'state', 'READY')
     return 1
 end
-if action ~= 'ALLOCATE' or state ~= 'READY' then return fail('paused or unknown action') end
+if (action ~= 'ALLOCATE' and action ~= 'CHECK') or state ~= 'READY' then return fail('paused or unknown action') end
 if tonumber(seq) + 1 >= 8796093022208 then return fail('sequence exhausted') end
+if action == 'CHECK' then return 1 end
 return {tonumber(epoch), redis.call('INCR', KEYS[2])}

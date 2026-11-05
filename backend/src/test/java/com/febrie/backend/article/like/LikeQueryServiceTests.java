@@ -51,13 +51,25 @@ class LikeQueryServiceTests {
         try(var workers=Executors.newFixedThreadPool(2)) {
             var first=workers.submit(()->gate.load(List.of(1L,2L),keys->{calls.incrementAndGet();return Map.of(1L,10L,2L,20L);}));
             Runnable work=queue.poll(1,TimeUnit.SECONDS);assertNotNull(work);
-            var second=workers.submit(()->gate.load(List.of(1L,2L),keys->{calls.incrementAndGet();return Map.of(1L,10L,2L,20L);}));
-            // 即使第二个请求晚于完成到达，过载保护也不会制造额外未受控SQL。
+            var followerThread=new java.util.concurrent.atomic.AtomicReference<Thread>();
+            var second=workers.submit(()->{followerThread.set(Thread.currentThread());return gate.load(List.of(1L,2L),keys->{calls.incrementAndGet();return Map.of(1L,10L,2L,20L);});});
+            // 第二个请求明确等待共享Future后才放行领导者，避免依赖调度概率。
+            org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(1)).until(()->followerThread.get()!=null&&followerThread.get().getState()==Thread.State.TIMED_WAITING);
             work.run();assertEquals(20L,first.get(1,TimeUnit.SECONDS).get(2L));
-            while(!second.isDone()) {var extra=queue.poll(50,TimeUnit.MILLISECONDS);if(extra!=null){extra.run();}}
-            assertEquals(10L,second.get().get(1L));assertTrue(calls.get()<=2);
+            assertEquals(10L,second.get(1,TimeUnit.SECONDS).get(1L));assertEquals(1,calls.get());assertTrue(queue.isEmpty());
         }
         var overloaded=new BatchReadGate<Long,Long>(Runnable::run,new Semaphore(0),Duration.ofMillis(10));
         assertThrows(ApiException.class,()->overloaded.load(List.of(1L),keys->{throw new AssertionError("不能越过并发上限");}));
+    }
+    @Test void slowCacheFillDoesNotConvertKnownSqlResultIntoReadTimeout() {
+        when(reader.counts(any())).thenReturn(Map.of(2L,3L));
+        doAnswer(call->{
+            // 明确模拟400ms缓存延迟，超过100ms的SQL等待预算；不是随机并发时序。
+            new CountDownLatch(1).await(400,TimeUnit.MILLISECONDS);return null;
+        }).when(cache).putCounts(any());
+        var p=new LikeProperties(true,false,false,"ec:test:unit:like",Duration.ofSeconds(2),128,2,20,67108864,60,4,Duration.ofMillis(100),"none",-1,0);
+        var query=new LikeQueryService(cache,reader,p,mock(LikeTelemetry.class));
+        try{assertEquals(3,query.summaries(null,List.of(2L)).get(2L).likeCount());}
+        finally{query.destroy();}
     }
 }

@@ -33,8 +33,14 @@ public class LikeMaintenance implements ApplicationRunner {
             throw new IllegalStateException("点赞维护必须启用模块、禁用写入口并使用非Web模式");
         }
         Object result = switch (properties.maintenance()) {
-            case "status" -> Map.of("sqlEpoch", jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1", Integer.class),
-                    "redis", allocator.getObject().status());
+            case "status" -> {
+                int epoch=jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1", Integer.class);
+                var current=allocator.getObject().status();
+                boolean ready=allocator.getObject().ready()&&Integer.toString(epoch).equals(current.get(0));
+                var details=Map.of("sqlEpoch",epoch,"redisEpoch",current.get(0),"sequence",current.get(1),"state",current.get(2),"ready",ready);
+                if(!ready){System.out.println(mapper.writeValueAsString(Map.of("action","status","result",details)));throw new IllegalStateException("点赞分配器未就绪，禁止开放写入口");}
+                yield details;
+            }
             case "pause" -> { allocator.getObject().pause(); yield Map.of("paused", true); }
             case "recover" -> Map.of("epoch", recovery.getObject().recover(properties.expectedEpoch()));
             case "replay" -> Map.of("replayed", replay.getObject().replay(properties.replayLimit()));

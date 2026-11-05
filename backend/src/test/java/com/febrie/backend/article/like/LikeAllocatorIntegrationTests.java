@@ -37,6 +37,7 @@ class LikeAllocatorIntegrationTests {
         assertThrows(ApiException.class, allocator::next);
         String runtime = allocator.recoveryRuntime();
         allocator.initialize(1, runtime); allocator.activate(1, runtime);
+        assertTrue(allocator.ready()); assertEquals("0",allocator.status().get(1));
         assertEquals(LikeVersion.pack(1, 1), allocator.next());
         allocator.pause(); assertThrows(ApiException.class, allocator::next);
         assertThrows(RuntimeException.class, () -> allocator.initialize(1, runtime));

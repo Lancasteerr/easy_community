@@ -44,6 +44,10 @@ public class LikeVersionAllocator {
         return status().get(4);
     }
     public void pause() { execute("PAUSE", "", ""); }
+    public boolean ready() {
+        try { execute("CHECK", "", ""); return true; }
+        catch (RuntimeException invalid) { return false; }
+    }
     public void pauseIf(int epoch, String runtime) { execute("PAUSE", Integer.toString(epoch), runtime); }
     public void initialize(int epoch, String runtime) { execute("INITIALIZE", Integer.toString(epoch), runtime); }
     public void activate(int epoch, String runtime) { execute("ACTIVATE", Integer.toString(epoch), runtime); }
