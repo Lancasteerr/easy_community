@@ -36,7 +36,7 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?请设置 Redis 密码}
     # 密码通过容器环境读取，避免 Compose 再次展开密码里的特殊字符。
-    command: ["sh", "-ec", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    command: ["sh", "-ec", "exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\""]
     ports:
       - "127.0.0.1:${REDIS_PORT:-16379}:6379"
     volumes:
