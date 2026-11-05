@@ -34,6 +34,10 @@
         <aws-sdk.version>2.57.3</aws-sdk.version>
     </properties>
     <dependencies>
+        <!-- 点赞可靠发布/消费和本机只读指标，版本全部沿用Boot BOM。 -->
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-amqp</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+        <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-registry-prometheus</artifactId></dependency>
         <!-- COS官方SDK负责真实审核、复制与删除，POST Policy遵循独立的COS签名规则。 -->
         <dependency>
             <groupId>com.qcloud</groupId>
