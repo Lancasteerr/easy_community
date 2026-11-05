@@ -20,7 +20,7 @@ class LikePublisherTests {
 
     LikePublisherTests() {
         when(rabbit.getConnectionFactory()).thenReturn(factory);
-        when(factory.createConnection()).thenReturn(mock(Connection.class));
+        doReturn(mock(Connection.class)).when(factory).createConnection();
         publisher = new LikePublisher(rabbit, properties(), mock(LikeCodec.class), mock(LikeTelemetry.class));
     }
 
@@ -44,7 +44,7 @@ class LikePublisherTests {
         when(factory.createConnection()).thenThrow(new IllegalStateException());
         assertEquals("LIKE_PUBLISH_UNAVAILABLE", assertThrows(ApiException.class, () -> publisher.publish(message)).code());
         verify(rabbit, never()).send(anyString(), anyString(), any(Message.class), any(CorrelationData.class));
-        when(factory.createConnection()).thenReturn(mock(Connection.class));
+        doReturn(mock(Connection.class)).when(factory).createConnection();
         doAnswer(call -> {
             ((CorrelationData) call.getArgument(3)).getFuture().complete(new CorrelationData.Confirm(true, null));
             return null;

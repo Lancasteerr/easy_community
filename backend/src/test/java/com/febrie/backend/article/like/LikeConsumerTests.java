@@ -1,0 +1,47 @@
+package com.febrie.backend.article.like;
+
+import com.febrie.backend.article.like.application.*;
+import com.febrie.backend.article.like.domain.*;
+import com.febrie.backend.article.like.infrastructure.*;
+import com.rabbitmq.client.Channel;
+import java.util.ArrayList;
+import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.*;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.TransientDataAccessResourceException;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+/** 用可控等待器验证有界退避、隔离和ACK时序，不真实sleep。 */
+class LikeConsumerTests {
+    @Test void boundedRetriesKeepMessageUntilDeadLetterTransfer() throws Exception {
+        var codec = mock(LikeCodec.class); var sql = mock(LikeSqlService.class); var channel = mock(Channel.class);
+        when(codec.decode(any())).thenReturn(LikeSqlServiceTests.command(true, 10));
+        when(sql.apply(any())).thenThrow(new TransientDataAccessResourceException("test"));
+        var delays = new ArrayList<Long>();
+        new LikeConsumer(codec, sql, provider(), mock(LikeTelemetry.class), delays::add).consume(message(), channel);
+        assertEquals(java.util.List.of(1000L, 2000L, 4000L, 8000L), delays);
+        verify(sql, times(5)).apply(any());
+        verify(channel).basicNack(7, false, false);
+        verify(channel, never()).basicAck(anyLong(), anyBoolean());
+    }
+
+    @Test void staleDoesNotWriteOriginalMessageAndCacheFailureDoesNotUndoAck() throws Exception {
+        var codec = mock(LikeCodec.class); var sql = mock(LikeSqlService.class); var channel = mock(Channel.class);
+        var projection = mock(LikeProjection.class); var provider = provider();
+        doAnswer(call -> { ((java.util.function.Consumer<LikeProjection>) call.getArgument(0)).accept(projection); return null; })
+                .when(provider).ifAvailable(any());
+        when(codec.decode(any())).thenReturn(LikeSqlServiceTests.command(true, 10));
+        when(sql.apply(any())).thenReturn(new LikeSqlService.Result(LikeSqlService.Status.STALE, new LikeState(1, 2, false, 12)));
+        var consumer = new LikeConsumer(codec, sql, provider, mock(LikeTelemetry.class), ignored -> { });
+        consumer.consume(message(), channel);
+        verifyNoInteractions(projection);
+        when(sql.apply(any())).thenReturn(new LikeSqlService.Result(LikeSqlService.Status.APPLIED, new LikeState(1, 2, true, 10)));
+        doThrow(new IllegalStateException()).when(projection).committed(any());
+        consumer.consume(message(), channel);
+        verify(channel, times(2)).basicAck(7, false);
+    }
+
+    @SuppressWarnings("unchecked") private static ObjectProvider<LikeProjection> provider() { return mock(ObjectProvider.class); }
+    private static Message message() { var p = new MessageProperties(); p.setDeliveryTag(7); return new Message(new byte[]{1}, p); }
+}
