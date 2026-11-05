@@ -43,7 +43,7 @@ public class LikeConsumer {
         for (int attempt = 0; attempt < 5; attempt++) {
             long started = System.nanoTime();
             try { result = sql.apply(command); break; }
-            catch (TransientDataAccessException | RecoverableDataAccessException | TransactionException retryable) {
+            catch (TransientDataAccessException | RecoverableDataAccessException | DataAccessResourceFailureException | TransactionException retryable) {
                 telemetry.event("consume", "retry");
                 if (attempt == 4) { isolate(channel, tag, "retry_exhausted"); return; }
                 try { delay.await(1000L << attempt); }
