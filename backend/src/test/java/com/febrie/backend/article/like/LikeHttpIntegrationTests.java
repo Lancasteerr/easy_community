@@ -13,6 +13,8 @@ import java.net.http.*;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -165,6 +167,27 @@ class LikeHttpIntegrationTests {
         assertEquals(503,owner.call("GET","/api/articles/"+article,null,false,null).statusCode());
     }
 
+    @Test void hideAfterExistenceCheckAndDeletionAfterAcceptanceDoNotRevokeCommand()throws Exception{
+        listener.stop();
+        var checked=new CountDownLatch(1);var release=new CountDownLatch(1);
+        doAnswer(call->{
+            boolean visible=(boolean)call.callRealMethod();checked.countDown();
+            assertTrue(release.await(5,TimeUnit.SECONDS));return visible;
+        }).when(likes).publicArticle(article);
+        try(var requests=Executors.newSingleThreadExecutor()){
+            var response=requests.submit(()->owner.call("PUT",path(),null,true,UUID.randomUUID().toString()));
+            try{
+                assertTrue(checked.await(5,TimeUnit.SECONDS));
+                // 写侧存在性检查已完成，隐藏不持有也不等待点赞事务中的article行锁。
+                jdbc.update("UPDATE article SET hidden=TRUE WHERE id=?",article);
+            }finally{release.countDown();}
+            var accepted=response.get(10,TimeUnit.SECONDS);assertEquals(202,accepted.statusCode(),accepted.body());
+            jdbc.update("UPDATE users SET status='DELETED',auth_version=auth_version+1 WHERE id=?",owner.user);
+            listener.start();committed(mapper.readTree(accepted.body()).path("version").asLong(),true,1);
+            assertEquals(404,browser().call("GET","/api/articles/"+article,null,false,null).statusCode());
+        }
+    }
+
     @Test void lostAckRedeliversAfterSqlCommitWithoutDoubleCount()throws Exception{
         listener.stop();var command=command(true);publisher.publish(command);
         var nativeFactory=new com.rabbitmq.client.ConnectionFactory();
@@ -198,6 +221,30 @@ class LikeHttpIntegrationTests {
         }).when(likes).addDelta(eq(article),anyInt());
         var command=command(true);publisher.publish(command);committed(command.number(),true,1);
         verify(likes,atLeast(2)).addDelta(article,1);
+    }
+
+    @Test @EnabledIfEnvironmentVariable(named="IT_LIKE_FAULTS",matches="true")
+    void hardProcessExitAfterCommitRedeliversWithoutDoubleCounting()throws Exception{
+        listener.stop();var command=command(true);publisher.publish(command);
+        String executable=java.nio.file.Path.of(System.getProperty("java.home"),"bin",System.getProperty("os.name").startsWith("Windows")?"java.exe":"java").toString();
+        List<String> args=new ArrayList<>(List.of(executable));
+        String temporary=System.getProperty("jdk.net.unixdomain.tmpdir");if(temporary!=null){args.add("-Djdk.net.unixdomain.tmpdir="+temporary);}
+        args.addAll(List.of("-cp",System.getProperty("surefire.test.class.path",System.getProperty("java.class.path")),LikeCrashProcess.class.getName(),properties.name("command.q"),PREFIX));
+        var output=java.nio.file.Path.of("target","like-crash-child.log").toFile();
+        var process=new ProcessBuilder(args).redirectErrorStream(true).redirectOutput(output).start();
+        try{assertTrue(process.waitFor(40,TimeUnit.SECONDS));assertEquals(0,process.exitValue(),"检查like-crash-child.log");}
+        finally{if(process.isAlive()){process.destroyForcibly();process.waitFor(5,TimeUnit.SECONDS);}}
+        assertEquals(command.number(),likes.states(owner.user,List.of(article)).get(article).version());
+        listener.start();committed(command.number(),true,1);
+    }
+
+    @Test @EnabledIfEnvironmentVariable(named="IT_LIKE_FAULTS",matches="true")
+    void brokerRestartPreservesConfirmedUnconsumedCommands()throws Exception{
+        assertEquals("17772",System.getenv("IT_RABBITMQ_PORT"));listener.stop();
+        var command=command(true);publisher.publish(command);
+        LikeTestContainers.restart("easy-community-like-it-rabbitmq-1");
+        await().ignoreExceptions().atMost(Duration.ofSeconds(30)).until(()->admin.getQueueInfo(properties.name("command.q")).getMessageCount()==1);
+        listener.start();committed(command.number(),true,1);
     }
 
     @Test void deadLetterMissingOrFullRetainsMessagesAndReplayFailureKeepsOriginal()throws Exception{
