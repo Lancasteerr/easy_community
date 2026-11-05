@@ -60,7 +60,7 @@ class ArticleHttpIntegrationTests {
         reset(cache, reader);
         browsers.forEach(Browser::close);
         for (long id : owners) {
-            articleFixtures.deleteTagsForAuthor(id); articleFixtures.deleteArticlesForAuthor(id);
+            articleFixtures.deleteTagsForAuthor(id); articleFixtures.deleteLikeStatesForAuthor(id); articleFixtures.deleteLikeCountsForAuthor(id); articleFixtures.deleteArticlesForAuthor(id);
             fixtures.deleteOwnedReferences(id); fixtures.deleteOwnedFiles(id);
             fixtures.deleteIdentities(id); fixtures.deleteUser(id);
         }

@@ -77,7 +77,7 @@ class ArticleMysqlIntegrationTests {
         reset(articles);
         reset(dataSource);
         articleFixtures.deleteTagsForAuthor(actor.userId());
-        articleFixtures.deleteArticlesForAuthor(actor.userId());
+        articleFixtures.deleteLikeStatesForAuthor(actor.userId()); articleFixtures.deleteLikeCountsForAuthor(actor.userId()); articleFixtures.deleteArticlesForAuthor(actor.userId());
         fixtures.deleteOwnedReferences(actor.userId());
         fixtures.deleteOwnedFiles(actor.userId());
         fixtures.deleteIdentities(actor.userId()); fixtures.deleteUser(actor.userId());

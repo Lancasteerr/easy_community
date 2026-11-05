@@ -30,6 +30,8 @@ public class ArticleRepository {
         row.setUpdatedAt(now);
         row.setPublishedAt(now);
         articles.insert(row);
+        // 无论点赞入口是否启用，新文章始终拥有精确计数基线，并随创建事务一起回滚。
+        articles.initializeLikeCount(row.getId());
         return row.getId();
     }
 

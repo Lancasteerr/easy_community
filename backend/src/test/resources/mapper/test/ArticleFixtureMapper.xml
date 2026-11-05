@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.febrie.backend.support.persistence.ArticleFixtureMapper">
+    <!-- 仅删除本次测试用户或其文章产生的点赞数据，不清共享业务表。 -->
+    <delete id="deleteLikeStatesForAuthor">
+        DELETE FROM article_like_state WHERE user_id=#{author}
+        OR article_id IN (SELECT id FROM article WHERE author_id=#{author})
+    </delete>
+    <delete id="deleteLikeCountsForAuthor">
+        DELETE c FROM article_like_count c JOIN article a ON a.id=c.article_id WHERE a.author_id=#{author}
+    </delete>
     <delete id="deleteTagsForAuthor">
         DELETE r FROM article_tag r JOIN article a ON a.id = r.article_id WHERE a.author_id = #{author}
     </delete>

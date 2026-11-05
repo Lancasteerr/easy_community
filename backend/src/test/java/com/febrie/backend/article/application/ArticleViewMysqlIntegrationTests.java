@@ -61,7 +61,7 @@ class ArticleViewMysqlIntegrationTests {
 
     @AfterEach void clean() {
         reset(stats);
-        articleFixtures.deleteArticlesForAuthor(actor.userId());
+        articleFixtures.deleteLikeStatesForAuthor(actor.userId()); articleFixtures.deleteLikeCountsForAuthor(actor.userId()); articleFixtures.deleteArticlesForAuthor(actor.userId());
         fixtures.deleteIdentities(actor.userId());
         fixtures.deleteUser(actor.userId());
     }

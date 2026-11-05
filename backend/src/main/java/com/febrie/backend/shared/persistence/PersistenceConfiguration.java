@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 @MapperScan(basePackages = {
         "com.febrie.backend.user.infrastructure.persistence.mapper",
         "com.febrie.backend.media.infrastructure.persistence.mapper",
-        "com.febrie.backend.article.infrastructure.persistence.mapper"
+        "com.febrie.backend.article.infrastructure.persistence.mapper",
+        "com.febrie.backend.article.like.infrastructure.mapper"
 }, sqlSessionTemplateRef = "sqlSessionTemplate")
 public class PersistenceConfiguration { }
