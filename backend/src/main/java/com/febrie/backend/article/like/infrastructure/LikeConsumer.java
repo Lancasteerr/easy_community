@@ -39,6 +39,7 @@ public class LikeConsumer {
         LikeCommand command;
         try { command = codec.decode(message.getBody()); }
         catch (RuntimeException invalid) { isolate(channel, tag, "invalid_message"); return; }
+        telemetry.queueAge(command.occurredAt());
         LikeSqlService.Result result = null;
         for (int attempt = 0; attempt < 5; attempt++) {
             long started = System.nanoTime();
@@ -46,10 +47,17 @@ public class LikeConsumer {
             catch (TransientDataAccessException | RecoverableDataAccessException | DataAccessResourceFailureException | TransactionException retryable) {
                 telemetry.event("consume", "retry");
                 if (attempt == 4) { isolate(channel, tag, "retry_exhausted"); return; }
-                try { delay.await(1000L << attempt); }
-                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IOException("消费已中断，保留未确认消息", interrupted); }
-            } catch (RuntimeException fatal) { isolate(channel, tag, "sql_invariant_or_error"); return; }
+            } catch (RuntimeException fatal) {
+                log.error("点赞SQL消费错误 operationId={} errorType={}",command.operationId(),fatal.getClass().getSimpleName());
+                isolate(channel, tag, "sql_invariant_or_error"); return;
+            }
             finally { telemetry.time("sql", started); }
+            // 退避在事务计时之外；否则数据库延迟指标会混入人为等待的1/2/4/8秒。
+            try { delay.await(1000L << attempt); }
+            catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IOException("消费已中断，保留未确认消息", interrupted);
+            }
         }
         if (result == null) { throw new IllegalStateException("SQL消费未得到结果"); }
         telemetry.event("consume", result.status().name().toLowerCase(java.util.Locale.ROOT));

@@ -13,4 +13,8 @@ public class LikeTelemetry {
     public void time(String action, long started) {
         registry.timer("article.like.duration", "action", action).record(System.nanoTime() - started, TimeUnit.NANOSECONDS);
     }
+    public void queueAge(java.time.Instant occurredAt) {
+        var age=java.time.Duration.between(occurredAt,java.time.Instant.now());
+        registry.timer("article.like.queue.age").record(age.isNegative()?java.time.Duration.ZERO:age);
+    }
 }

@@ -3,6 +3,7 @@ package com.febrie.backend.article.like;
 import com.febrie.backend.article.application.dto.PreparedArticle;
 import com.febrie.backend.article.infrastructure.persistence.ArticleRepository;
 import com.febrie.backend.article.like.application.LikeSqlService;
+import com.febrie.backend.article.like.application.LikeAuditService;
 import com.febrie.backend.article.like.domain.*;
 import com.febrie.backend.article.like.infrastructure.LikeRepository;
 import com.febrie.backend.media.application.UploadStorage;
@@ -32,6 +33,7 @@ class LikeMysqlIntegrationTests {
     @Autowired AccountRepository accounts;
     @Autowired TransactionTemplate transaction;
     @Autowired JdbcTemplate jdbc;
+    @Autowired LikeAuditService audit;
     @MockitoBean UploadStorage storage;
     long user, article;
 
@@ -88,6 +90,12 @@ class LikeMysqlIntegrationTests {
         }
         assertEquals(20L, likes.counts(List.of(article)).get(article));
         assertEquals(20L, jdbc.queryForObject("SELECT COUNT(*) FROM article_like_state WHERE article_id=? AND liked=1", Long.class, article));
+    }
+
+    @Test void auditReportsMissingZeroCountWithoutCreatingOrRepairingIt() {
+        jdbc.update("DELETE FROM article_like_count WHERE article_id=?", article);
+        assertTrue(audit.discrepancies().stream().anyMatch(row -> ((Number)row.get("article_id")).longValue() == article));
+        assertFalse(likes.counts(List.of(article)).containsKey(article));
     }
 
     private LikeCommand command(long actor, boolean liked, long version) {

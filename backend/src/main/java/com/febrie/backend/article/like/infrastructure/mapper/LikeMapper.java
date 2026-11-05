@@ -7,7 +7,6 @@ import org.apache.ibatis.annotations.Param;
 
 /** 只声明主库语句；事务和重试由外层服务决定。 */
 public interface LikeMapper {
-    int initializeCount(@Param("articleId") long articleId);
     int initializeState(@Param("userId") long userId, @Param("articleId") long articleId);
     LikeState lock(@Param("userId") long userId, @Param("articleId") long articleId);
     int update(@Param("state") LikeState state);

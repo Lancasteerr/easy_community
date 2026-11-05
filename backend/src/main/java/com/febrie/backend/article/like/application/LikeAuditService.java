@@ -15,7 +15,8 @@ public class LikeAuditService {
     public List<Map<String, Object>> discrepancies() {
         return jdbc.queryForList("""
             SELECT ids.article_id, c.like_count, COALESCE(s.actual_count,0) AS actual_count
-            FROM (SELECT article_id FROM article_like_count UNION SELECT article_id FROM article_like_state) ids
+            FROM (SELECT id AS article_id FROM article UNION SELECT article_id FROM article_like_count
+                  UNION SELECT article_id FROM article_like_state) ids
             LEFT JOIN article_like_count c ON c.article_id=ids.article_id
             LEFT JOIN (SELECT article_id,SUM(liked) AS actual_count FROM article_like_state GROUP BY article_id) s
             ON s.article_id=ids.article_id

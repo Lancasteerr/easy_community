@@ -10,7 +10,6 @@ import org.springframework.stereotype.Repository;
 public class LikeRepository {
     private final LikeMapper mapper;
     public LikeRepository(LikeMapper mapper) { this.mapper = mapper; }
-    public void initializeCount(long id) { mapper.initializeCount(id); }
     public void initializeState(long user, long article) { mapper.initializeState(user, article); }
     public LikeState lock(long user, long article) { return mapper.lock(user, article); }
     public int update(LikeState state) { return mapper.update(state); }
