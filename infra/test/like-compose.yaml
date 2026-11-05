@@ -1,0 +1,57 @@
+# 仅用于点赞真实集成测试；不复用开发容器、数据卷或凭证。
+name: easy-community-like-it
+services:
+  mysql:
+    image: mysql:8.4@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
+    labels: { ec.like.test: "true" }
+    environment:
+      MYSQL_ROOT_PASSWORD: ${IT_SERVICE_PASSWORD:?必须设置测试密码}
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: easy_community_like_test
+    ports: ["127.0.0.1:17706:3306"]
+    tmpfs: ["/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysql --protocol=TCP -h 127.0.0.1 -uroot -e 'SELECT 1' >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+  redis:
+    image: redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+    labels: { ec.like.test: "true" }
+    environment: { IT_SERVICE_PASSWORD: "${IT_SERVICE_PASSWORD:?必须设置测试密码}" }
+    command: ["sh", "-ec", "exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$$IT_SERVICE_PASSWORD\""]
+    ports: ["127.0.0.1:17779:6379"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$IT_SERVICE_PASSWORD\" redis-cli ping | grep -qx PONG"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  rabbitmq:
+    image: rabbitmq:4-management@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407
+    labels: { ec.like.test: "true" }
+    hostname: ec-like-it-rabbit
+    environment:
+      RABBITMQ_DEFAULT_USER: like_test
+      RABBITMQ_DEFAULT_PASS: ${IT_SERVICE_PASSWORD:?必须设置测试密码}
+      RABBITMQ_DEFAULT_VHOST: easy_community_like_test
+      # 仅缩短专用测试Broker的内部死信重试周期，避免故障用例等待生产默认周期。
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit dead_letter_worker_publisher_confirm_timeout 1000"
+    ports: ["127.0.0.1:17772:5672", "127.0.0.1:17773:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+  redis72:
+    # 验证最低支持版本的Lua INFO与字符串CAS行为；不参与重启故障实验。
+    profiles: [compatibility]
+    image: redis:7.2-alpine@sha256:2c933526722b4126a61d5c170f766dc159adf97682f0b1cbbc27b1666ba96d84
+    labels: { ec.like.test: "true" }
+    environment: { IT_SERVICE_PASSWORD: "${IT_SERVICE_PASSWORD:?必须设置测试密码}" }
+    command: ["sh", "-ec", "exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$$IT_SERVICE_PASSWORD\""]
+    ports: ["127.0.0.1:17778:6379"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$IT_SERVICE_PASSWORD\" redis-cli ping | grep -qx PONG"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
