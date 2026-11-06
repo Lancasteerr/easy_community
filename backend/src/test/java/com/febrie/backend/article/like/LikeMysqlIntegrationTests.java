@@ -1,7 +1,7 @@
 package com.febrie.backend.article.like;
 
-import com.febrie.backend.article.application.dto.PreparedArticle;
-import com.febrie.backend.article.infrastructure.persistence.ArticleRepository;
+import com.febrie.backend.article.content.application.dto.PreparedArticle;
+import com.febrie.backend.article.content.infrastructure.persistence.ArticleRepository;
 import com.febrie.backend.article.like.application.LikeSqlService;
 import com.febrie.backend.article.like.application.LikeAuditService;
 import com.febrie.backend.article.like.domain.*;

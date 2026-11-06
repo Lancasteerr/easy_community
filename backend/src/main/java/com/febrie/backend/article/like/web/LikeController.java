@@ -1,6 +1,6 @@
 package com.febrie.backend.article.like.web;
 
-import com.febrie.backend.article.application.ArticleIds;
+import com.febrie.backend.article.common.ArticleIds;
 import com.febrie.backend.article.like.application.*;
 import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.shared.error.ApiException;

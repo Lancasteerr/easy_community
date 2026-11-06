@@ -11,54 +11,89 @@
 ```text
 backend
 ├─ BackendApplication
-├─ user
-│  ├─ web
-│  │  └─ request
-│  ├─ application
-│  │  └─ dto
-│  ├─ domain
-│  └─ infrastructure
-│     ├─ persistence
-│     └─ bootstrap
-├─ auth
-│  ├─ web
-│  │  ├─ request
-│  │  ├─ response
-│  │  ├─ session
-│  │  └─ security
-│  ├─ application
-│  │  └─ dto
-│  └─ infrastructure
-│     ├─ config
-│     ├─ security
-│     ├─ session
-│     ├─ ratelimit
-│     ├─ redis
-│     └─ scheduling
 ├─ article
-│  ├─ web
-│  │  ├─ request
-│  │  └─ response
+│  ├─ common
+│  ├─ content
+│  │  ├─ application
+│  │  │  └─ dto
+│  │  ├─ infrastructure
+│  │  │  ├─ cache
+│  │  │  ├─ config
+│  │  │  ├─ maintenance
+│  │  │  └─ persistence
+│  │  │     ├─ entity
+│  │  │     └─ mapper
+│  │  └─ web
+│  │     ├─ request
+│  │     └─ response
+│  ├─ like
+│  │  ├─ application
+│  │  ├─ domain
+│  │  ├─ infrastructure
+│  │  │  └─ mapper
+│  │  └─ web
+│  ├─ tag
+│  │  ├─ application
+│  │  │  └─ dto
+│  │  ├─ infrastructure
+│  │  │  └─ persistence
+│  │  │     ├─ entity
+│  │  │     └─ mapper
+│  │  └─ web
+│  │     └─ request
+│  └─ view
+│     ├─ application
+│     └─ infrastructure
+│        ├─ cache
+│        ├─ persistence
+│        │  ├─ entity
+│        │  └─ mapper
+│        └─ scheduling
+├─ auth
 │  ├─ application
 │  │  └─ dto
-│  └─ infrastructure
-│     ├─ persistence
-│     ├─ cache
-│     └─ config
+│  ├─ infrastructure
+│  │  ├─ config
+│  │  ├─ ratelimit
+│  │  ├─ scheduling
+│  │  ├─ security
+│  │  └─ session
+│  └─ web
+│     ├─ request
+│     ├─ response
+│     ├─ security
+│     └─ session
 ├─ media
-│  ├─ web
-│  │  └─ request
 │  ├─ application
 │  │  └─ dto
 │  ├─ domain
-│  └─ infrastructure
-│     ├─ config
-│     ├─ storage
-│     ├─ persistence
-│     └─ scheduling
-└─ shared
-   ├─ error
+│  ├─ infrastructure
+│  │  ├─ config
+│  │  ├─ persistence
+│  │  │  ├─ entity
+│  │  │  ├─ mapper
+│  │  │  └─ notification
+│  │  ├─ ratelimit
+│  │  ├─ scheduling
+│  │  └─ storage
+│  └─ web
+│     └─ request
+├─ shared
+│  ├─ error
+│  ├─ persistence
+│  ├─ ratelimit
+│  └─ web
+└─ user
+   ├─ application
+   │  └─ dto
+   ├─ domain
+   ├─ infrastructure
+   │  ├─ bootstrap
+   │  └─ persistence
+   │     ├─ entity
+   │     └─ mapper
    └─ web
+      └─ request
 ```
 
 这是一种实用分层，不要求每个业务都有四层。当前认证没有独立的纯业务模型，因此不建 `auth.domain`；未来新增帖子、评论时，同样按实际代码建包。
@@ -130,7 +165,7 @@ Repository 保留业务可读的方法，内部使用 MyBatis-Plus。普通单�
 | 用户列表数据库查询 | SQL 放 `user.infrastructure.persistence`，跨业务入口由用户应用服务提供 |
 | 独立于数据库的用户规则 | `user.domain`；若依赖 HTTP 错误等应用约定，先保留在应用层 |
 | 新的认证限流规则 | `auth.infrastructure.ratelimit`，由认证流程或过滤器调用 |
-| 文章展示缓存 | `article.infrastructure.cache`；按文章ID保存详情和列表，不缓存整页，不增加定时补偿框架 |
+| 文章展示缓存 | `article.content.infrastructure.cache`；按文章ID保存详情和列表，不缓存整页，不增加定时补偿框架 |
 
 测试包通常镜像被测类的包；跨模块的 HTTP 集成测试保留在应用根包。不因为未来可能用到，就创建空包、额外接口或工具层。
 
@@ -171,7 +206,7 @@ Flyway V2定义直接重写，仅用于新建空库。不存在旧complete/prepa
 - 写事务只在文章锁内复核资源权限及hidden，媒体门禁复用MediaReferenceService。无SQL自动重试、版本、任务表或消息队列。当前调用内存中的提交确认只用于区分代理提交异常，不是持久化业务状态。
 - ArticleQueryService与ArticleListHydrator禁止携带外层事务，缓存获锁后才调用ArticleReader建立短只读RR视图。列表只查小字段，作者通过AccountQueryService.displays批量读取ID/username，不读取凭证或排除软删除作者。
 - 详情与列表DTO均自包含coverUrl、作者名与Tag名。批量装配按缓存检查、非阻塞取锁、二次检查、合并SQL、逐项token发布分段组织；不持一把锁阻塞等待另一把。
-- article.infrastructure.cache直接复用Spring Data Redis与固定Lua资源；三态投影、5秒共享锁、双失效、不可自动过期墓碑均限于文章业务。无通用脚本框架或第二套锁库。
+- article.content.infrastructure.cache直接复用Spring Data Redis与固定Lua资源；三态投影、5秒共享锁、双失效、不可自动过期墓碑均限于文章业务。无通用脚本框架或第二套锁库。
 - ArticleRequestFilter在消息转换前限制保存字节，统一设置no-store和请求关联ID。游客仅放开单篇详情GET，编辑GET仍受保护，写入沿用Session与CSRF。
 - ArticleCacheRebuild只在显式启用的非Web命令下重建新命名空间的墓碑；要求先停流量与旧实例，拒绝使用已有Key的版本，不执行FLUSHDB。
 
@@ -196,3 +231,13 @@ Redis 异常及无效返回沿现有依赖失败处理，不降级放行，不�
 每批运行 `mvn test`，最终运行 `mvn clean verify`。真实集成测试需显式设置 `IT_DB_PASSWORD`，使用专用 `easy_community_auth_test` 数据库和随机 Redis 前缀；Redis 地址、端口、密码通过测试环境变量提供，不能使用业务数据库。Windows JDK 的临时套接字问题及启动步骤见后端 README。
 
 验证账户查询的一致快照和最新版本、Controller 操作人转换、登录检查顺序与失败计数，以及现有 Cookie、CSRF、角色、改密、删除、并发、撤销和清理行为。本次不新增会话命名空间隔离场景测试。凭证只从本地配置或环境变量读取，不写入代码和文档。
+
+## 文章能力与共享事务边界
+
+文章先按 `content`、`view`、`tag`、`like` 找能力，再进入对应技术层。`article.common` 只放共用错误和ID解析；内容应用层保留保存、提交、渲染、读取与缓存维护，不为每个服务再建单类目录。浏览统计仍由现有调用者和任务使用，本次不接入文章HTTP查询。
+
+标签目录通过 `TagService.requireAllExist` 提供存在性校验，文章提交不访问标签基础设施；`article_tag` 集合替换与展示JOIN仍属于文章内容持久化。校验沿用调用者事务，不另建事务。文章创建初始化点赞计数仍与正文、标签、媒体引用同事务，点赞入口关闭也必须执行，任何失败一起回滚。这是明确保留的共享数据边界，不改为异步事件。
+
+`ArticleCacheRebuild` 属于内容基础设施维护入口，仍要求非Web模式和未使用的新命名空间。独立提交Bean与短只读Reader保留Spring代理，移动包不合并事务服务。浏览统计的跨能力MySQL测试与内容提交服务同包，以访问内部提交确认类型，不扩大生产可见性。
+
+迁包需同步修改显式Mapper扫描、XML的namespace和结果类型、测试及脚本中的全限定名。Mapper XML按 `mapper/main/article/content` 和 `view` 归组；通知执行器始终不进入主库扫描。HTTP、SQL结构、配置键、Redis Key和消息协议不变。

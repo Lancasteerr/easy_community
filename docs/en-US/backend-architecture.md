@@ -11,54 +11,89 @@ The root package is `com.febrie.backend`:
 ```text
 backend
 ├─ BackendApplication
-├─ user
-│  ├─ web
-│  │  └─ request
-│  ├─ application
-│  │  └─ dto
-│  ├─ domain
-│  └─ infrastructure
-│     ├─ persistence
-│     └─ bootstrap
-├─ auth
-│  ├─ web
-│  │  ├─ request
-│  │  ├─ response
-│  │  ├─ session
-│  │  └─ security
-│  ├─ application
-│  │  └─ dto
-│  └─ infrastructure
-│     ├─ config
-│     ├─ security
-│     ├─ session
-│     ├─ ratelimit
-│     ├─ redis
-│     └─ scheduling
 ├─ article
-│  ├─ web
-│  │  ├─ request
-│  │  └─ response
+│  ├─ common
+│  ├─ content
+│  │  ├─ application
+│  │  │  └─ dto
+│  │  ├─ infrastructure
+│  │  │  ├─ cache
+│  │  │  ├─ config
+│  │  │  ├─ maintenance
+│  │  │  └─ persistence
+│  │  │     ├─ entity
+│  │  │     └─ mapper
+│  │  └─ web
+│  │     ├─ request
+│  │     └─ response
+│  ├─ like
+│  │  ├─ application
+│  │  ├─ domain
+│  │  ├─ infrastructure
+│  │  │  └─ mapper
+│  │  └─ web
+│  ├─ tag
+│  │  ├─ application
+│  │  │  └─ dto
+│  │  ├─ infrastructure
+│  │  │  └─ persistence
+│  │  │     ├─ entity
+│  │  │     └─ mapper
+│  │  └─ web
+│  │     └─ request
+│  └─ view
+│     ├─ application
+│     └─ infrastructure
+│        ├─ cache
+│        ├─ persistence
+│        │  ├─ entity
+│        │  └─ mapper
+│        └─ scheduling
+├─ auth
 │  ├─ application
 │  │  └─ dto
-│  └─ infrastructure
-│     ├─ persistence
-│     ├─ cache
-│     └─ config
+│  ├─ infrastructure
+│  │  ├─ config
+│  │  ├─ ratelimit
+│  │  ├─ scheduling
+│  │  ├─ security
+│  │  └─ session
+│  └─ web
+│     ├─ request
+│     ├─ response
+│     ├─ security
+│     └─ session
 ├─ media
-│  ├─ web
-│  │  └─ request
 │  ├─ application
 │  │  └─ dto
 │  ├─ domain
-│  └─ infrastructure
-│     ├─ config
-│     ├─ storage
-│     ├─ persistence
-│     └─ scheduling
-└─ shared
-   ├─ error
+│  ├─ infrastructure
+│  │  ├─ config
+│  │  ├─ persistence
+│  │  │  ├─ entity
+│  │  │  ├─ mapper
+│  │  │  └─ notification
+│  │  ├─ ratelimit
+│  │  ├─ scheduling
+│  │  └─ storage
+│  └─ web
+│     └─ request
+├─ shared
+│  ├─ error
+│  ├─ persistence
+│  ├─ ratelimit
+│  └─ web
+└─ user
+   ├─ application
+   │  └─ dto
+   ├─ domain
+   ├─ infrastructure
+   │  ├─ bootstrap
+   │  └─ persistence
+   │     ├─ entity
+   │     └─ mapper
    └─ web
+      └─ request
 ```
 
 This is practical layering. A business module does not need all four layers. Authentication currently has no separate pure business model, so there is no `auth.domain`. Future post and comment packages should also follow actual needs.
@@ -130,7 +165,7 @@ Both executors use STATEMENT local-cache scope and disable second-level caching,
 | Database query for a user list | SQL in `user.infrastructure.persistence`, with an application service entry point for other modules |
 | User rule independent of databases | `user.domain`; keep rules coupled to HTTP errors or application conventions in the application layer |
 | Authentication rate limit rule | `auth.infrastructure.ratelimit`, called by authentication workflows or filters |
-| Article display cache | `article.infrastructure.cache`; per-article detail/list projections, with no page cache or scheduled compensation framework |
+| Article display cache | `article.content.infrastructure.cache`; per-article detail/list projections, with no page cache or scheduled compensation framework |
 
 Unit test packages generally mirror their subjects. Cross-module HTTP integration tests remain at the application root. Do not create empty packages, interfaces, or utility layers for hypothetical future needs.
 
@@ -175,7 +210,7 @@ See the [article contract and recovery guide](../zh-CN/article-crud-implementati
 - Article permissions and hidden state are checked under the row lock. MediaReferenceService remains the binding gate. There are no SQL retries, editing versions, task tables or queues. Per-call in-memory commit observation classifies proxy failures; it is not persistent business state.
 - ArticleQueryService and ArticleListHydrator reject surrounding transactions. After obtaining cache locks they invoke ArticleReader to establish a short read-only RR snapshot. List SQL excludes large content fields. AccountQueryService.displays batches only IDs and usernames, including historical attribution for soft-deleted accounts.
 - Detail/list DTOs contain coverUrl, author name and tag names. Batch hydration separates cache checks, non-blocking lock acquisition, rechecks, combined SQL and per-token publication. It never blocks on another lock while holding one.
-- article.infrastructure.cache uses Spring Data Redis and fixed Lua resources directly. Three-state projections, the shared five-second lock, double invalidation and persistent tombstones stay article-specific; no generic scripting framework or second lock library is added.
+- article.content.infrastructure.cache uses Spring Data Redis and fixed Lua resources directly. Three-state projections, the shared five-second lock, double invalidation and persistent tombstones stay article-specific; no generic scripting framework or second lock library is added.
 - ArticleRequestFilter bounds save bytes before conversion and sets no-store plus request correlation IDs. Only single-article GET is public; edit GET stays protected, and writes retain Session/CSRF.
 - ArticleCacheRebuild runs only through an explicitly enabled non-web command after traffic and old instances stop. It rebuilds tombstones into a fresh namespace, rejects used versions, and never runs FLUSHDB.
 
@@ -200,3 +235,13 @@ Stop all old application instances before starting the new version uniformly. Ex
 Run `mvn test` for each batch and `mvn clean verify` at completion. Real integration tests require explicit `IT_DB_PASSWORD`, a dedicated `easy_community_auth_test` database, and a random Redis prefix. Supply the Redis host, port, and password through test environment variables. Never point tests at the business database. See the backend README for startup steps and the Windows JDK temporary socket workaround.
 
 Verify consistent account snapshots and fresh versions, controller actor conversion, login ordering and failure counters, and existing cookie, CSRF, role, password change, deletion, concurrency, revocation, and cleanup behavior. This refactor does not add a session namespace isolation scenario test. Read credentials only from local configuration or environment variables, never from committed code or documentation.
+
+## Article Capabilities and Shared Transactions
+
+Find article code by `content`, `view`, `tag`, or `like`, then by its technical layer. `article.common` contains only shared article errors and ID parsing. Content application services retain save, commit, rendering, reading, and cache maintenance responsibilities without a separate directory for every class. Existing callers and tasks continue to use view statistics; this change does not add counting to HTTP queries.
+
+`TagService.requireAllExist` exposes catalog validation in the caller's transaction. Content no longer accesses tag infrastructure. Article-tag association replacement and display JOINs remain in content persistence. Article creation still initializes the like-count row in the same transaction as content, tags, and media references, even when likes are disabled. Failures roll back together; this documented shared data boundary is not replaced with asynchronous events.
+
+`ArticleCacheRebuild` belongs to content infrastructure maintenance and retains its non-Web and unused-namespace requirements. Separate commit and short-read beans preserve Spring transaction proxies. The cross-capability view MySQL test stays in the content application package to access internal commit confirmation without widening production visibility.
+
+Package moves update explicit Mapper scans, XML namespaces and result types, and qualified names in tests and scripts. Mapper XML is grouped under `mapper/main/article/content` and `view`; notification persistence stays outside the main scan. HTTP, SQL schema, configuration keys, Redis keys, and message protocols remain unchanged.

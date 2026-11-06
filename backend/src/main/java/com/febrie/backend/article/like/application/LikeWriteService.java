@@ -1,6 +1,6 @@
 package com.febrie.backend.article.like.application;
 
-import com.febrie.backend.article.application.ArticleErrors;
+import com.febrie.backend.article.common.ArticleErrors;
 import com.febrie.backend.article.like.domain.LikeCommand;
 import com.febrie.backend.article.like.infrastructure.*;
 import com.febrie.backend.shared.error.ApiException;
