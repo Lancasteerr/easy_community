@@ -10,7 +10,7 @@
 - `media_reference` 恰好三字段：file_id、ref_type、ref_id，复合主键 `(ref_type,ref_id,file_id)`，文件外键 ON DELETE RESTRICT。
 - UUID 在 SQL 中为标准高低位字节顺序的 BINARY(16)，API 与 Key 为标准小写字符串。
 - Key 固定为 `{prefix}/temp/{id}` 与 `{prefix}/public/{id}`，无扩展名；桶、厂商与前缀不落 SQL。已有文件后不能热切换定位配置。
-- 只有 ISSUED、READY、DELETING 三状态。失败保持 ISSUED，不保存失败原因或处理中状态。
+- 只有 ISSUED、READY、DELETING 三状态。未完成发布的文件保持 ISSUED；最终更新已发出时，超时也可能实际已 READY。不保存失败原因或处理中状态。
 - `size_bytes` 来自已认证通知的实际对象长度。当前审核适配器不提供真实格式结论，`mime_type` 保持 NULL；复制时的 Content-Type 仍来自受 Policy 约束的声明。
 - 公开图片知道 URL 即可读取，隐藏文章不意味着其图片保密。
 
@@ -56,7 +56,9 @@ COS 根据原始 body、路径、query 与约定密钥验证 `x-cos-callback-enc
 
 生产仅在复制完成、READY UPDATE 影响一行且提交成功后返回成功。非超时业务失败也用HTTP200、小型JSON和准确Content-Length，认证或格式失败用4xx。整体期限耗尽或SDK/SQL明确超时返回HTTP504、Content-Length: 0，不生成200超时JSON；由COS向上传客户端生成203 CallbackFailed。超时的阶段、PROCESS_TIMEOUT和耗时只记日志。结果头为 X-Media-Id、X-Media-Result、X-Media-Stage、X-Media-Code；浏览器以 JSON 为准，不能假定 COS 透传自定义回调头。
 
-复制成功但 SQL 失败留下的孤儿由 ISSUED 回收。响应丢失可能实际已 READY，客户端仍按失败重新上传，旧对象无引用时回收。不恢复审核或复制，不立即补偿删除；极端迟到复制残留沿用设计接受的边界。
+通知超时只表示本次未确认成功，不证明已发出的 SQL 未提交。客户端读超时、语句取消与服务端提交存在竞态；自动提交的更新可能在应用停止等待后完成，也可能已提交但响应丢失。淘汰连接用于避免坏连接复用，不作为撤销更新的保证。
+
+复制成功后，更新未提交则保留 ISSUED 及原维护期限，更新已提交则保留 READY 及无引用回收期限；两种结果都保留文件记录与可推导的公开 Key。客户端仍按失败重新申请新 ID 上传，旧对象无引用时交给 GC。不恢复审核或复制，不立即补偿删除，不为此次超时增加事务或自动重试。正常 SQL 超时竞态不会让对象失去对应的管理记录；远端复制极端迟到、在 GC 已删记录和对象后才完成的残留仍是已接受边界，当前不提供全桶对账保证。
 
 ## 引用、头像与文章契约
 

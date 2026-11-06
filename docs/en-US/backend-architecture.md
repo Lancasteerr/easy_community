@@ -167,6 +167,8 @@ Persistence entities stay in infrastructure. Users and identities use AUTO IDs; 
 
 Main mappers explicitly bind to sqlSessionTemplate and load mapper/main XML. Notifications privately own a separate pool, MyBatis-Plus factory, and SqlSessionTemplate, loading only mapper/notification. These are not additional DataSource or session-factory beans. The notification pool keeps auto-commit, its 250ms acquisition wait, one-second statement timeout, and existing network limits. Timed-out SQL connections are evicted; the original update is not retried.
 
+Notification success requires a confirmed READY commit. An SQL timeout means success was not confirmed; it does not prove that the update was rolled back, and connection eviction cannot provide that guarantee. Clients request a new file ID after failure. The old file may remain ISSUED with its original collection time or become READY with an unreferenced collection time. Existing GC handles both outcomes and protects bound files, without an additional confirmation transaction or immediate storage compensation. This SQL race does not lose the file's tracking record; an extremely late remote copy completing after GC can still leave a residual object, as already accepted by the design.
+
 Both executors use STATEMENT local-cache scope and disable second-level caching, preserving fresh authentication versions and READ_COMMITTED reference queries. No global logical-delete, optimistic-lock, or automatic-fill policy changes existing state transitions or database defaults. Test-only mappers and XML provide fixtures, cleanup, and database assertions without expanding production repository APIs.
 
 ## Where New Classes Belong

@@ -38,3 +38,19 @@
 生产部署前应使用专用测试账号与 `backend/examples/media/verify-cos.mjs`，验证真实验签、回调JSON转发、POST防覆盖、回调参数不可篡改及恰好10MiB图片审核。再以真实审核拒绝和复核样本检查失败分支，验证后端504到COS上传端203 CallbackFailed，并结合日志检查期限耗尽后没有启动后续操作。后端不再承诺线程恰好在第五秒退出，COS实际等待参数需要真实环境确认。离线响应替身与MinIO通过不能替代此项。
 
 部署需要新库以及更新后的环境配置，不对既有Flyway历史执行repair或clean。具体配置和已接受限制见[文件服务V2](media-service.md)。
+
+## 2026-11-06：通知 SQL 超时与无引用回收
+
+本节补充当前验收，上文 2026-10-29 的记录保留其原始范围和结论。此前整套真实依赖验证中的 `lockedFileMakesReadyTimeoutAndCannotCommitLater` 失败及重构前后对照记录继续保留，见[包结构重构验证](backend-package-refactor-validation-2026-11-06.md)与[点赞验证](like-validation-2026-11-06.md)。
+
+本次按现有业务契约修正测试：超时表示未确认成功，已发出的自动提交更新可能实际已 READY，不承诺超时必定 ISSUED。未提交更新的 ISSUED 和已提交的零引用 READY 均须保留有效维护时间，由现有 GC 回收；已绑定文件受引用保护。运行逻辑、HTTP、数据库结构与超时配置不变，不增加事务、即时补偿或发布重试。
+
+- 默认 `mvn -f backend/pom.xml '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' clean verify` 通过：220 项，124 通过、96 按外部依赖门禁跳过，0 失败、0 错误。默认跳过不计作真实依赖通过。
+- 专用真实 MySQL 的 `MysqlPersistenceTests` 8 项全部通过，包含改名后的 `lockedReadyUpdateTimesOutAndKeepsRecoverableMetadata`。保留真实行锁阻塞、4 秒耗时上限、超时异常和后续连接可用校验；按实际状态核对原维护时间或 READY 元数据与回收时间，数据库时间统一到毫秒精度。
+- 专用真实 MySQL、Redis、MinIO、Caddy 的 `MediaV2IntegrationTests` 13 项全部通过，0 跳过、失败与错误。新增确定性 ISSUED/READY 公开对象回收、到期前保留、到期时删除、已绑定公开对象保留和删除后迟到更新不能复活记录的验证。阻塞通知仍确认接收，GC 使用独立未来时钟，避免手动修改过期时间与迟到 SQL 竞争。
+- 真实依赖全量 `./infra/test/run-like-tests.ps1 -Verify -Faults` 通过：220 项，207 通过、13 按门禁跳过，0 失败、0 错误；没有传入测试排除项，原超时用例改名后实际执行并通过。跳过项为媒体集成类 12 项和容量实验 1 项；媒体类单独启用后实际执行 13 项，其中参数化回收测试展开为两种状态。各轮结果分别记录，不将跳过项计为通过，也不拼成一次全量运行。
+- 受影响的流程、超时识别和删除重试单元测试通过；删除失败保留调度，重试成功后先删公开对象再删记录。`node --test backend/examples/media/upload.test.mjs` 7 项全部通过。
+
+真实媒体验证使用本轮独立桶、空测试数据库、MinIO 和 Caddy 容器，不连接开发 MinIO。MySQL 与 Redis 使用现有专用测试容器，无共享业务数据清理；测试结束删除本次用户和桶内对象。临时源在断言期间保留供桶生命周期处理，不将清理测试夹具等同于发布补偿。
+
+本次未调用真实 COS，不把 MinIO 验证当成生产回调、验签或审核验收。SQL 超时竞态有可追踪记录；极端迟到远端复制在 GC 已完成后才生成对象的残留仍为设计接受边界，不宣称全桶无孤儿。
