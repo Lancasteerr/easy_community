@@ -1,7 +1,10 @@
 package com.febrie.backend.article.like;
 
+import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
+import com.febrie.backend.article.like.infrastructure.redis.LikeVersionAllocator;
+
 import com.febrie.backend.article.like.domain.LikeVersion;
-import com.febrie.backend.article.like.infrastructure.*;
 import com.febrie.backend.shared.error.ApiException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;

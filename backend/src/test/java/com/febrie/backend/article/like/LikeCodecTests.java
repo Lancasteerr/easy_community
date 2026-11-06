@@ -1,7 +1,7 @@
 package com.febrie.backend.article.like;
 
 import com.febrie.backend.article.like.domain.LikeCommand;
-import com.febrie.backend.article.like.infrastructure.LikeCodec;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeCodec;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;

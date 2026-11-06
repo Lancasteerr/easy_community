@@ -1,7 +1,7 @@
 package com.febrie.backend.article.like.application;
 
 import com.febrie.backend.article.like.domain.LikeState;
-import com.febrie.backend.article.like.infrastructure.LikeRepository;
+import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;

@@ -1,6 +1,11 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.article.like.infrastructure.maintenance;
 
-import com.febrie.backend.article.like.application.*;
+import com.febrie.backend.article.like.application.maintenance.LikeAuditService;
+import com.febrie.backend.article.like.application.maintenance.LikeRecoveryService;
+import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeDeadLetterReplay;
+import com.febrie.backend.article.like.infrastructure.redis.LikeVersionAllocator;
+
 import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.*;

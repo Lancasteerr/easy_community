@@ -2,7 +2,7 @@ package com.febrie.backend.article.like;
 
 import com.febrie.backend.article.like.application.LikeSqlService;
 import com.febrie.backend.article.like.domain.*;
-import com.febrie.backend.article.like.infrastructure.LikeRepository;
+import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

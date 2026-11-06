@@ -1,6 +1,10 @@
 package com.febrie.backend.article.like;
 
-import com.febrie.backend.article.like.infrastructure.*;
+import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeCodec;
+import com.febrie.backend.article.like.infrastructure.messaging.LikePublisher;
+import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
+
 import com.febrie.backend.shared.error.ApiException;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;

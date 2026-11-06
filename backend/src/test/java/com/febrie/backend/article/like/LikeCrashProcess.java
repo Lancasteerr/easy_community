@@ -2,7 +2,7 @@ package com.febrie.backend.article.like;
 
 import com.febrie.backend.BackendApplication;
 import com.febrie.backend.article.like.application.LikeSqlService;
-import com.febrie.backend.article.like.infrastructure.LikeCodec;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeCodec;
 import org.springframework.boot.SpringApplication;
 
 /** 测试子进程：领取真实消息，SQL提交后立即硬退出，刻意不ACK或更新投影。 */

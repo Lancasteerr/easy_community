@@ -1,4 +1,4 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.article.like.infrastructure.messaging;
 
 import com.febrie.backend.article.like.domain.LikeCommand;
 import java.time.Instant;

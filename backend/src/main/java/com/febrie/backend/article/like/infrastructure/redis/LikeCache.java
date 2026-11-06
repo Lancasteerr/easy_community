@@ -1,6 +1,9 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.article.like.infrastructure.redis;
 
-import com.febrie.backend.article.like.application.*;
+import com.febrie.backend.article.like.application.LikeProjection;
+import com.febrie.backend.article.like.application.LikeSqlService;
+import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+
 import com.febrie.backend.article.like.domain.*;
 import java.util.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

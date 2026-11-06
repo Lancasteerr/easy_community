@@ -28,9 +28,16 @@ backend
 │  │     └─ response
 │  ├─ like
 │  │  ├─ application
+│  │  │  └─ maintenance
 │  │  ├─ domain
 │  │  ├─ infrastructure
-│  │  │  └─ mapper
+│  │  │  ├─ config
+│  │  │  ├─ maintenance
+│  │  │  ├─ messaging
+│  │  │  ├─ observability
+│  │  │  ├─ persistence
+│  │  │  │  └─ mapper
+│  │  │  └─ redis
 │  │  └─ web
 │  ├─ tag
 │  │  ├─ application
@@ -80,6 +87,7 @@ backend
 │     └─ request
 ├─ shared
 │  ├─ error
+│  ├─ management
 │  ├─ persistence
 │  ├─ ratelimit
 │  └─ web
@@ -241,3 +249,9 @@ Redis 异常及无效返回沿现有依赖失败处理，不降级放行，不�
 `ArticleCacheRebuild` 属于内容基础设施维护入口，仍要求非Web模式和未使用的新命名空间。独立提交Bean与短只读Reader保留Spring代理，移动包不合并事务服务。浏览统计的跨能力MySQL测试与内容提交服务同包，以访问内部提交确认类型，不扩大生产可见性。
 
 迁包需同步修改显式Mapper扫描、XML的namespace和结果类型、测试及脚本中的全限定名。Mapper XML按 `mapper/main/article/content` 和 `view` 归组；通知执行器始终不进入主库扫描。HTTP、SQL结构、配置键、Redis Key和消息协议不变。
+
+## 点赞实现与管理端归属
+
+点赞基础设施按 `persistence`、`redis`、`messaging`、`config`、`observability`、`maintenance` 分类。恢复与对账服务位于 `application.maintenance`，保留原有专用连接、命名锁、只读快照和停写要求；命令行入口位于基础设施维护包。现有跨组件测试保留在点赞测试根包，共用命令夹具无需公开。
+
+管理端安全链属于 `shared.management.ManagementSecurityConfiguration`，继续仅允许本机管理端口GET读取health/prometheus，保持原有安全链顺序和Bean方法。分配器健康检查仍属于点赞观测能力，组件名称不变。点赞Mapper XML归入 `mapper/main/article/like`，消息格式、Bean名称、队列、确认与重试协议不变。

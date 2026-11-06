@@ -1,6 +1,9 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.article.like.infrastructure.messaging;
 
-import com.febrie.backend.article.like.application.*;
+import com.febrie.backend.article.like.application.LikeProjection;
+import com.febrie.backend.article.like.application.LikeSqlService;
+import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
+
 import com.febrie.backend.article.like.domain.*;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;

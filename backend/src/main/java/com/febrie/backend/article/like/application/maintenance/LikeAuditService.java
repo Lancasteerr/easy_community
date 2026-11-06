@@ -1,4 +1,4 @@
-package com.febrie.backend.article.like.application;
+package com.febrie.backend.article.like.application.maintenance;
 
 import java.util.List;
 import java.util.Map;

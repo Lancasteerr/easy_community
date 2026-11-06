@@ -1,4 +1,4 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.article.like.infrastructure.observability;
 
 import io.micrometer.core.instrument.*;
 import java.util.concurrent.TimeUnit;

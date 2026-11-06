@@ -1,7 +1,7 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.article.like.infrastructure.persistence;
 
 import com.febrie.backend.article.like.domain.LikeState;
-import com.febrie.backend.article.like.infrastructure.mapper.LikeMapper;
+import com.febrie.backend.article.like.infrastructure.persistence.mapper.LikeMapper;
 import java.util.*;
 import org.springframework.stereotype.Repository;
 

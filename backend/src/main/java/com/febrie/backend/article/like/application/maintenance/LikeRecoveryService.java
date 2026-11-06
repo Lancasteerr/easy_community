@@ -1,7 +1,9 @@
-package com.febrie.backend.article.like.application;
+package com.febrie.backend.article.like.application.maintenance;
+
+import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+import com.febrie.backend.article.like.infrastructure.redis.LikeVersionAllocator;
 
 import com.febrie.backend.article.like.domain.LikeVersion;
-import com.febrie.backend.article.like.infrastructure.*;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.UUID;

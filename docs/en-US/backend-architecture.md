@@ -28,9 +28,16 @@ backend
 │  │     └─ response
 │  ├─ like
 │  │  ├─ application
+│  │  │  └─ maintenance
 │  │  ├─ domain
 │  │  ├─ infrastructure
-│  │  │  └─ mapper
+│  │  │  ├─ config
+│  │  │  ├─ maintenance
+│  │  │  ├─ messaging
+│  │  │  ├─ observability
+│  │  │  ├─ persistence
+│  │  │  │  └─ mapper
+│  │  │  └─ redis
 │  │  └─ web
 │  ├─ tag
 │  │  ├─ application
@@ -80,6 +87,7 @@ backend
 │     └─ request
 ├─ shared
 │  ├─ error
+│  ├─ management
 │  ├─ persistence
 │  ├─ ratelimit
 │  └─ web
@@ -245,3 +253,9 @@ Find article code by `content`, `view`, `tag`, or `like`, then by its technical 
 `ArticleCacheRebuild` belongs to content infrastructure maintenance and retains its non-Web and unused-namespace requirements. Separate commit and short-read beans preserve Spring transaction proxies. The cross-capability view MySQL test stays in the content application package to access internal commit confirmation without widening production visibility.
 
 Package moves update explicit Mapper scans, XML namespaces and result types, and qualified names in tests and scripts. Mapper XML is grouped under `mapper/main/article/content` and `view`; notification persistence stays outside the main scan. HTTP, SQL schema, configuration keys, Redis keys, and message protocols remain unchanged.
+
+## Like Infrastructure and Management Ownership
+
+Like infrastructure is grouped into `persistence`, `redis`, `messaging`, `config`, `observability`, and `maintenance`. Recovery and audit services live in `application.maintenance`, retaining dedicated connections, named locks, read-only snapshots, and writer shutdown requirements. Command-line entry points remain infrastructure adapters. Existing cross-component tests stay in the like test root so shared command fixtures need no wider visibility.
+
+The management security chain belongs to `shared.management.ManagementSecurityConfiguration`. It still permits only local management-port GET requests for health/prometheus, with the same chain order and Bean method. Allocator health remains like observability with its existing component name. Like Mapper XML lives under `mapper/main/article/like`; messages, Bean names, queues, confirms, and retry protocols stay unchanged.

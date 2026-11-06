@@ -1,8 +1,12 @@
 package com.febrie.backend.article.like;
 
-import com.febrie.backend.article.like.application.*;
+import com.febrie.backend.article.like.application.LikeProjection;
+import com.febrie.backend.article.like.application.LikeSqlService;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeCodec;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeConsumer;
+import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
+
 import com.febrie.backend.article.like.domain.*;
-import com.febrie.backend.article.like.infrastructure.*;
 import com.rabbitmq.client.Channel;
 import java.util.ArrayList;
 import org.junit.jupiter.api.Test;

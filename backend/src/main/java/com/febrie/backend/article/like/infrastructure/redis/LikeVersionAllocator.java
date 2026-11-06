@@ -1,4 +1,7 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.article.like.infrastructure.redis;
+
+import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
 
 import com.febrie.backend.article.like.application.LikeErrors;
 import com.febrie.backend.article.like.domain.LikeVersion;

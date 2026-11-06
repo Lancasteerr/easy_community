@@ -1,4 +1,4 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.shared.management;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.*;
@@ -11,7 +11,7 @@ import org.springframework.security.web.SecurityFilterChain;
 /** 指标仅允许本机管理端口GET读取；主业务端口同路径不可用，不创建状态修改入口。 */
 @Configuration(proxyBeanMethods=false)
 @ConditionalOnWebApplication(type=ConditionalOnWebApplication.Type.SERVLET)
-public class LikeManagementSecurity {
+public class ManagementSecurityConfiguration {
     @Bean @Order(0)
     SecurityFilterChain managementReadOnly(HttpSecurity http,Environment environment)throws Exception{
         http.securityMatcher("/actuator/**").authorizeHttpRequests(requests->requests.anyRequest().access((authentication,context)->{

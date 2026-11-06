@@ -1,4 +1,6 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.article.like.infrastructure.messaging;
+
+import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 
 import java.util.Map;
 import org.springframework.amqp.core.*;

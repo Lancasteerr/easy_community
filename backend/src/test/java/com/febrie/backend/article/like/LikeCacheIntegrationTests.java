@@ -1,8 +1,10 @@
 package com.febrie.backend.article.like;
 
+import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+import com.febrie.backend.article.like.infrastructure.redis.LikeCache;
+
 import com.febrie.backend.article.like.application.LikeSqlService;
 import com.febrie.backend.article.like.domain.*;
-import com.febrie.backend.article.like.infrastructure.*;
 import java.time.Duration;
 import java.util.*;
 import org.junit.jupiter.api.*;

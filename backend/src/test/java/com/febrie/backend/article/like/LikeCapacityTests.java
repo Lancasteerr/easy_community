@@ -1,10 +1,13 @@
 package com.febrie.backend.article.like;
 
+import com.febrie.backend.article.like.application.maintenance.LikeAuditService;
+import com.febrie.backend.article.like.application.maintenance.LikeRecoveryService;
+import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+import com.febrie.backend.article.like.infrastructure.redis.LikeVersionAllocator;
+
 import com.febrie.backend.BackendApplication;
 import com.febrie.backend.article.content.application.dto.PreparedArticle;
 import com.febrie.backend.article.content.infrastructure.persistence.ArticleRepository;
-import com.febrie.backend.article.like.application.*;
-import com.febrie.backend.article.like.infrastructure.*;
 import com.febrie.backend.user.domain.Role;
 import com.febrie.backend.user.infrastructure.persistence.AccountRepository;
 import java.net.*;

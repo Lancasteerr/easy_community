@@ -1,4 +1,4 @@
-package com.febrie.backend.article.like.infrastructure.mapper;
+package com.febrie.backend.article.like.infrastructure.persistence.mapper;
 
 import com.febrie.backend.article.like.domain.LikeState;
 import java.util.Collection;

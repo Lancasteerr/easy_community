@@ -11,6 +11,6 @@ import org.springframework.context.annotation.Configuration;
         "com.febrie.backend.article.content.infrastructure.persistence.mapper",
         "com.febrie.backend.article.view.infrastructure.persistence.mapper",
         "com.febrie.backend.article.tag.infrastructure.persistence.mapper",
-        "com.febrie.backend.article.like.infrastructure.mapper"
+        "com.febrie.backend.article.like.infrastructure.persistence.mapper"
 }, sqlSessionTemplateRef = "sqlSessionTemplate")
 public class PersistenceConfiguration { }

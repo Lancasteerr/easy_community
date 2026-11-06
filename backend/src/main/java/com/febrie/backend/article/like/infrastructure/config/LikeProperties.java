@@ -1,4 +1,4 @@
-package com.febrie.backend.article.like.infrastructure;
+package com.febrie.backend.article.like.infrastructure.config;
 
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
