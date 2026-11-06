@@ -161,6 +161,26 @@ class LikeHttpIntegrationTests {
         assertEquals(404,owner.call("PUT",path(),null,true,UUID.randomUUID().toString()).statusCode());
     }
 
+    @Test void missingAllocatorRejectsNewWritesButAcceptedCommandStillDrains()throws Exception{
+        listener.stop();
+        var accepted=owner.call("PUT",path(),null,true,UUID.randomUUID().toString());
+        assertEquals(202,accepted.statusCode(),accepted.body());
+        long version=mapper.readTree(accepted.body()).path("version").asLong();
+        int epoch=jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1",Integer.class);
+        redis.delete(allocator.keys());
+        var rejected=owner.call("DELETE",path(),null,true,UUID.randomUUID().toString());
+        assertEquals(503,rejected.statusCode());
+        assertEquals("LIKE_ALLOCATOR_UNAVAILABLE",mapper.readTree(rejected.body()).path("code").asString());
+        assertEquals(0,redis.countExistingKeys(allocator.keys()),"接口不能自动重建签发器");
+        assertEquals(epoch,jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1",Integer.class));
+        try(var http=HttpClient.newHttpClient()){
+            var health=http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+managementPort+"/actuator/health")).GET().build(),HttpResponse.BodyHandlers.ofString());
+            assertEquals(503,health.statusCode(),health.body());
+        }
+        // 入口故障不撤销已受理命令，健康异常也不关闭消费能力。
+        listener.start();committed(version,true,1);assertTrue(listener.isRunning());
+    }
+
     @Test void allActiveRolesCanLikeAndCacheFailuresPreserve202OrUseSql()throws Exception{
         for(Role role:List.of(Role.ADMIN,Role.PATROLLER)){
             Browser actor=login(role);var response=actor.call("PUT",path(),null,true,UUID.randomUUID().toString());

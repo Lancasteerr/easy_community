@@ -32,6 +32,8 @@ $baseArguments = @("-Djdk.net.unixdomain.tmpdir=$jvmDirectory", '-jar', $jarPath
     "--app.like.namespace=$namespace")
 function Invoke-LikeCommand([string]$Action, [string[]]$Extra = @(), [bool]$ExpectedSuccess = $true) {
     $log = Join-Path $backendPath "target/like-cli-$Action.log"
+    # 除显式重放外使用不可达Broker端口，验证维护命令不会启动消费者或隐式连接MQ。
+    if ($Action -ne 'replay') { $Extra = @('--spring.rabbitmq.port=1') + $Extra }
     & java @baseArguments "--app.like.maintenance=$Action" @Extra *> $log
     if (($LASTEXITCODE -eq 0) -ne $ExpectedSuccess) { throw "维护动作退出码不符：$Action，日志：$log" }
     if ($ExpectedSuccess) {
