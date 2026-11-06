@@ -34,5 +34,17 @@ class ReferenceLifecycleTests {
         assertThrows(IllegalStateException.class, () -> service.maintainOne(id));
         verify(files).rescheduleDeletion(id, now.plusSeconds(300));
         verify(files, never()).deleteMetadata(anyString());
+        // 对象删除失败保留DELETING调度；下一轮删除成功后才能清理元数据。
+        clearInvocations(files, storage);
+        when(files.lock(id)).thenReturn(Optional.of(new FileRecord(id, 1, MediaPurpose.AVATAR, MediaStatus.DELETING, null, 123L,
+                now.minusSeconds(90000), now.plusSeconds(300))));
+        doNothing().when(storage).delete(anyString());
+        var retry = new MediaLifecycleService(files, storage, StorageSignatureTests.properties("minio"),
+                PostPolicyTests.workflow(), Clock.fixed(now.plusSeconds(300), ZoneOffset.UTC), manager);
+        retry.maintainOne(id);
+        var order = inOrder(files, storage);
+        order.verify(files).deleting(id, now.plusSeconds(300));
+        order.verify(storage).delete("ec/test/public/" + id);
+        order.verify(files).deleteMetadata(id);
     }
 }

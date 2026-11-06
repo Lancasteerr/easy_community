@@ -228,10 +228,16 @@ class MysqlPersistenceTests {
         // 构造与入口检查均在预算内，SQL 已提交后的检查恰好到期。
         var late = new ProcessingDeadline(Duration.ofSeconds(1),
                 () -> reads.getAndIncrement() < 2 ? 0 : 1_000_000_000L);
+        Instant collectAt = Instant.now().plusSeconds(60).truncatedTo(ChronoUnit.MILLIS);
         assertThrows(ProcessingDeadline.TimedOut.class, () ->
-                notifications.ready(id, 321, "image/png", Instant.now(), Instant.now().plusSeconds(60), late));
-        assertEquals(MediaStatus.READY, files.find(id).orElseThrow().status());
-        assertEquals(321L, files.find(id).orElseThrow().sizeBytes());
+                notifications.ready(id, 321, "image/png", Instant.now(), collectAt, late));
+        // 迟到只影响本次确认，已提交文件的元数据与无引用回收时间仍须完整。
+        var committed = files.find(id).orElseThrow();
+        assertEquals(MediaStatus.READY, committed.status());
+        assertEquals(321L, committed.sizeBytes());
+        assertEquals("image/png", committed.mimeType());
+        assertEquals(collectAt, committed.nextActionAt());
+        assertFalse(files.hasReferences(id));
         assertFalse(notifications.ready(id, 456, null, Instant.now(), null, deadline()));
 
         String expired = issued(MediaPurpose.AVATAR);
@@ -269,8 +275,10 @@ class MysqlPersistenceTests {
     }
 
     @Test
-    void lockedFileMakesReadyTimeoutAndCannotCommitLater() throws Exception {
+    void lockedReadyUpdateTimesOutAndKeepsRecoverableMetadata() throws Exception {
         String id = issued(MediaPurpose.AVATAR);
+        Instant issuedCollectAt = files.find(id).orElseThrow().nextActionAt();
+        Instant readyCollectAt = Instant.now().plusSeconds(60).truncatedTo(ChronoUnit.MILLIS);
         CountDownLatch locked = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         try (var executor = Executors.newSingleThreadExecutor()) {
@@ -287,13 +295,25 @@ class MysqlPersistenceTests {
             try {
                 assertTrue(locked.await(5, TimeUnit.SECONDS));
                 assertTimeout(Duration.ofSeconds(4), () -> assertThrows(ProcessingDeadline.TimedOut.class, () ->
-                        notifications.ready(id, 100, null, Instant.now(), Instant.now().plusSeconds(60), deadline())));
+                        notifications.ready(id, 100, null, Instant.now(), readyCollectAt, deadline())));
             } finally {
                 release.countDown();
             }
             holder.get(5, TimeUnit.SECONDS);
         }
-        assertEquals(MediaStatus.ISSUED, files.find(id).orElseThrow().status());
+        // 读超时不证明服务端已取消；两种结果都必须保留可回收的完整记录。
+        var file = files.find(id).orElseThrow();
+        assertTrue(Set.of(MediaStatus.ISSUED, MediaStatus.READY).contains(file.status()));
+        assertFalse(files.hasReferences(id));
+        assertNotNull(file.nextActionAt());
+        assertNull(file.mimeType());
+        if (file.status() == MediaStatus.ISSUED) {
+            assertNull(file.sizeBytes());
+            assertEquals(issuedCollectAt, file.nextActionAt());
+        } else {
+            assertEquals(100L, file.sizeBytes());
+            assertEquals(readyCollectAt, file.nextActionAt());
+        }
         // 超时取消可能使旧物理连接失效；下一次通知必须能正常使用连接池。
         assertTrue(notifications.find(id, deadline()).isPresent());
     }

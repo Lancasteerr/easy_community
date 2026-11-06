@@ -3,9 +3,15 @@ package com.febrie.backend.media;
 import com.febrie.backend.media.application.lifecycle.MediaLifecycleService;
 import com.febrie.backend.media.application.reference.MediaReferenceService;
 import com.febrie.backend.media.application.upload.MediaService;
+import com.febrie.backend.media.application.UploadStorage;
+import com.febrie.backend.media.application.upload.ProcessingDeadline;
+import com.febrie.backend.media.application.upload.UploadedObject;
 
 import com.febrie.backend.media.domain.*;
+import com.febrie.backend.media.infrastructure.config.MediaProperties;
+import com.febrie.backend.media.infrastructure.config.MediaWorkflowProperties;
 import com.febrie.backend.media.infrastructure.persistence.FileRepository;
+import com.febrie.backend.media.infrastructure.persistence.NotificationFiles;
 import com.febrie.backend.user.application.*;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.user.domain.Role;
@@ -13,10 +19,13 @@ import java.net.*;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -49,6 +58,10 @@ class MediaV2IntegrationTests {
     @Autowired MediaService media;
     @Autowired MediaReferenceService references;
     @Autowired MediaLifecycleService lifecycle;
+    @Autowired UploadStorage storage;
+    @Autowired NotificationFiles notifications;
+    @Autowired MediaProperties mediaProperties;
+    @Autowired MediaWorkflowProperties flow;
     @Autowired UserService users;
     @Autowired UserProfileService profiles;
     @Autowired PlatformTransactionManager manager;
@@ -202,6 +215,11 @@ class MediaV2IntegrationTests {
         }
         assertEquals(MediaStatus.READY, files.find(id).orElseThrow().status());
         assertTrue(files.hasReferences(id));
+        assertNull(files.find(id).orElseThrow().nextActionAt());
+        // 超过旧维护期限也不能删除已被业务绑定的文件。
+        lifecycleAt(Instant.now().plus(flow.unreferencedTtl()).plusSeconds(1)).maintainOne(id);
+        assertEquals(MediaStatus.READY, files.find(id).orElseThrow().status());
+        assertEquals(Set.of(id), files.references(ReferenceType.ARTICLE_IMAGE, 21));
     }
     @Test void unreadyForeignAndOversizeCoverCannotBindAndTransactionsRollback() {
         String id = ready(MediaPurpose.ARTICLE_IMAGE, 6L * 1024 * 1024);
@@ -273,13 +291,16 @@ class MediaV2IntegrationTests {
     @Test void blockedReadyUpdateFailsWithinBudgetAndGcRemovesItsPublishedOrphan() throws Exception {
         var grant = media.create(owner, MediaPurpose.AVATAR, "a.png", "image/png", 5);
         String id = grant.mediaId(), key = "easy-community/test/temp/" + id;
+        Instant issuedCollectAt = files.find(id).orElseThrow().nextActionAt();
+        Instant notificationStart = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         String etag = s3.putObject(request -> request.bucket(bucket()).key(key).contentType("image/png"),
                 software.amazon.awssdk.core.sync.RequestBody.fromString("image")).eTag();
         CountDownLatch locked = new CountDownLatch(1), release = new CountDownLatch(1);
         try (var executor = Executors.newSingleThreadExecutor()) {
             var blocker = executor.submit(() -> transaction().executeWithoutResult(status -> {
                 files.lock(id).orElseThrow(); locked.countDown();
-                try { release.await(8, TimeUnit.SECONDS); } catch (InterruptedException error) { throw new RuntimeException(error); }
+                try { assertTrue(release.await(8, TimeUnit.SECONDS)); }
+                catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new RuntimeException(error); }
             }));
             assertTrue(locked.await(3, TimeUnit.SECONDS));
             try (var anonymous = HttpClient.newHttpClient()) {
@@ -294,15 +315,86 @@ class MediaV2IntegrationTests {
                 assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() < 4500);
             } finally { release.countDown(); blocker.get(5, TimeUnit.SECONDS); }
         }
-        assertEquals(MediaStatus.ISSUED, files.find(id).orElseThrow().status());
+        // SQL超时可能先于服务端取消或提交完成，两种状态均应保持零引用和有效回收调度。
+        var file = files.find(id).orElseThrow();
+        assertTrue(Set.of(MediaStatus.ISSUED, MediaStatus.READY).contains(file.status()));
+        assertFalse(files.hasReferences(id));
+        assertNotNull(file.nextActionAt());
+        if (file.status() == MediaStatus.ISSUED) {
+            assertNull(file.sizeBytes());
+            assertEquals(issuedCollectAt, file.nextActionAt());
+        } else {
+            assertEquals(5L, file.sizeBytes());
+            assertFalse(file.nextActionAt().isBefore(notificationStart.plus(flow.unreferencedTtl())));
+            assertFalse(file.nextActionAt().isAfter(Instant.now().plus(flow.unreferencedTtl())));
+        }
         assertEquals(5L, s3.headObject(request -> request.bucket(bucket()).key("easy-community/test/public/" + id)).contentLength());
-        fixtures.expireFile(MediaIds.bytes(id));
-        lifecycle.maintainOne(id);
+        // 只推进本次GC的时钟；迟到UPDATE即使刷新为READY期限，也已经到期。
+        lifecycleAt(Instant.now().plus(flow.issuedTtl()).plus(flow.unreferencedTtl()).plusSeconds(1)).maintainOne(id);
         assertTrue(files.find(id).isEmpty());
         assertThrows(NoSuchKeyException.class, () -> s3.headObject(request -> request.bucket(bucket()).key("easy-community/test/public/" + id)));
+        assertFalse(notifications.ready(id, 5, null, Instant.now(), Instant.now().plus(flow.unreferencedTtl()), deadline()));
+        assertTrue(files.find(id).isEmpty());
         // 临时源仍存在，交给桶生命周期；GC不会主动删除它。
         assertEquals(5L, s3.headObject(request -> request.bucket(bucket()).key(key)).contentLength());
     }
+
+    /** 两条确定性路径均使用真实复制和删除，不能靠竞态恰好命中某个状态代替覆盖。 */
+    @ParameterizedTest
+    @EnumSource(value = MediaStatus.class, names = {"ISSUED", "READY"})
+    void publishedUnreferencedObjectIsCollectedOnlyWhenDue(MediaStatus state) {
+        String id = media.create(owner, MediaPurpose.AVATAR, "a.png", "image/png", 5).mediaId();
+        copyTempObject(id);
+        Instant collectAt = files.find(id).orElseThrow().nextActionAt();
+        if (state == MediaStatus.READY) {
+            collectAt = Instant.now().plus(flow.unreferencedTtl()).truncatedTo(ChronoUnit.MILLIS);
+            assertTrue(notifications.ready(id, 5, null, Instant.now(), collectAt, deadline()));
+        }
+        assertEquals(state, files.find(id).orElseThrow().status());
+        assertEquals(collectAt, files.find(id).orElseThrow().nextActionAt());
+        assertFalse(files.hasReferences(id));
+
+        // 到期前一毫秒保留对象和记录；到期时两种状态都应进入相同删除流程。
+        lifecycleAt(collectAt.minusMillis(1)).maintainOne(id);
+        assertEquals(state, files.find(id).orElseThrow().status());
+        assertEquals(5L, s3.headObject(request -> request.bucket(bucket()).key("easy-community/test/public/" + id)).contentLength());
+        lifecycleAt(collectAt).maintainOne(id);
+        assertTrue(files.find(id).isEmpty());
+        assertThrows(NoSuchKeyException.class, () -> s3.headObject(request -> request.bucket(bucket()).key("easy-community/test/public/" + id)));
+        // 删除后的迟到更新不能复活记录，临时源继续交给桶生命周期。
+        assertFalse(notifications.ready(id, 5, null, Instant.now(), collectAt, deadline()));
+        assertTrue(files.find(id).isEmpty());
+        assertEquals(5L, s3.headObject(request -> request.bucket(bucket()).key("easy-community/test/temp/" + id)).contentLength());
+    }
+
+    /** 真实业务绑定后，即使越过最初无引用宽限期，GC也不能删除公开对象。 */
+    @Test void boundPublicObjectSurvivesItsOriginalCollectionDeadline() {
+        String id = media.create(owner, MediaPurpose.AVATAR, "a.png", "image/png", 5).mediaId();
+        copyTempObject(id);
+        Instant collectAt = Instant.now().plus(flow.unreferencedTtl()).truncatedTo(ChronoUnit.MILLIS);
+        assertTrue(notifications.ready(id, 5, null, Instant.now(), collectAt, deadline()));
+        profiles.setAvatar(new UserActor(owner, Role.USER, 1), id);
+        assertNull(files.find(id).orElseThrow().nextActionAt());
+        lifecycleAt(collectAt.plusMillis(1)).maintainOne(id);
+        assertEquals(MediaStatus.READY, files.find(id).orElseThrow().status());
+        assertEquals(Set.of(id), files.references(ReferenceType.USER_AVATAR, owner));
+        assertEquals(5L, s3.headObject(request -> request.bucket(bucket()).key("easy-community/test/public/" + id)).contentLength());
+    }
+
+    /** PUT不会匹配只订阅POST的Webhook，便于明确控制数据库是否提交READY。 */
+    private void copyTempObject(String id) {
+        String key = "easy-community/test/temp/" + id;
+        String etag = s3.putObject(request -> request.bucket(bucket()).key(key).contentType("image/png"),
+                software.amazon.awssdk.core.sync.RequestBody.fromString("image")).eTag();
+        storage.copy(new UploadedObject(bucket(), key, 5, "image/png", etag), "easy-community/test/public/" + id, deadline());
+    }
+
+    /** 使用真实仓储、存储与事务管理器，仅替换此服务实例的维护时钟。 */
+    private MediaLifecycleService lifecycleAt(Instant now) {
+        return new MediaLifecycleService(files, storage, mediaProperties, flow, Clock.fixed(now, ZoneOffset.UTC), manager);
+    }
+
+    private static ProcessingDeadline deadline() { return new ProcessingDeadline(Duration.ofMillis(4500)); }
     private String ready(MediaPurpose purpose, long size) {
         String id = UUID.randomUUID().toString();
         files.insert(new FileRecord(id, owner, purpose, MediaStatus.ISSUED, null, null, Instant.now(), Instant.now().plusSeconds(7200)));
