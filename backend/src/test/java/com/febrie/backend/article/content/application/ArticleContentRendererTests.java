@@ -1,6 +1,6 @@
 package com.febrie.backend.article.content.application;
 
-import com.febrie.backend.media.application.MediaService;
+import com.febrie.backend.media.application.MediaUrls;
 import com.febrie.backend.shared.error.ApiException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -11,8 +11,8 @@ import static org.mockito.Mockito.*;
 /** 安全渲染必须从不可信JSON验证，不以客户端HTML作为兜底。 */
 class ArticleContentRendererTests {
     private final ObjectMapper mapper = new ObjectMapper();
-    private final MediaService media = mock(MediaService.class);
-    private final ArticleContentRenderer renderer = new ArticleContentRenderer(mapper, media);
+    private final MediaUrls urls = mock(MediaUrls.class);
+    private final ArticleContentRenderer renderer = new ArticleContentRenderer(mapper, urls);
     private JsonNode content(String blocks) {
         return mapper.readTree("{\"schemaVersion\":1,\"doc\":{\"type\":\"doc\",\"content\":[" + blocks + "]}}");
     }
@@ -28,7 +28,7 @@ class ArticleContentRendererTests {
     }
     @Test void replacesImageSourceAndDropsEventAttributes() {
         String id = "00000000-0000-0000-0000-000000000001";
-        when(media.publicUrl(id)).thenReturn("https://trusted.test/" + id);
+        when(urls.publicUrl(id)).thenReturn("https://trusted.test/" + id);
         var result = renderer.prepare("x", content("""
                 {"type":"image","attrs":{"fileId":"%s","src":"javascript:evil()","onerror":"evil()","alt":"\\\"<x>"}},
                 {"type":"image","attrs":{"fileId":"%s"}}
@@ -61,7 +61,7 @@ class ArticleContentRendererTests {
         String repeated = String.join(",", java.util.Collections.nCopies(10_001, "{\"type\":\"paragraph\"}"));
         assertThrows(ApiException.class, () -> renderer.prepare("x", content(repeated), null, List.of()));
         String id = "00000000-0000-0000-0000-000000000001";
-        when(media.publicUrl(id)).thenReturn("https://trusted.test/" + id);
+        when(urls.publicUrl(id)).thenReturn("https://trusted.test/" + id);
         String images = String.join(",", java.util.Collections.nCopies(51, "{\"type\":\"image\",\"attrs\":{\"fileId\":\"" + id + "\"}}"));
         assertThrows(ApiException.class, () -> renderer.prepare("x", content(images), null, List.of()));
     }

@@ -1,6 +1,6 @@
-package com.febrie.backend.media.web;
+package com.febrie.backend.media.web.notification;
 
-import com.febrie.backend.media.application.dto.UploadResult;
+import com.febrie.backend.media.application.upload.dto.UploadResult;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import tools.jackson.databind.ObjectMapper;

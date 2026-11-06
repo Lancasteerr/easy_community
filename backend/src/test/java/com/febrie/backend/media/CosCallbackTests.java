@@ -1,6 +1,6 @@
 package com.febrie.backend.media;
 
-import com.febrie.backend.media.web.CosCallbackAuth;
+import com.febrie.backend.media.web.notification.CosCallbackAuth;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;

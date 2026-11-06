@@ -72,7 +72,10 @@ backend
 │     └─ session
 ├─ media
 │  ├─ application
-│  │  └─ dto
+│  │  ├─ lifecycle
+│  │  ├─ reference
+│  │  └─ upload
+│  │     └─ dto
 │  ├─ domain
 │  ├─ infrastructure
 │  │  ├─ config
@@ -84,6 +87,7 @@ backend
 │  │  ├─ scheduling
 │  │  └─ storage
 │  └─ web
+│     ├─ notification
 │     └─ request
 ├─ shared
 │  ├─ error
@@ -255,3 +259,13 @@ Redis 异常及无效返回沿现有依赖失败处理，不降级放行，不�
 点赞基础设施按 `persistence`、`redis`、`messaging`、`config`、`observability`、`maintenance` 分类。恢复与对账服务位于 `application.maintenance`，保留原有专用连接、命名锁、只读快照和停写要求；命令行入口位于基础设施维护包。现有跨组件测试保留在点赞测试根包，共用命令夹具无需公开。
 
 管理端安全链属于 `shared.management.ManagementSecurityConfiguration`，继续仅允许本机管理端口GET读取health/prometheus，保持原有安全链顺序和Bean方法。分配器健康检查仍属于点赞观测能力，组件名称不变。点赞Mapper XML归入 `mapper/main/article/like`，消息格式、Bean名称、队列、确认与重试协议不变。
+
+## 媒体流程与公开地址
+
+`media.application.upload` 负责申请签发、通知发布、审核契约、通知对象和截止时间，上传DTO随流程放入其dto子包。`reference` 负责调用者事务内的引用变更，`lifecycle` 负责回收；共用文件模型、存储适配和持久化不重复拆分。`UploadStorage` 与 `MediaErrors` 继续作为媒体应用层共用类型。
+
+`MediaUrls` 从上传服务中提取固定公开地址转换，供文章渲染、文章读取、用户资料和上传签发共用。该组件只计算地址，不查询READY状态或访问对象存储，调用者继续承担原有权限和引用前提。`MediaService` 仅承载上传申请，调用方包名与构造参数相应调整，不保留旧包转发。
+
+存储通知的过滤、验签、解析和响应集中在 `media.web.notification`，仍使用原始body/query验签、同一截止时间和独立安全链。通知私有连接池、自动提交、主库排除扫描、引用排序锁及回收事务边界不变。媒体跨组件测试保留共用夹具，通知Filter测试镜像通知包。
+
+[包结构调整验证记录](backend-package-refactor-validation-2026-11-06.md)包含默认构建、真实依赖及重构前对照结果。

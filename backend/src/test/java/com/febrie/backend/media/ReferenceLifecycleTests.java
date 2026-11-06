@@ -1,6 +1,8 @@
 package com.febrie.backend.media;
 
-import com.febrie.backend.media.application.*;
+import com.febrie.backend.media.application.UploadStorage;
+import com.febrie.backend.media.application.lifecycle.MediaLifecycleService;
+
 import com.febrie.backend.media.domain.*;
 import com.febrie.backend.media.infrastructure.persistence.FileRepository;
 import java.time.*;

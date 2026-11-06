@@ -1,8 +1,9 @@
 package com.febrie.backend.media.web;
 
+import com.febrie.backend.media.application.upload.dto.UploadGrant;
+
 import com.febrie.backend.auth.application.dto.SessionPrincipal;
-import com.febrie.backend.media.application.MediaService;
-import com.febrie.backend.media.application.dto.*;
+import com.febrie.backend.media.application.upload.MediaService;
 import com.febrie.backend.media.web.request.UploadRequest;
 import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;

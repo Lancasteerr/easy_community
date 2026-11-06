@@ -1,4 +1,4 @@
-package com.febrie.backend.media.web;
+package com.febrie.backend.media.web.notification;
 
 import com.febrie.backend.media.infrastructure.storage.PostPolicies;
 import java.net.URLDecoder;

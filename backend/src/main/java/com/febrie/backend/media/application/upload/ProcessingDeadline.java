@@ -1,4 +1,4 @@
-package com.febrie.backend.media.application;
+package com.febrie.backend.media.application.upload;
 
 import java.time.Duration;
 import java.util.function.LongSupplier;

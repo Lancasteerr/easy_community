@@ -1,7 +1,10 @@
-package com.febrie.backend.media.web;
+package com.febrie.backend.media.web.notification;
 
-import com.febrie.backend.media.application.*;
-import com.febrie.backend.media.application.dto.UploadResult;
+import com.febrie.backend.media.application.upload.FinishUpload;
+import com.febrie.backend.media.application.upload.ProcessingDeadline;
+import com.febrie.backend.media.application.upload.UploadedObject;
+
+import com.febrie.backend.media.application.upload.dto.UploadResult;
 import com.febrie.backend.media.domain.MediaLocation;
 import com.febrie.backend.media.infrastructure.config.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,7 +15,7 @@ import org.slf4j.*;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.*;
-import static com.febrie.backend.media.application.dto.UploadResult.*;
+import static com.febrie.backend.media.application.upload.dto.UploadResult.*;
 
 /** HTTP适配层仅在认证后把通知转换为共用上传上下文。 */
 @Component

@@ -1,6 +1,6 @@
 package com.febrie.backend.media.infrastructure.scheduling;
 
-import com.febrie.backend.media.application.MediaLifecycleService;
+import com.febrie.backend.media.application.lifecycle.MediaLifecycleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;

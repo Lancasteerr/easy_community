@@ -1,7 +1,7 @@
 package com.febrie.backend.persistence;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.febrie.backend.media.application.ProcessingDeadline;
+import com.febrie.backend.media.application.upload.ProcessingDeadline;
 import com.febrie.backend.media.domain.FileRecord;
 import com.febrie.backend.media.domain.MediaIds;
 import com.febrie.backend.media.domain.MediaPurpose;

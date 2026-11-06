@@ -1,6 +1,9 @@
 package com.febrie.backend.media;
 
-import com.febrie.backend.media.application.*;
+import com.febrie.backend.media.application.lifecycle.MediaLifecycleService;
+import com.febrie.backend.media.application.reference.MediaReferenceService;
+import com.febrie.backend.media.application.upload.MediaService;
+
 import com.febrie.backend.media.domain.*;
 import com.febrie.backend.media.infrastructure.persistence.FileRepository;
 import com.febrie.backend.user.application.*;

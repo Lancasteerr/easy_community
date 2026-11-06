@@ -9,7 +9,7 @@ import com.febrie.backend.article.content.application.dto.ArticleSnapshot;
 import com.febrie.backend.article.content.application.dto.LoadedArticle;
 
 import com.febrie.backend.article.content.infrastructure.persistence.ArticleRepository;
-import com.febrie.backend.media.application.MediaService;
+import com.febrie.backend.media.application.MediaUrls;
 import com.febrie.backend.user.application.AccountQueryService;
 import com.febrie.backend.user.application.dto.*;
 import java.util.*;
@@ -23,11 +23,11 @@ import tools.jackson.databind.ObjectMapper;
 public class ArticleReader {
     private final ArticleRepository articles;
     private final AccountQueryService accounts;
-    private final MediaService media;
+    private final MediaUrls urls;
     private final ObjectMapper mapper;
 
-    public ArticleReader(ArticleRepository articles, AccountQueryService accounts, MediaService media, ObjectMapper mapper) {
-        this.articles = articles; this.accounts = accounts; this.media = media; this.mapper = mapper;
+    public ArticleReader(ArticleRepository articles, AccountQueryService accounts, MediaUrls urls, ObjectMapper mapper) {
+        this.articles = articles; this.accounts = accounts; this.urls = urls; this.mapper = mapper;
     }
     public LoadedArticle<ArticleDetailView> detail(long id) {
         var row = articles.find(id).orElse(null);
@@ -66,7 +66,7 @@ public class ArticleReader {
     public ArticlePageIds page(long author, int page, int size) {
         return new ArticlePageIds(articles.pageIds(author, ((long) page - 1) * size, size), articles.countPublic(author));
     }
-    private String url(ArticleSnapshot row) { return row.coverMediaId() == null ? null : media.publicUrl(row.coverMediaId()); }
+    private String url(ArticleSnapshot row) { return row.coverMediaId() == null ? null : urls.publicUrl(row.coverMediaId()); }
     private static String author(Map<Long, UserDisplayView> names, long id) {
         var display = names.get(id);
         if (display == null || display.username() == null) { throw ArticleErrors.unavailable(); }

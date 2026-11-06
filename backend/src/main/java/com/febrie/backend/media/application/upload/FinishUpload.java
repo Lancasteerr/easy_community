@@ -1,6 +1,8 @@
-package com.febrie.backend.media.application;
+package com.febrie.backend.media.application.upload;
 
-import com.febrie.backend.media.application.dto.UploadResult;
+import com.febrie.backend.media.application.UploadStorage;
+
+import com.febrie.backend.media.application.upload.dto.UploadResult;
 import com.febrie.backend.media.domain.*;
 import com.febrie.backend.media.infrastructure.config.*;
 import com.febrie.backend.media.infrastructure.persistence.NotificationFiles;
@@ -8,7 +10,7 @@ import java.time.Clock;
 import java.util.Set;
 import org.slf4j.*;
 import org.springframework.stereotype.Service;
-import static com.febrie.backend.media.application.dto.UploadResult.*;
+import static com.febrie.backend.media.application.upload.dto.UploadResult.*;
 
 /** 已认证通知的直线发布流程；无领取、重试、补偿或持锁网络调用。 */
 @Service

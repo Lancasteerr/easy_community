@@ -1,6 +1,6 @@
-package com.febrie.backend.media.web;
+package com.febrie.backend.media.web.notification;
 
-import com.febrie.backend.media.application.ProcessingDeadline;
+import com.febrie.backend.media.application.upload.ProcessingDeadline;
 import com.febrie.backend.media.infrastructure.config.MediaWorkflowProperties;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
@@ -8,7 +8,7 @@ import java.io.*;
 import java.net.SocketTimeoutException;
 import java.util.function.LongSupplier;
 import org.slf4j.*;
-import static com.febrie.backend.media.application.dto.UploadResult.*;
+import static com.febrie.backend.media.application.upload.dto.UploadResult.*;
 
 /** 单条同步通知链：入口起计时，分段读取与阶段调用返回后检查，超时直接结束。 */
 public final class StorageNotificationFilter implements Filter {

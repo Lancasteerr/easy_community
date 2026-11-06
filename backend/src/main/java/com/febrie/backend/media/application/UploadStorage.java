@@ -1,5 +1,8 @@
 package com.febrie.backend.media.application;
 
+import com.febrie.backend.media.application.upload.ProcessingDeadline;
+import com.febrie.backend.media.application.upload.UploadedObject;
+
 import java.time.Instant;
 import java.util.Map;
 

@@ -1,4 +1,4 @@
-package com.febrie.backend.media.application.dto;
+package com.febrie.backend.media.application.upload.dto;
 
 /** 两种上传入口消费同一结果；阶段与错误码为稳定英文枚举。 */
 public record UploadResult(boolean success, Stage stage, Code code) {

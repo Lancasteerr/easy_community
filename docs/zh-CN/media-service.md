@@ -2,6 +2,8 @@
 
 当前实现采用 [V2 设计](media-service-v2-design.md)。生产通过 COS Callback 同步审核、复制并提交 READY；开发使用 MinIO Webhook 发布，原有上传联调方案经 Caddy 转换响应。日常开发使用独立配置的 Docker 容器。只支持新建空库，不提供旧协议、旧表和 Flyway 历史兼容。
 
+应用流程按 `media.application.upload`、`reference`、`lifecycle` 归组，`MediaUrls` 独立生成公开地址；通知HTTP适配集中在 `media.web.notification`。结构与调用边界见[后端架构约定](backend-architecture.md)。
+
 ## 数据与职责
 
 - `media_file` 恰好八字段：id、uploader_id、purpose、status、mime_type、size_bytes、created_at、next_action_at。

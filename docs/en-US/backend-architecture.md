@@ -72,7 +72,10 @@ backend
 │     └─ session
 ├─ media
 │  ├─ application
-│  │  └─ dto
+│  │  ├─ lifecycle
+│  │  ├─ reference
+│  │  └─ upload
+│  │     └─ dto
 │  ├─ domain
 │  ├─ infrastructure
 │  │  ├─ config
@@ -84,6 +87,7 @@ backend
 │  │  ├─ scheduling
 │  │  └─ storage
 │  └─ web
+│     ├─ notification
 │     └─ request
 ├─ shared
 │  ├─ error
@@ -259,3 +263,13 @@ Package moves update explicit Mapper scans, XML namespaces and result types, and
 Like infrastructure is grouped into `persistence`, `redis`, `messaging`, `config`, `observability`, and `maintenance`. Recovery and audit services live in `application.maintenance`, retaining dedicated connections, named locks, read-only snapshots, and writer shutdown requirements. Command-line entry points remain infrastructure adapters. Existing cross-component tests stay in the like test root so shared command fixtures need no wider visibility.
 
 The management security chain belongs to `shared.management.ManagementSecurityConfiguration`. It still permits only local management-port GET requests for health/prometheus, with the same chain order and Bean method. Allocator health remains like observability with its existing component name. Like Mapper XML lives under `mapper/main/article/like`; messages, Bean names, queues, confirms, and retry protocols stay unchanged.
+
+## Media Workflows and Public URLs
+
+`media.application.upload` contains upload grants, notification publishing, moderation contracts, uploaded-object context, deadlines, and its DTOs. `reference` maintains references in the caller's transaction; `lifecycle` handles cleanup. File models, storage adapters, and persistence remain shared. `UploadStorage` and `MediaErrors` stay common media application types.
+
+`MediaUrls` extracts fixed public-address conversion from the upload service for article rendering, article reads, user profiles, and upload grants. It computes addresses without checking READY state or accessing storage; callers retain their original visibility and reference preconditions. `MediaService` only handles upload admission. Java packages and constructor arguments change without old-package forwarding classes.
+
+Notification filtering, signature verification, parsing, and responses are grouped in `media.web.notification`. Raw body/query verification, the shared deadline, and the separate security chain stay intact, as do the private notification pool, auto-commit, exclusion from main Mapper scans, reference lock order, and cleanup transactions. Cross-component media tests retain their shared fixtures; notification Filter tests mirror the notification package.
+
+[Package reorganization validation record (Chinese)](../zh-CN/backend-package-refactor-validation-2026-11-06.md) covers the default build, real dependencies, and pre-refactor comparison.

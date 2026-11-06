@@ -1,4 +1,4 @@
-package com.febrie.backend.media.application.dto;
+package com.febrie.backend.media.application.upload.dto;
 
 import com.febrie.backend.media.application.UploadStorage.Descriptor;
 

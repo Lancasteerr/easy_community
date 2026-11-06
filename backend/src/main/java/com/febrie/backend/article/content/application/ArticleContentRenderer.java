@@ -3,7 +3,7 @@ package com.febrie.backend.article.content.application;
 import com.febrie.backend.article.common.ArticleErrors;
 
 import com.febrie.backend.article.content.application.dto.PreparedArticle;
-import com.febrie.backend.media.application.MediaService;
+import com.febrie.backend.media.application.MediaUrls;
 import com.febrie.backend.media.domain.MediaIds;
 import java.net.URI;
 import java.util.*;
@@ -19,9 +19,9 @@ public class ArticleContentRenderer {
     private static final Map<String, String> MARK_TAGS = Map.of("bold", "strong", "italic", "em",
             "strike", "s", "underline", "u", "code", "code");
     private final ObjectMapper mapper;
-    private final MediaService media;
+    private final MediaUrls urls;
 
-    public ArticleContentRenderer(ObjectMapper mapper, MediaService media) { this.mapper = mapper; this.media = media; }
+    public ArticleContentRenderer(ObjectMapper mapper, MediaUrls urls) { this.mapper = mapper; this.urls = urls; }
 
     public PreparedArticle prepare(String title, JsonNode content, String coverId, List<Long> tags) {
         String normalizedTitle = title == null ? "" : title.strip();
@@ -155,7 +155,7 @@ public class ArticleContentRenderer {
         if (++state.imageNodes > 50) { throw ArticleErrors.invalid(); }
         String id = mediaId(string(input.path("attrs").get("fileId")));
         state.images.add(id);
-        String url = media.publicUrl(id);
+        String url = urls.publicUrl(id);
         String alt = optionalString(input.path("attrs").get("alt"));
         String title = optionalString(input.path("attrs").get("title"));
         output.putObject("attrs").put("fileId", id).put("src", url).put("alt", alt).put("title", title);

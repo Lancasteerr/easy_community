@@ -4,7 +4,7 @@
 
 同步保存、不可恢复隐藏、详情、作者编辑读取、本人公开文章管理、最小 Tag 目录及文章双投影缓存。不包含前端、公共信息流、计数、搜索、消息队列、修订或请求幂等。隐藏保留文件引用，不物理删除图片。
 
-代码沿用按业务分包：article.web 处理 HTTP，article.application 组织用例和事务，article.infrastructure 管理持久化、配置与缓存。Controller 不直接访问数据库或 Redis。作者显示资料经用户应用层读取，文件引用复用媒体应用服务；不创建空 domain 包或 Service/ServiceImpl。
+代码先按文章能力分包：`article.content` 处理正文读写及缓存，`article.tag` 管理标签目录，`article.view` 管理浏览统计，`article.like` 管理点赞；各能力内部再分 web、application 和 infrastructure。完整结构与共享事务边界见[后端架构约定](backend-architecture.md)。Controller 不直接访问数据库或 Redis。作者显示资料经用户应用层读取，文件引用复用媒体应用服务；不创建空 domain 包或 Service/ServiceImpl。
 
 ## HTTP
 

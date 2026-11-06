@@ -1,2 +1,4 @@
-/** 接收Session授权申请及独立认证的存储通知，不提供完成确认、状态轮询或任意实体绑定。 */
+/**
+ * 接收已登录用户的文件上传申请；存储上传通知在notification子包中使用独立安全链处理。
+ */
 package com.febrie.backend.media.web;

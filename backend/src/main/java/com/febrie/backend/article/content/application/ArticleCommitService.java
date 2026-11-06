@@ -5,7 +5,7 @@ import com.febrie.backend.article.content.application.dto.PreparedArticle;
 import com.febrie.backend.article.content.infrastructure.persistence.ArticleRepository;
 import com.febrie.backend.article.tag.application.TagService;
 
-import com.febrie.backend.media.application.MediaReferenceService;
+import com.febrie.backend.media.application.reference.MediaReferenceService;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.user.domain.Role;
 import java.time.Clock;

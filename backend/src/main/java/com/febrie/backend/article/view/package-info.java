@@ -1,4 +1,4 @@
 /**
- * 集中组织文章浏览统计能力，其子包按现有流程和实现职责划分。
+ * 记录文章浏览总量和按日增量，定时将Redis累计值刷入MySQL并修复统计下限。
  */
 package com.febrie.backend.article.view;

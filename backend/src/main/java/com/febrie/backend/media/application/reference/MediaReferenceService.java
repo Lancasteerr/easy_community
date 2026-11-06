@@ -1,4 +1,6 @@
-package com.febrie.backend.media.application;
+package com.febrie.backend.media.application.reference;
+
+import com.febrie.backend.media.application.MediaErrors;
 
 import com.febrie.backend.media.domain.*;
 import com.febrie.backend.media.infrastructure.persistence.FileRepository;

@@ -1,6 +1,9 @@
 package com.febrie.backend.media;
 
-import com.febrie.backend.media.application.*;
+import com.febrie.backend.media.application.UploadStorage;
+import com.febrie.backend.media.application.MediaUrls;
+import com.febrie.backend.media.application.upload.MediaService;
+
 import com.febrie.backend.media.domain.*;
 import com.febrie.backend.media.infrastructure.persistence.FileRepository;
 import com.febrie.backend.media.infrastructure.ratelimit.UploadRateLimit;
@@ -17,7 +20,8 @@ class UploadAdmissionTests {
         var files = mock(FileRepository.class);
         var storage = mock(UploadStorage.class);
         var limits = mock(UploadRateLimit.class);
-        var service = new MediaService(files, storage, StorageSignatureTests.properties("minio"), PostPolicyTests.workflow(),
+        var properties = StorageSignatureTests.properties("minio");
+        var service = new MediaService(files, storage, properties, new MediaUrls(properties), PostPolicyTests.workflow(),
                 limits, Clock.fixed(Instant.parse("2026-10-29T00:00:00.123456Z"), ZoneOffset.UTC));
         doThrow(new ApiException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "test", 30)).when(limits).consume(1);
         assertThrows(ApiException.class, () -> service.create(1, MediaPurpose.AVATAR, "a.png", "image/png", 10));

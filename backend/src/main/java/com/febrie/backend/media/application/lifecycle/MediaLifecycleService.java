@@ -1,4 +1,6 @@
-package com.febrie.backend.media.application;
+package com.febrie.backend.media.application.lifecycle;
+
+import com.febrie.backend.media.application.UploadStorage;
 
 import com.febrie.backend.media.domain.*;
 import com.febrie.backend.media.infrastructure.config.*;

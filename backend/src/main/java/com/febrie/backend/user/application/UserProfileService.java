@@ -1,6 +1,8 @@
 package com.febrie.backend.user.application;
 
-import com.febrie.backend.media.application.*;
+import com.febrie.backend.media.application.reference.MediaReferenceService;
+import com.febrie.backend.media.application.MediaUrls;
+
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.dto.*;
 import com.febrie.backend.user.infrastructure.persistence.AccountRepository;
@@ -13,13 +15,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class UserProfileService {
     private final AccountRepository accounts;
-    private final MediaService media;
+    private final MediaUrls urls;
     private final MediaReferenceService references;
     private final TransactionTemplate transaction;
 
-    public UserProfileService(AccountRepository accounts, MediaService media, MediaReferenceService references,
+    public UserProfileService(AccountRepository accounts, MediaUrls urls, MediaReferenceService references,
                               PlatformTransactionManager manager) {
-        this.accounts = accounts; this.media = media; this.references = references;
+        this.accounts = accounts; this.urls = urls; this.references = references;
         transaction = new TransactionTemplate(manager);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
@@ -60,7 +62,7 @@ public class UserProfileService {
 
     private UserProfileView view(UserProfileSnapshot profile, String mediaId) {
         return new UserProfileView(Long.toString(profile.id()), profile.username(), profile.role(), mediaId,
-                mediaId == null ? null : media.publicUrl(mediaId));
+                mediaId == null ? null : urls.publicUrl(mediaId));
     }
 
     private static void requireActive(UserActor actor, UserProfileSnapshot current) {

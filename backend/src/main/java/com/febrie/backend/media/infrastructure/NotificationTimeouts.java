@@ -1,6 +1,6 @@
 package com.febrie.backend.media.infrastructure;
 
-import com.febrie.backend.media.application.ProcessingDeadline;
+import com.febrie.backend.media.application.upload.ProcessingDeadline;
 import com.qcloud.cos.exception.CosClientException;
 import java.net.SocketTimeoutException;
 import java.sql.SQLTimeoutException;

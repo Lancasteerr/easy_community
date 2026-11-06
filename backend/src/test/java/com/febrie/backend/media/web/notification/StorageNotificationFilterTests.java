@@ -1,7 +1,8 @@
-package com.febrie.backend.media.web;
+package com.febrie.backend.media.web.notification;
 
-import com.febrie.backend.media.application.*;
-import com.febrie.backend.media.application.dto.UploadResult;
+import com.febrie.backend.media.application.upload.FinishUpload;
+
+import com.febrie.backend.media.application.upload.dto.UploadResult;
 import com.febrie.backend.media.infrastructure.config.*;
 import com.febrie.backend.media.infrastructure.storage.PostPolicies;
 import jakarta.servlet.*;
@@ -17,7 +18,7 @@ import org.springframework.boot.context.properties.bind.*;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.*;
-import static com.febrie.backend.media.application.dto.UploadResult.*;
+import static com.febrie.backend.media.application.upload.dto.UploadResult.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
