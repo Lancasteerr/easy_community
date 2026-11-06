@@ -28,19 +28,16 @@
 
 1. 协议与文档；2. SQL迁移和消费事务；3.可靠发布；4.消费、死信及重放；5.分配器和恢复；6.批量缓存查询；7.API与文章响应；8.集成故障测试、指标、容量报告。
 
-每批独立验证并小步提交，保留无关未跟踪文档。新增SQL从V5开始，不改旧迁移。功能默认关闭，先初始化基础设施与纪元，再开消费者、查询和写入口。
+每批独立验证并小步提交，保留无关未跟踪文档。新增SQL从V5开始，不改旧迁移。点赞固定集成，正常Web应用默认提供查询、写入并消费MQ；上线时由运维关闭外部入口，完成依赖与纪元准备后再开放。
 
 ## 实际实现与默认配置
 
-SQL迁移为`V5__create_article_like.sql`，会为公开和隐藏的已有文章初始化零计数。新建文章无论功能是否启用，均在同一事务建立计数。取消和账号注销不清关系墓碑；没有在线物理删除或自动修数入口。
+SQL迁移为`V5__create_article_like.sql`，会为公开和隐藏的已有文章初始化零计数。新建文章在同一事务建立计数。取消和账号注销不清关系墓碑；没有在线物理删除或自动修数入口。
 
-功能关闭时保留原有文章响应。`LIKE_ENABLED=true`后，详情和作者列表在共享内容取出后追加`likeCount`和`likedByMe`，游客恒为false，编辑接口不追加。正常点赞查询最多两条批量回源SQL；认证已有的SQL校验不计入该数量。
+详情和作者列表始终在共享内容取出后追加`likeCount`和`likedByMe`，游客恒为false，编辑接口不追加。正常点赞查询最多两条批量回源SQL；认证已有的SQL校验不计入该数量。
 
 | 配置 | 默认值 / 说明 |
 |---|---|
-| LIKE_ENABLED | false，模块总开关 |
-| LIKE_WRITE_ENABLED | false，写入口开关，关闭后消费者可继续运行 |
-| LIKE_CONSUMER_ENABLED | true，仅模块启用且非维护进程时生效 |
 | LIKE_PER_MINUTE | 每用户每分钟60次，仍叠加现有认证入口限流 |
 | LIKE_CONFIRM_TIMEOUT | 2s，只是确认等待预算，不是完整HTTP延迟承诺 |
 | app.like.pending-limit | 128 / 实例，超限在发送前拒绝 |
@@ -51,49 +48,13 @@ SQL迁移为`V5__create_article_like.sql`，会为公开和隐藏的已有文章
 
 上述`app.like.*`均可通过Spring命令行属性覆盖。普通应用重启不初始化分配器或提升纪元。分配器Key无TTL，展示缓存单独位于`<namespace>:cache:v1:*`，不要通过修改namespace来清理缓存。
 
-## 首次部署
+## 部署、重启和故障运维
 
-1. 保持写入口关闭，部署迁移和代码。将`.env.dev.example`或`.env.prod.example`中的RabbitMQ配置填入实际环境，Redis必须使用noeviction。
-2. 在PowerShell进程环境中设置RabbitMQ管理凭证和vhost，执行：
+完整操作步骤统一见[点赞运维手册](like-system-operations.md)，包括两个.env示例、AMQP与管理端口、首次初始化、普通应用重启、Redis/MySQL/RabbitMQ宕机、整机恢复、死信及数据回滚边界。
 
-```powershell
-./infra/dev/like-topology.ps1 -Namespace ec:dev:like -ManagementUrl http://127.0.0.1:15672
-./infra/dev/like-topology.ps1 -Namespace ec:dev:like -ManagementUrl http://127.0.0.1:15672 -VerifyOnly
-```
+正常Web应用自动提供点赞能力，不再读取旧模块、写入或消费开关。关闭外部端口时，后台消费者仍处理已受理命令；需要暂停消费时停止应用。纪元恢复前必须停止全部业务实例，恢复后在外部入口关闭期间完成本机验证，最后人工开放。
 
-脚本只声明本命名空间拓扑，不删除消息；核验Quorum类型、持久性、安全死信参数、无过期策略及绑定。应用也使用相同显式队列参数声明拓扑，已有不兼容队列不能静默复用。
-
-3. 在backend目录构建后，使用非Web维护进程初始化纪元。以下首次启动预期SQL epoch为0，后续必须填写status输出中的实际值：
-
-```powershell
-mvn -DskipTests package
-java -jar target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --spring.main.web-application-type=none --app.like.enabled=true --app.like.write-enabled=false --app.like.maintenance=recover --app.like.expected-epoch=0
-java -jar target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --spring.main.web-application-type=none --app.like.enabled=true --app.like.write-enabled=false --app.like.maintenance=status
-```
-
-4. 核验成功后，先以模块启用、写关闭启动消费者和查询，再启用写入口。管理健康和指标只允许本机管理端口GET访问`/actuator/health`、`/actuator/prometheus`，业务端口不开放这两个接口。
-
-## 故障恢复与维护
-
-- 所有维护动作必须使用上述非Web模式并显式关闭写入口。维护进程不启动监听器及业务定时任务。失败退出码非零；status未就绪也非零，不因命令打印了状态就开放写入。
-- Redis重启、进程标识变化、任一分配器Key丢失、TTL异常或序号耗尽时停止签发。恢复前关闭外部点赞写路由，停掉所有旧写实例；保留写关闭的应用实例消费已有消息。
-- `--app.like.maintenance=pause`只暂停签发，不清队列或状态。恢复使用MySQL专用连接命名锁；先持久提升纪元，再初始化PAUSED分配器，最后条件激活READY。
-- MySQL已提交但Redis初始化失败时保留纪元空洞，重试必须再提升纪元，不能在已保留纪元内归零。旧恢复进程不能覆盖更高纪元或激活较旧纪元。
-- 若更换Redis地址，先隔离旧端点；不支持透明自动切主。恢复结束先核验status，再恢复写配置和外部路由。
-- 工作队列失败消息最多尝试5个独立SQL事务，退避1/2/4/8秒；耗尽或遇到格式、版本冲突、计数异常时由Broker可靠转入DLQ。
-- 当前固定镜像的RabbitMQ 4.4.0内部死信发布重试默认180秒，修复DLQ后可能等待该周期。专用测试Broker使用1秒周期，不更改生产默认配置。
-- 告警建议：DLQ大于0、分配器拒签、计数不变量错误立即处理；积压持续增加或发布拒绝时关闭/降低入口，不能靠增大队列无限承接SQL故障。
-
-重放与对账示例：
-
-```powershell
-java -jar target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --spring.main.web-application-type=none --app.like.enabled=true --app.like.write-enabled=false --app.like.maintenance=replay --app.like.replay-limit=100
-java -jar target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --spring.main.web-application-type=none --app.like.enabled=true --app.like.write-enabled=false --app.like.maintenance=audit
-```
-
-replay每次最多10000条，保留原body、版本与messageId；确认重新入队后才ACK原死信。未知结果保留原死信，重复由SQL版本裁决。格式已损坏的消息停止本次重放，不能盲目重新编号绕过隔离。
-
-audit在主库一致性快照中报告关系聚合和计数差异，不执行修数；没有文章反向索引，因此不安排周期性全表扫描。回退时先关写，继续消费已受理命令；不回滚迁移、清空队列、删除墓碑或重置纪元。
+普通应用启动不会自动初始化或提升纪元。分配器未就绪时写接口503且健康检查异常，但不停止消费者；不增加自动恢复、自动开网或状态修改HTTP接口。非Web维护命令不启动消费者、自动MQ拓扑或业务定时任务，只有replay显式连接MQ。
 
 ## 前端接入
 
@@ -130,6 +91,6 @@ Redis7.2兼容实例使用17778端口；7.2和7.4均已验证Lua INFO、运行�
 
 指标标签只包含固定动作和结果，禁止用用户/文章ID作为标签。Broker队列深度和磁盘、MySQL锁等待使用原生监控；队头时间不可用时明确标记未知。消费者排队年龄是投递采样，不冒充全队列最老消息年龄。
 
-已完成的双实例实验与部署建议见[容量报告](like-capacity-2026-11-05.md)。正式环境仍须在目标硬件上重复验证，保持写开关关闭直到验收完成。
+已完成的双实例实验与部署建议见[容量报告](like-capacity-2026-11-05.md)。正式环境仍须在目标硬件上重复验证，保持外部入口关闭直到人工验收完成。
 
-本次测试记录及既有媒体测试的排除说明见[验证记录](like-validation-2026-11-06.md)，不能将带排除项的构建称为无条件全量通过。
+当前测试结果与历史结果区分记录，见[验证记录](like-validation-2026-11-06.md)；本次完整回归不沿用历史媒体测试排除项。
