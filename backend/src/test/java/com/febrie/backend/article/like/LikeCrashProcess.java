@@ -15,7 +15,7 @@ public final class LikeCrashProcess {
             throw new IllegalArgumentException("崩溃进程仅允许专用测试资源");
         }
         var context=SpringApplication.run(BackendApplication.class,"--spring.profiles.active=test",
-                "--spring.main.web-application-type=none","--app.like.enabled=false","--app.auth.redis-prefix="+args[1]);
+                "--spring.main.web-application-type=none","--app.auth.redis-prefix="+args[1]);
         var factory=new com.rabbitmq.client.ConnectionFactory();
         factory.setHost(System.getenv().getOrDefault("IT_RABBITMQ_HOST","127.0.0.1"));
         factory.setPort(Integer.parseInt(System.getenv().getOrDefault("IT_RABBITMQ_PORT","5672")));

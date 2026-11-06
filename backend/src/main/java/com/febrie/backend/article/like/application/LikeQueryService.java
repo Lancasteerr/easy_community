@@ -8,13 +8,11 @@ import com.febrie.backend.article.like.domain.LikeState;
 import java.util.*;
 import java.util.concurrent.*;
 import org.springframework.beans.factory.DisposableBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
 
 /** 共享内容取出后才批量装配个人状态；认证和文章内容缓存仍保留原有依赖边界。 */
 @Service
-@ConditionalOnProperty(name="app.like.enabled",havingValue="true")
 @Transactional(propagation=Propagation.NEVER)
 public class LikeQueryService implements DisposableBean {
     private final LikeCache cache;

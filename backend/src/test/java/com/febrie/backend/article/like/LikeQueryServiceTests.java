@@ -22,7 +22,7 @@ class LikeQueryServiceTests {
     final LikeCache cache=mock(LikeCache.class);
     final LikeReader reader=mock(LikeReader.class);
     LikeQueryService service() {
-        var p=new LikeProperties(true,false,false,"ec:test:unit:like",Duration.ofSeconds(2),128,2,20,67108864,60,4,Duration.ofSeconds(2),"none",-1,0);
+        var p=new LikeProperties("ec:test:unit:like",Duration.ofSeconds(2),128,2,20,67108864,60,4,Duration.ofSeconds(2),"none",-1,0);
         return new LikeQueryService(cache,reader,p,mock(LikeTelemetry.class));
     }
     @Test void fiftyArticlesUseOnlyTwoBatchQueriesAndVisitorsNeverQueryRelations() {
@@ -73,7 +73,7 @@ class LikeQueryServiceTests {
             // 明确模拟400ms缓存延迟，超过100ms的SQL等待预算；不是随机并发时序。
             new CountDownLatch(1).await(400,TimeUnit.MILLISECONDS);return null;
         }).when(cache).putCounts(any());
-        var p=new LikeProperties(true,false,false,"ec:test:unit:like",Duration.ofSeconds(2),128,2,20,67108864,60,4,Duration.ofMillis(100),"none",-1,0);
+        var p=new LikeProperties("ec:test:unit:like",Duration.ofSeconds(2),128,2,20,67108864,60,4,Duration.ofMillis(100),"none",-1,0);
         var query=new LikeQueryService(cache,reader,p,mock(LikeTelemetry.class));
         try{assertEquals(3,query.summaries(null,List.of(2L)).get(2L).likeCount());}
         finally{query.destroy();}

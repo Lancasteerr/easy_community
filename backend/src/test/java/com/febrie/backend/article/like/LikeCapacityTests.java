@@ -56,7 +56,7 @@ class LikeCapacityTests {
             var first = start();
             jdbc = first.getBean(JdbcTemplate.class); mapper = first.getBean(ObjectMapper.class);
             var properties = first.getBean(LikeProperties.class); namespace = properties.namespace();
-            var maintenance = new LikeProperties(true, false, false, namespace, Duration.ofSeconds(2), 128, 2, 20,
+            var maintenance = new LikeProperties(namespace, Duration.ofSeconds(2), 128, 2, 20,
                     67108864, 100000, 4, Duration.ofMillis(300), "none", -1, 0);
             int epoch = jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1", Integer.class);
             first.getBean(LikeRecoveryService.class); // 确认实际应用装配了同一维护服务。
@@ -108,7 +108,7 @@ class LikeCapacityTests {
     private ConfigurableApplicationContext start() {
         var context = SpringApplication.run(BackendApplication.class,
                 "--spring.profiles.active=test", "--server.port=0", "--management.server.port=0",
-                "--app.auth.redis-prefix=" + prefix, "--app.like.enabled=true", "--app.like.write-enabled=true",
+                "--app.auth.redis-prefix=" + prefix,
                 "--app.like.per-minute=100000", "--app.auth.user-per-minute=100000",
                 "--app.auth.csrf-per-minute=100000", "--app.auth.login-per-minute=100000",
                 "--app.media.cleanup-delay=24h", "--app.auth.cleanup-delay=24h");

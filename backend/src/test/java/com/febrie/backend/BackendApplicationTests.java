@@ -44,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** 真MySQL、Redis、HTTP测试；只清理本次创建的账号和随机命名空间。 */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@com.febrie.backend.support.WithoutRabbitConsumer
 @ActiveProfiles("test")
 @Import(PersistenceTestConfiguration.class)
 @EnabledIfEnvironmentVariable(named = "IT_DB_PASSWORD", matches = ".+")

@@ -24,7 +24,7 @@ class LikeCacheIntegrationTests {
         var server=new RedisStandaloneConfiguration(System.getenv().getOrDefault("IT_REDIS_HOST","127.0.0.1"),Integer.parseInt(System.getenv().getOrDefault("IT_REDIS_PORT","6379")));
         server.setPassword(System.getenv().getOrDefault("IT_REDIS_PASSWORD",""));
         factory=new LettuceConnectionFactory(server);factory.afterPropertiesSet();factory.start(); redis=new StringRedisTemplate(factory);
-        var p=new LikeProperties(true,false,false,"ec:test:"+UUID.randomUUID()+":like",Duration.ofSeconds(2),128,2,20,67108864,60,4,Duration.ofMillis(300),"none",-1,0);
+        var p=new LikeProperties("ec:test:"+UUID.randomUUID()+":like",Duration.ofSeconds(2),128,2,20,67108864,60,4,Duration.ofMillis(300),"none",-1,0);
         cache=new LikeCache(redis,p);
     }
     @AfterEach void clean() { if(cache!=null) { redis.delete(List.of(cache.stateKey(1),cache.countKey(2),cache.countKey(3))); } if(factory!=null) {factory.destroy();} }

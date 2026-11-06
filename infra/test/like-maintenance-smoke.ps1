@@ -28,7 +28,7 @@ $jvmDirectory = if ($IsWindows) { Join-Path ([IO.Path]::GetPathRoot($repoRoot)) 
 New-Item -ItemType Directory -Force -Path $jvmDirectory | Out-Null
 $baseArguments = @("-Djdk.net.unixdomain.tmpdir=$jvmDirectory", '-jar', $jarPath, '--spring.profiles.active=test',
     '--spring.config.additional-location=file:src/test/resources/application-test.properties',
-    '--spring.main.web-application-type=none', '--app.like.enabled=true', '--app.like.write-enabled=false',
+    '--spring.main.web-application-type=none',
     "--app.like.namespace=$namespace")
 function Invoke-LikeCommand([string]$Action, [string[]]$Extra = @(), [bool]$ExpectedSuccess = $true) {
     $log = Join-Path $backendPath "target/like-cli-$Action.log"

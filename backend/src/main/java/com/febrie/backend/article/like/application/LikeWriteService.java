@@ -12,7 +12,6 @@ import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.shared.ratelimit.FixedWindowCounter;
 import java.time.*;
 import org.slf4j.*;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
 
@@ -20,7 +19,6 @@ import org.springframework.transaction.annotation.*;
  * API只签发并可靠发布，不写点赞SQL；202之后投影失败不能改报未受理。
  */
 @Service
-@ConditionalOnProperty(name = "app.like.enabled", havingValue = "true")
 @Transactional(propagation = Propagation.NEVER)
 public class LikeWriteService {
     private static final Logger log = LoggerFactory.getLogger(LikeWriteService.class);
@@ -51,9 +49,6 @@ public class LikeWriteService {
             operation = LikeCommand.operation(operationId);
         } catch (IllegalArgumentException invalid) {
             throw LikeErrors.invalid();
-        }
-        if (!properties.writeEnabled()) {
-            throw LikeErrors.allocator();
         }
         long started = System.nanoTime();
         try {

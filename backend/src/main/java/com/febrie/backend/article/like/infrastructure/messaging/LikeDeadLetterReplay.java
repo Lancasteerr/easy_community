@@ -6,12 +6,10 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.support.DefaultMessagePropertiesConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /** 仅离线命令显式调用；确认重发成功后才ACK原死信，未知结果保留原消息。 */
 @Component
-@ConditionalOnProperty(name = "app.like.enabled", havingValue = "true")
 public class LikeDeadLetterReplay {
     private final RabbitTemplate rabbit;
     private final LikePublisher publisher;

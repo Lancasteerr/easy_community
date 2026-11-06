@@ -11,7 +11,6 @@ import com.rabbitmq.client.Channel;
 import java.util.ArrayList;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.*;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.TransientDataAccessResourceException;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -23,7 +22,7 @@ class LikeConsumerTests {
         when(codec.decode(any())).thenReturn(LikeSqlServiceTests.command(true, 10));
         when(sql.apply(any())).thenThrow(new TransientDataAccessResourceException("test"));
         var delays = new ArrayList<Long>();
-        new LikeConsumer(codec, sql, provider(), mock(LikeTelemetry.class), delays::add).consume(message(), channel);
+        new LikeConsumer(codec, sql, projection(), mock(LikeTelemetry.class), delays::add).consume(message(), channel);
         assertEquals(java.util.List.of(1000L, 2000L, 4000L, 8000L), delays);
         verify(sql, times(5)).apply(any());
         verify(channel).basicNack(7, false, false);
@@ -32,12 +31,10 @@ class LikeConsumerTests {
 
     @Test void staleDoesNotWriteOriginalMessageAndCacheFailureDoesNotUndoAck() throws Exception {
         var codec = mock(LikeCodec.class); var sql = mock(LikeSqlService.class); var channel = mock(Channel.class);
-        var projection = mock(LikeProjection.class); var provider = provider();
-        doAnswer(call -> { ((java.util.function.Consumer<LikeProjection>) call.getArgument(0)).accept(projection); return null; })
-                .when(provider).ifAvailable(any());
+        var projection = mock(LikeProjection.class);
         when(codec.decode(any())).thenReturn(LikeSqlServiceTests.command(true, 10));
         when(sql.apply(any())).thenReturn(new LikeSqlService.Result(LikeSqlService.Status.STALE, new LikeState(1, 2, false, 12)));
-        var consumer = new LikeConsumer(codec, sql, provider, mock(LikeTelemetry.class), ignored -> { });
+        var consumer = new LikeConsumer(codec, sql, projection, mock(LikeTelemetry.class), ignored -> { });
         consumer.consume(message(), channel);
         verifyNoInteractions(projection);
         when(sql.apply(any())).thenReturn(new LikeSqlService.Result(LikeSqlService.Status.APPLIED, new LikeState(1, 2, true, 10)));
@@ -51,12 +48,12 @@ class LikeConsumerTests {
         when(codec.decode(any())).thenReturn(LikeSqlServiceTests.command(true,10));
         when(sql.apply(any())).thenThrow(new org.springframework.transaction.TransactionSystemException("提交结果未知"))
                 .thenReturn(new LikeSqlService.Result(LikeSqlService.Status.DUPLICATE,new LikeState(1,2,true,10)));
-        new LikeConsumer(codec,sql,provider(),mock(LikeTelemetry.class),ignored->{ }).consume(message(),channel);
+        new LikeConsumer(codec,sql,projection(),mock(LikeTelemetry.class),ignored->{ }).consume(message(),channel);
         var order=inOrder(sql,channel);
         order.verify(sql,times(2)).apply(any());order.verify(channel).basicAck(7,false);
         verify(channel,never()).basicNack(anyLong(),anyBoolean(),anyBoolean());
     }
 
-    @SuppressWarnings("unchecked") private static ObjectProvider<LikeProjection> provider() { return mock(ObjectProvider.class); }
+    private static LikeProjection projection() { return mock(LikeProjection.class); }
     private static Message message() { var p = new MessageProperties(); p.setDeliveryTag(7); return new Message(new byte[]{1}, p); }
 }

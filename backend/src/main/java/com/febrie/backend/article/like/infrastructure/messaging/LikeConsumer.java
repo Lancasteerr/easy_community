@@ -9,30 +9,27 @@ import com.rabbitmq.client.Channel;
 import java.io.IOException;
 import org.slf4j.*;
 import org.springframework.amqp.core.Message;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.*;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.TransactionException;
 
 /** 每次尝试调用独立事务代理；SQL提交、可失败投影、ACK保持三个阶段。 */
 @Component
-@ConditionalOnProperty(name = "app.like.enabled", havingValue = "true")
 public class LikeConsumer {
     private static final Logger log = LoggerFactory.getLogger(LikeConsumer.class);
     private final LikeCodec codec;
     private final LikeSqlService sql;
-    private final ObjectProvider<LikeProjection> projection;
+    private final LikeProjection projection;
     private final LikeTelemetry telemetry;
     private final Delay delay;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public LikeConsumer(LikeCodec codec, LikeSqlService sql, ObjectProvider<LikeProjection> projection, LikeTelemetry telemetry) {
+    public LikeConsumer(LikeCodec codec, LikeSqlService sql, LikeProjection projection, LikeTelemetry telemetry) {
         this(codec, sql, projection, telemetry, Thread::sleep);
     }
 
     /** 测试可替换等待器，用屏障控制故障，不让单元测试真实等待15秒。 */
-    public LikeConsumer(LikeCodec codec, LikeSqlService sql, ObjectProvider<LikeProjection> projection,
+    public LikeConsumer(LikeCodec codec, LikeSqlService sql, LikeProjection projection,
                         LikeTelemetry telemetry, Delay delay) {
         this.codec = codec; this.sql = sql; this.projection = projection; this.telemetry = telemetry; this.delay = delay;
     }
@@ -66,8 +63,7 @@ public class LikeConsumer {
         telemetry.event("consume", result.status().name().toLowerCase(java.util.Locale.ROOT));
         // 缓存失败不能让已经提交的SQL被报成未提交；STALE不会带原消息写投影。
         if (result.status() != LikeSqlService.Status.STALE) {
-            var committed = result;
-            try { projection.ifAvailable(p -> p.committed(committed)); }
+            try { projection.committed(result); }
             catch (RuntimeException cacheFailure) { telemetry.event("cache", "commit_failure"); log.warn("点赞已提交，缓存维护失败 articleId={}", command.articleId()); }
         }
         channel.basicAck(tag, false);

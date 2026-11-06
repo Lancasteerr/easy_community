@@ -44,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** 显式启用后连接全新专用库、Redis、真实MinIO及Caddy；不会清空业务库或共享桶。 */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT, properties = {"server.port=18080", "server.address=0.0.0.0"})
+@com.febrie.backend.support.WithoutRabbitConsumer
 @ActiveProfiles("test")
 @Import(PersistenceTestConfiguration.class)
 @EnabledIfEnvironmentVariable(named = "IT_MEDIA_V2", matches = "true")

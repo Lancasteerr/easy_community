@@ -4,11 +4,9 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-/** 功能和写入口分别关闭；维护动作只能由非Web进程显式选择。 */
+/** 点赞固定集成；仅配置容量、命名空间和显式非Web维护动作。 */
 @ConfigurationProperties("app.like")
-public record LikeProperties(@DefaultValue("false") boolean enabled,
-        @DefaultValue("false") boolean writeEnabled, @DefaultValue("true") boolean consumerEnabled,
-        @DefaultValue("ec:dev:like") String namespace, @DefaultValue("2s") Duration confirmTimeout,
+public record LikeProperties(@DefaultValue("ec:dev:like") String namespace, @DefaultValue("2s") Duration confirmTimeout,
         @DefaultValue("128") int pendingLimit, @DefaultValue("2") int concurrency,
         @DefaultValue("20") int prefetch, @DefaultValue("67108864") long queueBytes,
         @DefaultValue("60") int perMinute, @DefaultValue("4") int readConcurrency,

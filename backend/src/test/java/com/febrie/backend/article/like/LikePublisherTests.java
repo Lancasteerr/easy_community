@@ -57,7 +57,7 @@ class LikePublisherTests {
     }
 
     static LikeProperties properties() {
-        return new LikeProperties(true, true, false, "ec:test:unit:like", Duration.ofMillis(20),
+        return new LikeProperties("ec:test:unit:like", Duration.ofMillis(20),
                 128, 2, 20, 67108864, 60, 4, Duration.ofMillis(300), "none", -1, 0);
     }
 }

@@ -7,7 +7,6 @@ import com.febrie.backend.article.like.infrastructure.messaging.LikeDeadLetterRe
 import com.febrie.backend.article.like.infrastructure.redis.LikeVersionAllocator;
 
 import java.util.Map;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.*;
 import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,35 +19,35 @@ import tools.jackson.databind.ObjectMapper;
 public class LikeMaintenance implements ApplicationRunner {
     private final LikeProperties properties;
     private final ApplicationContext context;
-    private final ObjectProvider<LikeVersionAllocator> allocator;
-    private final ObjectProvider<LikeRecoveryService> recovery;
-    private final ObjectProvider<LikeDeadLetterReplay> replay;
+    private final LikeVersionAllocator allocator;
+    private final LikeRecoveryService recovery;
+    private final LikeDeadLetterReplay replay;
     private final LikeAuditService audit;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     public LikeMaintenance(LikeProperties properties, ApplicationContext context,
-            ObjectProvider<LikeVersionAllocator> allocator, ObjectProvider<LikeRecoveryService> recovery,
-            ObjectProvider<LikeDeadLetterReplay> replay, LikeAuditService audit, JdbcTemplate jdbc, ObjectMapper mapper) {
+            LikeVersionAllocator allocator, LikeRecoveryService recovery,
+            LikeDeadLetterReplay replay, LikeAuditService audit, JdbcTemplate jdbc, ObjectMapper mapper) {
         this.properties=properties; this.context=context; this.allocator=allocator; this.recovery=recovery;
         this.replay=replay; this.audit=audit; this.jdbc=jdbc; this.mapper=mapper;
     }
     @Override public void run(ApplicationArguments arguments) throws Exception {
         if (!properties.maintaining()) { return; }
-        if (context instanceof WebApplicationContext || !properties.enabled() || properties.writeEnabled()) {
-            throw new IllegalStateException("点赞维护必须启用模块、禁用写入口并使用非Web模式");
+        if (context instanceof WebApplicationContext) {
+            throw new IllegalStateException("点赞维护必须使用非Web模式；恢复前必须人工停止全部业务实例");
         }
         Object result = switch (properties.maintenance()) {
             case "status" -> {
                 int epoch=jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1", Integer.class);
-                var current=allocator.getObject().status();
-                boolean ready=allocator.getObject().ready()&&Integer.toString(epoch).equals(current.get(0));
+                var current=allocator.status();
+                boolean ready=allocator.ready()&&Integer.toString(epoch).equals(current.get(0));
                 var details=Map.of("sqlEpoch",epoch,"redisEpoch",current.get(0),"sequence",current.get(1),"state",current.get(2),"ready",ready);
                 if(!ready){System.out.println(mapper.writeValueAsString(Map.of("action","status","result",details)));throw new IllegalStateException("点赞分配器未就绪，禁止开放写入口");}
                 yield details;
             }
-            case "pause" -> { allocator.getObject().pause(); yield Map.of("paused", true); }
-            case "recover" -> Map.of("epoch", recovery.getObject().recover(properties.expectedEpoch()));
-            case "replay" -> Map.of("replayed", replay.getObject().replay(properties.replayLimit()));
+            case "pause" -> { allocator.pause(); yield Map.of("paused", true); }
+            case "recover" -> Map.of("epoch", recovery.recover(properties.expectedEpoch()));
+            case "replay" -> Map.of("replayed", replay.replay(properties.replayLimit()));
             case "audit" -> {
                 var differences = audit.discrepancies();
                 if (!differences.isEmpty()) { System.out.println(mapper.writeValueAsString(differences)); throw new IllegalStateException("点赞对账不一致，未执行修数"); }

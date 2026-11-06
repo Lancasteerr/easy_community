@@ -89,7 +89,7 @@ class LikeHttpIntegrationTests {
             throw new IllegalArgumentException("HTTP集成测试只允许专用数据库和测试vhost");
         }
         registry.add("spring.datasource.url",()->url);registry.add("app.auth.redis-prefix",()->PREFIX);
-        registry.add("app.like.enabled",()->true);registry.add("app.like.write-enabled",()->true);
+
         registry.add("app.like.read-timeout",()->"2s");registry.add("app.like.queue-bytes",()->4096);
         registry.add("spring.rabbitmq.host",()->System.getenv().getOrDefault("IT_RABBITMQ_HOST","127.0.0.1"));
         registry.add("spring.rabbitmq.port",()->System.getenv().getOrDefault("IT_RABBITMQ_PORT","5672"));
@@ -100,7 +100,7 @@ class LikeHttpIntegrationTests {
 
     @BeforeEach void seed()throws Exception{
         reset(cache,reader,publisher,likes);
-        var maintenance=new LikeProperties(true,false,false,properties.namespace(),properties.confirmTimeout(),128,2,20,4096,60,4,Duration.ofSeconds(2),"none",-1,0);
+        var maintenance=new LikeProperties(properties.namespace(),properties.confirmTimeout(),128,2,20,4096,60,4,Duration.ofSeconds(2),"none",-1,0);
         int epoch=jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1",Integer.class);
         new LikeRecoveryService(dataSource,allocator,maintenance).recover(epoch);
         if(hash==null){hash=encoder.encode(PASSWORD);}

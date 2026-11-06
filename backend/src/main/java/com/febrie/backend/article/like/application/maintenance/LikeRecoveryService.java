@@ -8,12 +8,10 @@ import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.UUID;
 import javax.sql.DataSource;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /** 离线恢复的前提是所有写实例已停用；专用连接持有命名锁，不能归还池后继续恢复。 */
 @Service
-@ConditionalOnProperty(name = "app.like.enabled", havingValue = "true")
 public class LikeRecoveryService {
     private final DataSource dataSource;
     private final LikeVersionAllocator allocator;
@@ -23,7 +21,7 @@ public class LikeRecoveryService {
     }
 
     public int recover(int expected) throws SQLException {
-        if (properties.writeEnabled()) { throw new IllegalStateException("维护进程必须禁用写入口，并确认其他写实例已停止"); }
+        // 停止全部业务实例是离线恢复的操作前提；入口关闭不能替代该人工核验。
         String name = "like-recover:" + UUID.nameUUIDFromBytes(properties.namespace().getBytes(StandardCharsets.UTF_8));
         try (Connection connection = dataSource.getConnection()) {
             if (scalar(connection, "SELECT GET_LOCK(?, 0)", name) != 1) { throw new IllegalStateException("已有点赞恢复执行者"); }

@@ -6,7 +6,6 @@ import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 
 import com.febrie.backend.article.like.domain.*;
 import java.util.*;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Component;
 
 /** 展示缓存与签发器分开命名；缓存可以丢失，但只能用固定TTL最终修复。 */
 @Component
-@ConditionalOnProperty(name = "app.like.enabled", havingValue = "true")
 public class LikeCache implements LikeProjection {
     private static final RedisScript<List> STATE = RedisScript.of(new ClassPathResource("redis/like-state.lua"), List.class);
     private static final RedisScript<Long> COUNTS = RedisScript.of(new ClassPathResource("redis/like-count-fill.lua"), Long.class);

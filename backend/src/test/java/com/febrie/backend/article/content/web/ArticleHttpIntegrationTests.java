@@ -31,6 +31,7 @@ import static org.mockito.Mockito.*;
 
 /** 真HTTP/Session/CSRF与MySQL/Redis接入；只清理本次用户、Tag和随机文章前缀。 */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@com.febrie.backend.support.WithoutRabbitConsumer
 @ActiveProfiles("test")
 @Import(PersistenceTestConfiguration.class)
 @EnabledIfEnvironmentVariable(named = "IT_ARTICLE", matches = "true")

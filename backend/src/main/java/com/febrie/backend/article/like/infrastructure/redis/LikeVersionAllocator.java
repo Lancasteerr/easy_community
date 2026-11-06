@@ -6,7 +6,6 @@ import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetr
 import com.febrie.backend.article.like.application.LikeErrors;
 import com.febrie.backend.article.like.domain.LikeVersion;
 import java.util.*;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.*;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Component;
 
 /** 故障只停止签发，绝不根据SQL关系最大版本重置序号。 */
 @Component
-@ConditionalOnProperty(name = "app.like.enabled", havingValue = "true")
 public class LikeVersionAllocator {
     private static final ClassPathResource SCRIPT = new ClassPathResource("redis/like-version.lua");
     private static final RedisScript<List> READ = RedisScript.of(SCRIPT, List.class);

@@ -11,12 +11,10 @@ import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.*;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /** 只等待同次发送的确认，不创建后台重发任务；未知结果保留未知语义。 */
 @Component
-@ConditionalOnProperty(name = "app.like.enabled", havingValue = "true")
 public class LikePublisher {
     private final RabbitTemplate rabbit;
     private final LikeProperties properties;
