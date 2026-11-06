@@ -1,2 +1,0 @@
-# Linux 容器执行的脚本在 Windows 检出时也必须保留 LF。
-infra/dev/*.sh text eol=lf

@@ -2,7 +2,7 @@
 
 基于 [easy_blog](https://github.com/Lancasteerr/Easy_blog_full)，适配多用户，多角色改进
 
-本地开发使用 IDEA / Vite 运行应用，MySQL、Redis、MinIO、RabbitMQ 由根目录 Compose 统一管理，配置、Navicat 连接和启动命令见 [本地开发说明](docs/zh-CN/local-development.md)。
+本地开发使用 IDEA / Vite 运行应用，MySQL、Redis、MinIO、RabbitMQ 使用独立配置的 Docker 容器，后端通过 `backend/.env.dev` 连接宿主机发布的端口。
 
 功能：
 

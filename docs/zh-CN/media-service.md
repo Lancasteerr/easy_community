@@ -1,6 +1,6 @@
 # 文件服务 V2：POST 直传、通知发布与引用回收
 
-当前实现采用 [V2 设计](media-service-v2-design.md)。生产通过 COS Callback 同步审核、复制并提交 READY；开发使用 MinIO Webhook 发布，原有上传联调方案经 Caddy 转换响应。日常基础依赖已改为根目录 Compose，不启动 Caddy，浏览器上传响应适配留待后续 Vite 阶段。只支持新建空库，不提供旧协议、旧表和 Flyway 历史兼容。
+当前实现采用 [V2 设计](media-service-v2-design.md)。生产通过 COS Callback 同步审核、复制并提交 READY；开发使用 MinIO Webhook 发布，原有上传联调方案经 Caddy 转换响应。日常开发使用独立配置的 Docker 容器。只支持新建空库，不提供旧协议、旧表和 Flyway 历史兼容。
 
 ## 数据与职责
 
@@ -90,13 +90,13 @@ GC 每五分钟按三个状态分别扫描最多 100 个候选。加文件行锁
 
 ### 当前日常开发入口
 
-按 [本地开发说明](local-development.md) 启动根目录 `compose.dev.yaml`，统一管理 MySQL、Redis、MinIO、RabbitMQ。一次性初始化工具自动创建开发桶并配置公开前缀、临时对象生命周期和精确 POST 通知，Spring 运行期仍只校验配置，不创建桶或修改权限。
+独立配置并启动 MinIO 容器，在 `backend/.env.dev` 中填写实际存储端点、凭证、桶和前缀。开发桶的公开策略、临时对象生命周期和精确 POST 通知需自行配置，步骤见下文；Spring 运行期只校验配置，不创建桶或修改权限。
 
-新环境的后端存储端点和上传端点均为 `http://127.0.0.1:19000`，没有 19002 上传代理。MinIO 原生 POST 响应不满足上文统一 JSON 协议，现有 `upload.mjs` 暂不能直接使用；后续由 Vite 开发接入单独适配，普通代理不会自动转换响应。可使用底层 multipart POST 验证存储和 Webhook。
+后端通过宿主机发布的端口访问 MinIO，容器通知宿主机时使用 `host.docker.internal` 和后端实际监听端口。MinIO 原生 POST 响应不满足上文统一 JSON 协议，现有 `upload.mjs` 不能直接识别；后续由 Vite 开发接入单独适配，普通代理不会自动转换响应。可使用底层 multipart POST 验证存储和 Webhook。
 
 ### 历史 Caddy 上传联调示例
 
-以下保留旧方案供独立上传协议联调，使用固定 MinIO `RELEASE.2025-09-07T16-13-09Z` 和 Caddy `2.10.2-alpine`。它与新 Compose 的 MinIO 端口冲突，不能同时启动；不属于当前日常开发启动步骤。
+以下保留旧方案供独立上传协议联调，使用固定 MinIO `RELEASE.2025-09-07T16-13-09Z` 和 Caddy `2.10.2-alpine`。不属于当前日常开发启动步骤；使用前检查 19000/19001/19002 端口，避免与独立容器冲突。
 
 ```powershell
 # 仅历史方案：在 backend 目录执行，上传端点需单独设为 http://127.0.0.1:19002。

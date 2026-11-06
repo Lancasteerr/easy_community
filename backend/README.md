@@ -7,7 +7,7 @@
 文件上传、MinIO/COS桶配置、头像接口和文章接入见[文件服务V2](../docs/zh-CN/media-service.md)。
 升级已有本机环境文件时，必须补充示例中的全部`MEDIA_*`字段；应用只校验配置，不自动创建桶或修改权限。
 
-Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。本地 Compose 自动创建空库 `easy_community`，Flyway 自动建表；其他部署方式需提前建库。
+Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `easy_community`，Flyway 自动建表。
 数据库访问统一使用 MyBatis-Plus：普通 CRUD 使用 BaseMapper/LambdaWrapper，复杂 SQL 放在 XML；Repository 接口与应用服务事务边界保持稳定。上传通知使用独立短等待执行器，不共享业务连接池或事务。
 使用官方 `spring-boot-starter-session-data-redis`，移除了 JWT Resource Server starter；Redis 原子计数与会话登记通过 Spring Data Redis 执行短 Lua，无第三方 JWT 或限流依赖。
 
@@ -15,12 +15,11 @@ Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。本地 Compose 自动创建空�
 
 必须显式选择 `dev` 或 `prod`，无默认运行环境。选定环境后自动读取对应的 `.env.dev` 或 `.env.prod`，数据库密码不写入仓库。
 
-先按 [本地开发说明](../docs/zh-CN/local-development.md) 在仓库根目录配置并启动 MySQL、Redis、MinIO、RabbitMQ。
-Compose 与 Spring 分别读取 `.env.compose.dev` 和 `backend/.env.dev`，按文档同步实际凭证；已有文件不自动覆盖。
-当前 Compose 不包含前端代理，浏览器上传的响应适配留待后续 Vite 阶段，现有 `upload.mjs` 暂不能直接用于新环境。
+先独立配置并启动 MySQL、Redis、MinIO、RabbitMQ 容器，在 `backend/.env.dev` 中填写实际发布端口和凭证；已有文件不自动覆盖。
+直接使用 MinIO 原生上传响应时，现有 `upload.mjs` 仍需响应适配，详见文件服务说明。
 
 ```powershell
-# 在 backend 目录首次配置；已有文件时直接编辑，同步 Compose 的连接及存储凭证。
+# 在 backend 目录首次配置；已有文件时直接编辑，填写独立容器的连接及存储凭证。
 if (-not (Test-Path .env.dev)) { Copy-Item .env.dev.example .env.dev }
 # 配置完成后直接启动，无需每次手动设置数据库密码环境变量。
 mvn spring-boot:run '-Dspring-boot.run.profiles=dev'
@@ -45,7 +44,7 @@ Working directory 可以是仓库根目录或 `backend` 目录，环境文件统
 此方式使用 [Spring Boot 配置导入](https://docs.spring.io/spring-boot/reference/features/external-config.html)，文件中的键属于应用配置，不会写入操作系统环境变量。
 
 开发环境默认 MySQL `127.0.0.1:13306/easy_community`、用户名 `ec_dev`、Redis `127.0.0.1:16379`。
-Navicat 同样使用 `127.0.0.1:13306` 和开发账号；不要连接容器 IP。Compose 的 Redis 必须配置密码。
+上述为应用默认值，实际连接以 `.env.dev` 为准。Navicat 使用 MySQL 容器发布到宿主机的实际端口和账号；Redis 密码与容器配置保持一致。
 可覆盖 `DB_URL / DB_USERNAME / DB_PASSWORD / REDIS_HOST / REDIS_PORT / REDIS_PASSWORD / SERVER_PORT`。
 本地 HTTP Cookie 不设置 Secure；所有环境均为 HttpOnly、Host-only、Path=/、SameSite=Lax。
 
