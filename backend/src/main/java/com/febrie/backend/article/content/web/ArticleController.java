@@ -8,8 +8,11 @@ import com.febrie.backend.article.content.application.dto.ArticleEditView;
 import com.febrie.backend.article.content.web.request.ArticleSaveRequest;
 import com.febrie.backend.article.content.web.response.ArticleSaveResponse;
 import com.febrie.backend.article.content.web.response.ArticleLikeAssembler;
+import com.febrie.backend.article.view.application.ArticleViewService;
 import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.user.application.dto.UserActor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,12 +23,16 @@ import tools.jackson.databind.ObjectMapper;
 @RestController
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class ArticleController {
+    private static final Logger log = LoggerFactory.getLogger(ArticleController.class);
     private final ArticleService articles;
     private final ArticleQueryService queries;
     private final ObjectMapper mapper;
     private final ArticleLikeAssembler likes;
-    public ArticleController(ArticleService articles, ArticleQueryService queries, ObjectMapper mapper, ArticleLikeAssembler likes) {
+    private final ArticleViewService views;
+    public ArticleController(ArticleService articles, ArticleQueryService queries, ObjectMapper mapper,
+                             ArticleLikeAssembler likes, ArticleViewService views) {
         this.articles = articles; this.queries = queries; this.mapper = mapper; this.likes=likes;
+        this.views = views;
     }
     @PostMapping(value = "/api/articles", consumes = "application/json")
     public ArticleSaveResponse save(@AuthenticationPrincipal SessionPrincipal principal, @RequestBody byte[] body) {
@@ -38,8 +45,17 @@ public class ArticleController {
         articles.hide(actor(principal), ArticleIds.parse(id));
     }
     @GetMapping("/api/articles/{id}")
-    public Object detail(@PathVariable String id,@AuthenticationPrincipal SessionPrincipal principal) {
-        return likes.detail(queries.detail(ArticleIds.parse(id)),principal==null?null:principal.userId());
+    public Object detail(@PathVariable String id, @AuthenticationPrincipal SessionPrincipal principal) {
+        long articleId = ArticleIds.parse(id);
+        var response = likes.detail(queries.detail(articleId), principal == null ? null : principal.userId());
+        // 公开详情与点赞信息读取成功后记录一次PV；缓存命中同样计数。
+        try {
+            views.record(articleId);
+        } catch (RuntimeException failure) {
+            // 浏览统计允许漏计；不重试结果未知的加一，也不影响已取得的详情响应。
+            log.warn("记录文章浏览失败 articleId={} error={}", articleId, failure.getClass().getSimpleName());
+        }
+        return response;
     }
     @GetMapping("/api/articles/{id}/edit")
     public ArticleEditView edit(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable String id) {
