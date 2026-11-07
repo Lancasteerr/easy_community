@@ -23,4 +23,10 @@ public class ArticleSearchController {
         return assembler.assemble(searches.page(new ArticleSearchQuery("search", q, tagId, sort, size), cursor),
                 principal == null ? null : principal.userId());
     }
+    @GetMapping("/api/articles/feed")
+    public ArticleSearchAssembler.Response feed(@RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String cursor, @AuthenticationPrincipal SessionPrincipal principal) {
+        return assembler.assemble(searches.page(new ArticleSearchQuery("feed", null, null, "recommended", size), cursor),
+                principal == null ? null : principal.userId());
+    }
 }

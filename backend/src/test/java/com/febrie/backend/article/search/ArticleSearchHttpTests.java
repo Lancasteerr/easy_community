@@ -16,6 +16,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** 静态路由与扁平卡片协议验证；完整Session安全链由现有HTTP集成测试回归。 */
 class ArticleSearchHttpTests {
+    @Test void feedUsesRecommendedQueryAndDoesNotRecordViews() throws Exception {
+        var service = mock(ArticleSearchService.class);
+        var views = mock(ArticleViewService.class); var likes = mock(LikeQueryService.class);
+        when(service.page(new ArticleSearchQuery("feed", null, null, "recommended", 20), null))
+                .thenReturn(new ArticleSearchService.Page(List.of(), null));
+        when(views.totals(List.of())).thenReturn(Map.of()); when(likes.summaries(null, List.of())).thenReturn(Map.of());
+        var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes)))
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
+        mvc.perform(get("/api/articles/feed")).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+        verify(service).page(new ArticleSearchQuery("feed", null, null, "recommended", 20), null);
+        verify(views, never()).record(anyLong());
+    }
     @Test void guestGetsFlatCardWithOnlyFinalItemCounts() throws Exception {
         var service = mock(ArticleSearchService.class);
         var views = mock(ArticleViewService.class); var likes = mock(LikeQueryService.class);
