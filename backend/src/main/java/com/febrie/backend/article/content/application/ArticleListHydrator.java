@@ -21,13 +21,13 @@ public class ArticleListHydrator {
     private final ArticleCache cache;
     private final ArticleListCacheStore lists;
     private final ArticleReader reader;
+    private final java.util.concurrent.Semaphore publicReads = new java.util.concurrent.Semaphore(4);
     public ArticleListHydrator(ArticleCache cache, ArticleListCacheStore lists, ArticleReader reader) {
         this.cache = cache; this.lists = lists; this.reader = reader;
     }
 
-    public List<ArticleListView> authorPage(long author, List<Long> ids) {
-        if (ids.isEmpty()) { return List.of(); }
-        Assembly assembly = new Assembly(ids);
+    private Assembly assemble(List<Long> ids, boolean publicCandidates) {
+        Assembly assembly = new Assembly(ids, publicCandidates);
         long deadline = System.nanoTime() + ArticleCache.WAIT_BUDGET.toNanos();
         while (!assembly.pending.isEmpty()) {
             var hidden = cache.hidden(assembly.pending);
@@ -52,6 +52,22 @@ public class ArticleListHydrator {
             }
         }
 
+        return assembly;
+    }
+
+    /** ES候选不带作者授权前提；只跳过已知无效项，不额外强查主库状态。 */
+    public List<ArticleListView> publicCandidates(List<Long> ids) {
+        if (ids.isEmpty()) { return List.of(); }
+        var assembly = assemble(ids, true);
+        cache.hidden(assembly.result.keySet()).forEach((id, hidden) -> {
+            if (hidden) { assembly.result.remove(id); }
+        });
+        return ids.stream().map(assembly.result::get).filter(Objects::nonNull).toList();
+    }
+
+    public List<ArticleListView> authorPage(long author, List<Long> ids) {
+        if (ids.isEmpty()) { return List.of(); }
+        var assembly = assemble(ids, false);
         // 返回前再查墓碑；与已授权分页SQL矛盾的项由主库批量核对，不绕锁写共享缓存。
         cache.hidden(assembly.result.keySet()).forEach((id, hidden) -> {
             if (hidden) { assembly.conflicts.add(id); assembly.result.remove(id); }
@@ -86,7 +102,10 @@ public class ArticleListHydrator {
             if (!acceptCached(id, hidden.get(id), values.get(id), assembly)) { load.add(id); }
         }
         if (load.isEmpty()) { return; }
-        var loaded = reader.lists(load);
+        Map<Long, LoadedArticle<ArticleListView>> loaded;
+        if (assembly.publicCandidates && !publicReads.tryAcquire()) { throw ArticleErrors.unavailable(); }
+        try { loaded = reader.lists(load); }
+        finally { if (assembly.publicCandidates) { publicReads.release(); } }
         log.debug("文章列表批量回源 count={}", load.size());
         for (long id : load) {
             var value = Objects.requireNonNull(loaded.get(id), "SQL批量项未确认");
@@ -106,6 +125,9 @@ public class ArticleListHydrator {
         private final Map<Long, ArticleListView> result = new HashMap<>();
         private final Set<Long> pending;
         private final Set<Long> conflicts = new HashSet<>();
-        private Assembly(List<Long> ids) { pending = new LinkedHashSet<>(ids); }
+        private final boolean publicCandidates;
+        private Assembly(List<Long> ids, boolean publicCandidates) {
+            pending = new LinkedHashSet<>(ids); this.publicCandidates = publicCandidates;
+        }
     }
 }

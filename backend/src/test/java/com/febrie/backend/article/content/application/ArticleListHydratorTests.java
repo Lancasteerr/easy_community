@@ -56,6 +56,47 @@ class ArticleListHydratorTests {
         verify(cache, never()).missing(anyLong(), anyString());
         verify(lists, never()).publish(anyLong(), anyString(), any());
     }
+    @Test void publicCandidatesSkipKnownInvalidWithoutSqlAndAllowDifferentAuthors() {
+        var other = new ArticleListView("2", "other", "100", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.negative(), 2L, CacheValue.hit(other)));
+        assertEquals(List.of(other), hydrator.publicCandidates(List.of(1L, 2L)));
+        verifyNoInteractions(reader);
+    }
+    @Test void publicMissesShareOneSqlAndKeepCandidateOrder() {
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss(), 2L, CacheValue.miss()));
+        when(cache.tryLock(1)).thenReturn("a"); when(cache.tryLock(2)).thenReturn("b");
+        when(reader.lists(List.of(2L, 1L))).thenReturn(Map.of(1L, LoadedArticle.visible(view(1)), 2L, LoadedArticle.visible(view(2))));
+        assertEquals(List.of("2", "1"), hydrator.publicCandidates(List.of(2L, 1L)).stream().map(ArticleListView::articleId).toList());
+        verify(reader, times(1)).lists(List.of(2L, 1L));
+    }
+    @Test void publicColdReadsAreBoundedToFourWithoutLeakingSlots() throws Exception {
+        when(lists.get(anyCollection())).thenAnswer(call -> {
+            Map<Long, CacheValue<ArticleListView>> values = new HashMap<>();
+            for (long id : (Collection<Long>) call.getArgument(0)) { values.put(id, CacheValue.miss()); }
+            return values;
+        });
+        when(cache.tryLock(anyLong())).thenReturn("token");
+        var entered = new java.util.concurrent.CountDownLatch(4);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        when(reader.lists(anyCollection())).thenAnswer(call -> {
+            entered.countDown();
+            if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) { throw new IllegalStateException("回源释放超时"); }
+            long id = ((Collection<Long>) call.getArgument(0)).iterator().next();
+            return Map.of(id, LoadedArticle.visible(view(id)));
+        });
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(4)) {
+            var futures = new ArrayList<java.util.concurrent.Future<?>>();
+            for (long id = 1; id <= 4; id++) {
+                long candidate = id; futures.add(executor.submit(() -> hydrator.publicCandidates(List.of(candidate))));
+            }
+            try {
+                assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+                assertThrows(com.febrie.backend.shared.error.ApiException.class, () -> hydrator.publicCandidates(List.of(5L)));
+            } finally { release.countDown(); }
+            for (var future : futures) { future.get(5, java.util.concurrent.TimeUnit.SECONDS); }
+        } finally { release.countDown(); }
+        assertEquals(1, hydrator.publicCandidates(List.of(6L)).size());
+    }
     private static ArticleListView view(long id) {
         return new ArticleListView(Long.toString(id), "title", "9", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
     }
