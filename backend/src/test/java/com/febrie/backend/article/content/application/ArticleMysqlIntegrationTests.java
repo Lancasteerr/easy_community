@@ -124,6 +124,20 @@ class ArticleMysqlIntegrationTests {
         assertEquals(2, indexReader.load(id).metaVersion());
     }
 
+    @Test void rankSqlExcludesExpiredBucketAndIncludesZeroViewArticle() {
+        long id = commits.create(actor, content("window", null), new ArticleCommitService.Attempt());
+        long zero = commits.create(actor, content("zero", null), new ArticleCommitService.Attempt());
+        java.time.LocalDate day = java.time.LocalDate.of(2026, 11, 8);
+        for (int offset : List.of(0, 1, 6, 7)) {
+            jdbc.update("INSERT INTO article_view_stat(article_id,stat_date,pv) VALUES (?,?,?)", id, java.sql.Date.valueOf(day.minusDays(offset)), offset == 7 ? 99 : 5);
+        }
+        var rows = indexMapper.ranking(List.of(id, zero), day.minusDays(6), day).stream()
+                .collect(java.util.stream.Collectors.toMap(r -> r.articleId(), r -> r.views()));
+        assertEquals(15, rows.get(id)); assertEquals(0, rows.get(zero));
+        assertTrue(indexMapper.candidates(day.minusDays(7), 0, Math.max(id, zero)).contains(id));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='article_view_stat' AND index_name='idx_article_view_stat_date_article'", Integer.class));
+    }
+
     @Test void outboxFailureRollsBackContentAndVersion() {
         long id = commits.create(actor, content("before", null), new ArticleCommitService.Attempt());
         doThrow(new IllegalStateException("模拟Outbox写入失败")).when(articles).recordIndexEvent(id, true);
