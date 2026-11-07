@@ -33,6 +33,7 @@ public class ArticleCommitService {
         long id = articles.insert(actor.userId(), content, now);
         attempt.id = id;
         replace(id, actor.userId(), content, now);
+        articles.recordIndexEvent(id, false);
         attempt.bodyCompleted = true;
         return id;
     }
@@ -44,6 +45,7 @@ public class ArticleCommitService {
         if (current.authorId() != actor.userId()) { throw ArticleErrors.forbidden(); }
         if (current.hidden()) { throw ArticleErrors.hidden(); }
         replace(id, current.authorId(), content, clock.instant().truncatedTo(ChronoUnit.MILLIS));
+        articles.recordIndexEvent(id, true);
         attempt.id = id;
         attempt.bodyCompleted = true;
         return id;
@@ -57,7 +59,10 @@ public class ArticleCommitService {
             throw ArticleErrors.forbidden();
         }
         // 已隐藏也完成权限检查；不解绑媒体、不允许恢复，重复删除可再次修复缓存。
-        if (!current.hidden()) { articles.hide(id, clock.instant().truncatedTo(ChronoUnit.MILLIS)); }
+        if (!current.hidden()) {
+            articles.hide(id, clock.instant().truncatedTo(ChronoUnit.MILLIS));
+            articles.recordIndexEvent(id, true);
+        }
         attempt.id = id;
         attempt.bodyCompleted = true;
     }

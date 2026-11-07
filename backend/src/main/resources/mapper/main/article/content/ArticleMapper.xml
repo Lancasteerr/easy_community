@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.febrie.backend.article.content.infrastructure.persistence.mapper.ArticleMapper">
+    <!-- 调用者已持文章行锁；创建路径不递增，直接记录最终v1。 -->
+    <update id="advanceMetaVersion">UPDATE article SET meta_version=meta_version+1 WHERE id=#{id}</update>
+    <insert id="appendIndexEvent">
+        INSERT INTO article_outbox(article_id, meta_version)
+        SELECT id, meta_version FROM article WHERE id=#{id}
+    </insert>
     <!-- 与文章创建同事务，不依赖点赞功能开关。 -->
     <insert id="initializeLikeCount">INSERT INTO article_like_count(article_id, like_count) VALUES (#{id}, 0)</insert>
     <select id="lock" resultType="com.febrie.backend.article.content.infrastructure.persistence.entity.ArticleEntity">

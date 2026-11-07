@@ -21,6 +21,12 @@ public class ArticleRepository {
     public Optional<ArticleSnapshot> find(long id) { return snapshot(articles.selectById(id)); }
     public Optional<ArticleSnapshot> lock(long id) { return snapshot(articles.lock(id)); }
 
+    /** 与文章写入共享事务和行锁；INSERT SELECT准确记录本次提交版本。 */
+    public void recordIndexEvent(long id, boolean advanceVersion) {
+        if (advanceVersion && articles.advanceMetaVersion(id) != 1) { throw new IllegalStateException("文章版本更新失败"); }
+        if (articles.appendIndexEvent(id) != 1) { throw new IllegalStateException("文章索引事件写入失败"); }
+    }
+
     /** 先插入不带封面的文章，避免封面外键在媒体排序锁之前提前锁文件。 */
     public long insert(long author, PreparedArticle content, Instant now) {
         var row = new ArticleEntity();

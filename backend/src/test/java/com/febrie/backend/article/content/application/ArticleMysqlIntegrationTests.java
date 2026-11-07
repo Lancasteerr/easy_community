@@ -55,6 +55,7 @@ class ArticleMysqlIntegrationTests {
     @Autowired DatabaseFixtureMapper fixtures;
     @Autowired ArticleFixtureMapper articleFixtures;
     @Autowired TransactionTemplate transaction;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @MockitoSpyBean ArticleRepository articles;
     @MockitoSpyBean HikariDataSource dataSource;
     @MockitoBean UploadStorage storage;
@@ -85,6 +86,26 @@ class ArticleMysqlIntegrationTests {
         fixtures.deleteIdentities(actor.userId()); fixtures.deleteUser(actor.userId());
         createdTags.forEach(articleFixtures::deleteTag);
     }
+    @Test void indexVersionAndOutboxShareTransaction() {
+        long id = commits.create(actor, content("v1", null), new ArticleCommitService.Attempt());
+        assertEquals(1L, jdbc.queryForObject("SELECT meta_version FROM article WHERE id=?", Long.class, id));
+        commits.update(actor, id, content("v2", null), new ArticleCommitService.Attempt());
+        commits.hide(actor, id, new ArticleCommitService.Attempt());
+        commits.hide(actor, id, new ArticleCommitService.Attempt());
+        assertEquals(List.of(1L, 2L, 3L), jdbc.queryForList(
+                "SELECT meta_version FROM article_outbox WHERE article_id=? ORDER BY id", Long.class, id));
+        assertEquals(3L, jdbc.queryForObject("SELECT meta_version FROM article WHERE id=?", Long.class, id));
+    }
+
+    @Test void outboxFailureRollsBackContentAndVersion() {
+        long id = commits.create(actor, content("before", null), new ArticleCommitService.Attempt());
+        doThrow(new IllegalStateException("模拟Outbox写入失败")).when(articles).recordIndexEvent(id, true);
+        assertThrows(IllegalStateException.class, () -> commits.update(actor, id, content("after", null), new ArticleCommitService.Attempt()));
+        assertEquals("before", articles.find(id).orElseThrow().title());
+        assertEquals(1L, jdbc.queryForObject("SELECT meta_version FROM article WHERE id=?", Long.class, id));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM article_outbox WHERE article_id=?", Integer.class, id));
+    }
+
     @Test void autoIdAndMediaCommitTogetherAndHidePreservesReferences() {
         assertTrue(AopUtils.isAopProxy(commits));
         String image = readyImage();

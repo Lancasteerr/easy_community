@@ -21,6 +21,7 @@ public class ArticleEntity {
     private String contentHtml;
     private byte[] coverMediaId;
     private boolean hidden;
+    private Long metaVersion;
     private Instant createdAt;
     private Instant updatedAt;
     private Instant publishedAt;

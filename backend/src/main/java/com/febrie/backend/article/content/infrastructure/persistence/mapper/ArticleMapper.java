@@ -10,6 +10,8 @@ import org.apache.ibatis.annotations.Param;
 
 /** 锁、部分字段投影与关系维护在XML中显式表达，不伪造关系表单列主键。 */
 public interface ArticleMapper extends BaseMapper<ArticleEntity> {
+    int advanceMetaVersion(@Param("id") long id);
+    int appendIndexEvent(@Param("id") long id);
     int initializeLikeCount(@Param("id") long id);
     ArticleEntity lock(@Param("id") long id);
     List<ArticleEntity> listRows(@Param("ids") Collection<Long> ids);
