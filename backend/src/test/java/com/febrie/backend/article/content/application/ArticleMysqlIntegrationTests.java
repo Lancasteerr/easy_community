@@ -56,6 +56,9 @@ class ArticleMysqlIntegrationTests {
     @Autowired ArticleFixtureMapper articleFixtures;
     @Autowired TransactionTemplate transaction;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired com.febrie.backend.article.search.application.ArticleIndexReader indexReader;
+    @Autowired org.mybatis.spring.SqlSessionTemplate sqlSession;
+    @MockitoSpyBean com.febrie.backend.article.search.infrastructure.persistence.mapper.ArticleIndexMapper indexMapper;
     @MockitoSpyBean ArticleRepository articles;
     @MockitoSpyBean HikariDataSource dataSource;
     @MockitoBean UploadStorage storage;
@@ -79,6 +82,7 @@ class ArticleMysqlIntegrationTests {
     @AfterEach void cleanup() {
         reset(articles);
         reset(dataSource);
+        reset(indexMapper);
         articleFixtures.deleteTagsForAuthor(actor.userId());
         articleFixtures.deleteLikeStatesForAuthor(actor.userId()); articleFixtures.deleteLikeCountsForAuthor(actor.userId()); articleFixtures.deleteArticlesForAuthor(actor.userId());
         fixtures.deleteOwnedReferences(actor.userId());
@@ -95,6 +99,29 @@ class ArticleMysqlIntegrationTests {
         assertEquals(List.of(1L, 2L, 3L), jdbc.queryForList(
                 "SELECT meta_version FROM article_outbox WHERE article_id=? ORDER BY id", Long.class, id));
         assertEquals(3L, jdbc.queryForObject("SELECT meta_version FROM article WHERE id=?", Long.class, id));
+    }
+
+    @Test void indexReaderKeepsMetadataAndTagsInSameSnapshot() throws Exception {
+        long tag = tagRepository.insert("idx_" + UUID.randomUUID().toString().substring(0, 16));
+        createdTags.add(tag);
+        long id = commits.create(actor, content("old", null), new ArticleCommitService.Attempt());
+        CountDownLatch articleRead = new CountDownLatch(1), continueTags = new CountDownLatch(1);
+        doAnswer(call -> {
+            articleRead.countDown();
+            if (!continueTags.await(10, TimeUnit.SECONDS)) { throw new IllegalStateException("索引标签屏障超时"); }
+            // MyBatis接口代理不能callRealMethod，直接取得同一事务中的真实Mapper执行SQL。
+            return sqlSession.getMapper(com.febrie.backend.article.search.infrastructure.persistence.mapper.ArticleIndexMapper.class).tags(List.of(id));
+        }).when(indexMapper).tags(List.of(id));
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var read = executor.submit(() -> indexReader.load(id));
+            try {
+                assertTrue(articleRead.await(5, TimeUnit.SECONDS));
+                commits.update(actor, id, new PreparedArticle("new", "new", "{}", "new", null, Set.of(), List.of(tag)), new ArticleCommitService.Attempt());
+            } finally { continueTags.countDown(); }
+            var snapshot = read.get(10, TimeUnit.SECONDS);
+            assertEquals(1, snapshot.metaVersion()); assertEquals("old", snapshot.title()); assertTrue(snapshot.tagIds().isEmpty());
+        } finally { continueTags.countDown(); }
+        assertEquals(2, indexReader.load(id).metaVersion());
     }
 
     @Test void outboxFailureRollsBackContentAndVersion() {
