@@ -78,10 +78,10 @@ class LikeCapacityTests {
                 clearDisplayCache(first);
                 measurements.add(stage("cold", 60, seconds));
                 measurements.add(stage("mixed", 60, seconds));
-                for (var app : applications) { app.getBean(SimpleMessageListenerContainer.class).stop(); }
+                for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).stop(); }
                 measurements.add(stage("backlog", 60, Math.min(5, seconds)));
                 long resumed = System.nanoTime();
-                for (var app : applications) { app.getBean(SimpleMessageListenerContainer.class).start(); }
+                for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).start(); }
                 await().atMost(Duration.ofSeconds(60)).until(() -> { samplePending(); return pending.isEmpty(); });
                 measurements.add(Map.of("scenario", "backlog_recovery", "milliseconds", (System.nanoTime() - resumed) / 1_000_000));
             }
@@ -210,7 +210,7 @@ class LikeCapacityTests {
     }
     private void cleanup() {
         clients.forEach(Client::close);
-        for (var app : applications) { app.getBean(SimpleMessageListenerContainer.class).stop(); }
+        for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).stop(); }
         if (!applications.isEmpty()) {
             var app = applications.getFirst();
             if (namespace != null) {

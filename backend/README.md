@@ -1,5 +1,7 @@
 # 社区后端：Session 登录、用户、文件与文章管理
 
+文章标题搜索、Tag筛选、全局推荐流及索引恢复见[搜索与推荐流运维说明](../docs/zh-CN/article-search-operations.md)。查询默认关闭，首次导入和对账后再开启。
+
 代码组织与包职责见架构文档：[简体中文](../docs/zh-CN/backend-architecture.md) · [English](../docs/en-US/backend-architecture.md)。
 
 文章CRUD已接入，接口、正文白名单、最终一致缓存及维护命令见[文章接入与恢复](../docs/zh-CN/article-crud-implementation.md)。删除不可恢复；本人管理列表只展示公开文章，游客仅可读取单篇详情。

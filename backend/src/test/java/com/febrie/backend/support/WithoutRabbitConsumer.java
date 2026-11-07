@@ -9,5 +9,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @MockitoBean(name = "likeListener", types = SimpleMessageListenerContainer.class)
+@WithoutSearchIndexing
 @TestPropertySource(properties = "spring.rabbitmq.dynamic=false")
 public @interface WithoutRabbitConsumer { }

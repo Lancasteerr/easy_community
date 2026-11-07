@@ -48,6 +48,7 @@ import static org.awaitility.Awaitility.await;
 
 /** 专用MySQL/Redis/vhost上的真实HTTP和MQ闭环，测试结束只删除本次随机资源。 */
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT)
+@com.febrie.backend.support.WithoutSearchIndexing
 @ActiveProfiles("test")
 @EnabledIfEnvironmentVariable(named="IT_LIKE",matches="true")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)

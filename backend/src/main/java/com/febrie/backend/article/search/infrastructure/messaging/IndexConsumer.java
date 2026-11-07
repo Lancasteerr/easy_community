@@ -62,6 +62,8 @@ public class IndexConsumer {
     }
     private static boolean retryable(Exception failure) {
         return failure instanceof IOException || failure instanceof TransientDataAccessException || failure instanceof TransactionException
+                || failure instanceof org.springframework.dao.DataAccessResourceFailureException
+                || failure instanceof org.springframework.dao.RecoverableDataAccessException
                 || (failure instanceof ElasticsearchException e && (e.status() == 429 || e.status() == 409 || e.status() >= 500));
     }
 }

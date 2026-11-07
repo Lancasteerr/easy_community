@@ -19,6 +19,8 @@ public class SearchConfiguration {
     @Bean(destroyMethod = "close")
     public ElasticsearchClient articleElasticsearch(SearchProperties p) {
         var builder = Rest5Client.builder(HttpHost.create(p.uri()));
+        // 重试由消费/Bulk的有界策略负责，避免HTTP默认重试叠加延迟和重复写入。
+        builder.setHttpClientConfigCallback(c -> c.disableAutomaticRetries());
         builder.setConnectionConfigCallback(c -> c.setConnectTimeout(Timeout.ofMilliseconds(p.connectTimeout().toMillis()))
                 .setSocketTimeout(Timeout.ofMilliseconds(p.responseTimeout().toMillis())));
         builder.setRequestConfigCallback(c -> c.setResponseTimeout(Timeout.ofMilliseconds(p.responseTimeout().toMillis()))

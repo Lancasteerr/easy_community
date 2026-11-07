@@ -47,7 +47,7 @@ class LikeApplicationRestartTests {
         try{
             var first=start(true);var second=start(true);
             for(var app:List.of(first,second)){
-                var listener=app.getBean(SimpleMessageListenerContainer.class);
+                var listener=app.getBean("likeListener", SimpleMessageListenerContainer.class);
                 assertTrue(listener.isAutoStartup());assertTrue(listener.isRunning());
                 assertEquals(Integer.toString(epoch),app.getBean(LikeVersionAllocator.class).status().get(0));
             }
@@ -78,6 +78,9 @@ class LikeApplicationRestartTests {
                 var admin=app.getBean(AmqpAdmin.class);
                 admin.deleteQueue(p.name("command.q"));admin.deleteQueue(p.name("dead.q"));
                 admin.deleteExchange(p.name("command.x"));admin.deleteExchange(p.name("dead.x"));
+                var search=app.getBean(com.febrie.backend.article.search.infrastructure.config.SearchProperties.class);
+                admin.deleteQueue(search.name("work.q"));admin.deleteQueue(search.name("dead.q"));
+                admin.deleteExchange(search.name("change.x"));admin.deleteExchange(search.name("dead.x"));
                 jdbc.update("DELETE FROM article_like_state WHERE article_id=?",article);
                 jdbc.update("DELETE FROM article_like_count WHERE article_id=?",article);
                 jdbc.update("DELETE FROM article WHERE id=?",article);

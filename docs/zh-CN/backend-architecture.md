@@ -1,5 +1,13 @@
 # 后端代码组织与架构约定
 
+## 文章检索与推荐流 v1
+
+`article.search`集中维护标题/Tag检索、PIT游标、推荐算分和可靠索引同步。内容事务在创建/编辑/首次隐藏时写meta_version与Outbox；新增主库Mapper由统一sqlSessionTemplate扫描，XML位于mapper/main/article/search。消费者读取短RR快照并通过ES脚本防倒退，隐藏留墓碑，统计不修改元数据版本。
+
+搜索/feed共用公开卡片装配，按ES顺序批量回源，只过滤已知无效项，不额外强查主库状态；作者管理页约束保留。响应阶段批量装配计数和个人点赞状态。排名只读SQL七日浏览量，日期候选与每日校准共用分数Bulk，不建立排名锁或批次状态表。
+
+Relay与排名分别使用专用单线程调度器，默认taskScheduler归属保持明确。非Web维护负责导入/对账、有限重放及维护窗口别名切换，见[检索运维说明](article-search-operations.md)。
+
 [English](../en-US/backend-architecture.md) · [启动、接口和部署说明](../../backend/README.md)
 
 ## 从业务找到代码
@@ -217,7 +225,7 @@ Flyway V2定义直接重写，仅用于新建空库。不存在旧complete/prepa
 文章接口与维护流程见[文章CRUD接入](article-crud-implementation.md)。删除只设置不可恢复的hidden，保留媒体引用；作者管理SQL只选本人公开文章，不建立回收站、恢复API或隐藏条目私有装配。
 
 - ArticleService明确禁止外层事务，先经ArticleContentRenderer准备规范JSON、安全HTML、摘要及媒体集合，再经独立ArticleCommitService代理执行一次RC短事务；文章行先于媒体行锁定。最后执行有界缓存维护，缓存异常不覆盖已确认提交。
-- 写事务只在文章锁内复核资源权限及hidden，媒体门禁复用MediaReferenceService。无SQL自动重试、版本、任务表或消息队列。当前调用内存中的提交确认只用于区分代理提交异常，不是持久化业务状态。
+- 写事务只在文章锁内复核资源权限及hidden，媒体门禁复用MediaReferenceService。无SQL自动重试；元数据版本和Outbox与内容同事务，提交后经MQ同步ES。当前调用内存中的提交确认只用于区分代理提交异常，不是持久化业务状态。
 - ArticleQueryService与ArticleListHydrator禁止携带外层事务，缓存获锁后才调用ArticleReader建立短只读RR视图。列表只查小字段，作者通过AccountQueryService.displays批量读取ID/username，不读取凭证或排除软删除作者。
 - 详情与列表DTO均自包含coverUrl、作者名与Tag名。批量装配按缓存检查、非阻塞取锁、二次检查、合并SQL、逐项token发布分段组织；不持一把锁阻塞等待另一把。
 - article.content.infrastructure.cache直接复用Spring Data Redis与固定Lua资源；三态投影、5秒共享锁、双失效、不可自动过期墓碑均限于文章业务。无通用脚本框架或第二套锁库。
@@ -248,7 +256,7 @@ Redis 异常及无效返回沿现有依赖失败处理，不降级放行，不�
 
 ## 文章能力与共享事务边界
 
-文章先按 `content`、`view`、`tag`、`like` 找能力，再进入对应技术层。`article.common` 只放共用错误和ID解析；内容应用层保留保存、提交、渲染、读取与缓存维护，不为每个服务再建单类目录。浏览统计仍由现有调用者和任务使用，本次不接入文章HTTP查询。
+文章先按 `content`、`view`、`tag`、`like`、`search` 找能力，再进入对应技术层。`article.common` 只放共用错误和ID解析；内容应用层保留保存、提交、渲染、读取与缓存维护，不为每个服务再建单类目录。浏览统计已接入公开详情，搜索/feed只批量读取计数，不增加浏览。
 
 标签目录通过 `TagService.requireAllExist` 提供存在性校验，文章提交不访问标签基础设施；`article_tag` 集合替换与展示JOIN仍属于文章内容持久化。校验沿用调用者事务，不另建事务。文章创建初始化点赞计数仍与正文、标签、媒体引用同事务，点赞入口关闭也必须执行，任何失败一起回滚。这是明确保留的共享数据边界，不改为异步事件。
 

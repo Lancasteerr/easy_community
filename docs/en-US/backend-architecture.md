@@ -1,5 +1,13 @@
 # Backend Code Organization and Architecture
 
+## Article search and global feed v1
+
+`article.search` owns title/tag queries, PIT cursors, ranking and reliable index synchronization. Content transactions append the metadata version and Outbox event on create, edit and first hide. New main-database mappers use the existing sqlSessionTemplate and mapper/main/article/search XML directory. Consumers read a short RR snapshot and apply conditional ES scripts; hidden documents retain their version tombstones. Statistics do not advance metadata versions.
+
+Search and feed share public card hydration, preserving ES order with batch cache/database reads. Known invalid items are skipped without an additional authoritative visibility query; author-management semantics remain unchanged. Counts and user-specific like state are assembled only for final response items. Ranking reads persisted seven-day views and uses date candidates plus daily calibration, without distributed ranking locks or persistent batch state.
+
+Relay and ranking have separate single-thread schedulers while the default scheduler remains explicit. Non-web maintenance supports import, audit, bounded replay and maintenance-window alias switching. See the [operations guide](../zh-CN/article-search-operations.md).
+
 [简体中文](../zh-CN/backend-architecture.md) · [Startup, API, and deployment guide](../../backend/README.md)
 
 ## Find Code by Business Responsibility
@@ -221,7 +229,7 @@ The rewritten Flyway V2 definition is for new databases only. Old complete/prepa
 See the [article contract and recovery guide](../zh-CN/article-crud-implementation.md). Deletion sets an irreversible hidden flag and preserves media references. Author management SQL selects only that author's public articles; there is no recycle bin, restore API, or private hidden-row hydration.
 
 - ArticleService rejects surrounding transactions, prepares canonical JSON, safe HTML, summary and media through ArticleContentRenderer, then calls the independent ArticleCommitService proxy for one short RC transaction. Article locks precede media locks. Bounded post-commit cache maintenance cannot override confirmed SQL success.
-- Article permissions and hidden state are checked under the row lock. MediaReferenceService remains the binding gate. There are no SQL retries, editing versions, task tables or queues. Per-call in-memory commit observation classifies proxy failures; it is not persistent business state.
+- Article permissions and hidden state are checked under the row lock. MediaReferenceService remains the binding gate. SQL is not automatically retried; metadata versions and Outbox events commit with content, then reach ES through MQ. Per-call in-memory commit observation classifies proxy failures; it is not persistent business state.
 - ArticleQueryService and ArticleListHydrator reject surrounding transactions. After obtaining cache locks they invoke ArticleReader to establish a short read-only RR snapshot. List SQL excludes large content fields. AccountQueryService.displays batches only IDs and usernames, including historical attribution for soft-deleted accounts.
 - Detail/list DTOs contain coverUrl, author name and tag names. Batch hydration separates cache checks, non-blocking lock acquisition, rechecks, combined SQL and per-token publication. It never blocks on another lock while holding one.
 - article.content.infrastructure.cache uses Spring Data Redis and fixed Lua resources directly. Three-state projections, the shared five-second lock, double invalidation and persistent tombstones stay article-specific; no generic scripting framework or second lock library is added.
@@ -252,7 +260,7 @@ Verify consistent account snapshots and fresh versions, controller actor convers
 
 ## Article Capabilities and Shared Transactions
 
-Find article code by `content`, `view`, `tag`, or `like`, then by its technical layer. `article.common` contains only shared article errors and ID parsing. Content application services retain save, commit, rendering, reading, and cache maintenance responsibilities without a separate directory for every class. Existing callers and tasks continue to use view statistics; this change does not add counting to HTTP queries.
+Find article code by `content`, `view`, `tag`, `like`, or `search`, then by its technical layer. `article.common` contains only shared article errors and ID parsing. Content application services retain save, commit, rendering, reading, and cache maintenance responsibilities without a separate directory for every class. Public details record views; search and feed read counts in batches without adding views.
 
 `TagService.requireAllExist` exposes catalog validation in the caller's transaction. Content no longer accesses tag infrastructure. Article-tag association replacement and display JOINs remain in content persistence. Article creation still initializes the like-count row in the same transaction as content, tags, and media references, even when likes are disabled. Failures roll back together; this documented shared data boundary is not replaced with asynchronous events.
 
