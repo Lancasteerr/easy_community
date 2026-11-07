@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.febrie.backend.article.search.infrastructure.persistence.mapper.IndexOutboxMapper">
+    <!-- 只在RC领取事务内调用，不在持锁期间访问Broker。 -->
+    <select id="available" resultType="com.febrie.backend.article.search.application.IndexEvent">
+        SELECT id AS event_id, article_id, meta_version FROM article_outbox
+        WHERE available_at &lt;= CURRENT_TIMESTAMP(3) ORDER BY available_at,id LIMIT 10 FOR UPDATE SKIP LOCKED
+    </select>
+    <update id="claim">
+        UPDATE article_outbox SET claim_token=#{token}, available_at=DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 30 SECOND)
+        WHERE id IN <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    </update>
+    <delete id="complete">DELETE FROM article_outbox WHERE id=#{id} AND claim_token=#{token}</delete>
+    <update id="retry">
+        UPDATE article_outbox SET claim_token=NULL, available_at=DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL #{delay} SECOND)
+        WHERE id=#{id} AND claim_token=#{token}
+    </update>
+    <select id="count" resultType="long">SELECT COUNT(*) FROM article_outbox</select>
+    <select id="oldestAge" resultType="long">
+        SELECT COALESCE(GREATEST(0,TIMESTAMPDIFF(SECOND,MIN(created_at),CURRENT_TIMESTAMP(3))),0) FROM article_outbox
+    </select>
+</mapper>
