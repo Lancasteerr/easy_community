@@ -43,7 +43,7 @@ SQL保存成功不等待MQ/ES；缓存维护尽力执行，允许短暂旧卡片
 | app.search.target-index | 维护目标，默认index-name |
 | app.search.replay-limit | 100，允许1～10000 |
 
-凭证放现有.env.dev或生产环境，不提交。客户端沿用Boot的9.4.5，开发/测试服务端9.5.6，Rest5与ES私有Jackson 2不替换Web JSON。普通启动不建索引、不导入、不强检ES连通性。
+凭证填写到.env.dev或.env.prod模板，使用时将所选模板复制为.env，或由部署工具注入系统环境变量，不提交真实文件。应用只读取.env，不自动读取模板；维护命令中的显式Profile须与当前配置一致。客户端沿用Boot的9.4.5，开发/测试服务端9.5.6，Rest5与ES私有Jackson 2不替换Web JSON。普通启动不建索引、不导入、不强检ES连通性。
 
 消息前缀为`${app.auth.redis-prefix}:search`，冒号换成点后追加`.article.index.change.x/work.q/dead.x/dead.q`。路由为article.index.changed和article.index.dead。工作队列/DLQ各64MiB，quorum、reject-publish，工作队列至少一次死信转发。部署通过infra/dev/search-topology.ps1声明并核验专用绑定与队列参数，已有拓扑用-VerifyOnly；该脚本从RABBITMQ_USERNAME/PASSWORD/VHOST环境变量读取管理凭证，可指定-Namespace和-ManagementUrl。不加其他业务绑定/备用交换机；mandatory不能单独证明目标队列正确。
 

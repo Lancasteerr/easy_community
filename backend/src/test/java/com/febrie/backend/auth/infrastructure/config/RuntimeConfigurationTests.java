@@ -6,7 +6,7 @@ import org.springframework.mock.env.MockEnvironment;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** 环境选择与代理信任必须显式配置，不能悄悄回退到开发配置。 */
+/** 最终运行环境必须唯一，生产代理信任和安全Cookie仍需完整配置。 */
 class RuntimeConfigurationTests {
     private AuthProperties properties(String environment, boolean secure) {
         return new AuthProperties(environment, "ec:" + environment, secure, Duration.ofHours(2),

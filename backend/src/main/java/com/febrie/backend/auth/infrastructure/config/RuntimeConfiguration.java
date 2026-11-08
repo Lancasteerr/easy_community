@@ -13,7 +13,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-/** 显式环境与生产代理边界检查，防止容器误用本地安全配置。 */
+/** 校验最终运行环境与生产代理边界，防止混合环境或不完整的生产配置。 */
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
 @EnableConfigurationProperties(AuthProperties.class)
@@ -21,7 +21,7 @@ public class RuntimeConfiguration {
     public RuntimeConfiguration(Environment env, AuthProperties properties) {
         long selected = Arrays.stream(env.getActiveProfiles()).filter(Set.of("dev", "prod", "test")::contains).count();
         if (selected != 1 || !Arrays.asList(env.getActiveProfiles()).contains(properties.environment())) {
-            throw new IllegalStateException("必须且只能显式选择dev、prod或test运行环境");
+            throw new IllegalStateException("必须且只能启用dev、prod或test中的一个运行环境");
         }
         String basePrefix = "ec:" + properties.environment();
         if (!(properties.redisPrefix().equals(basePrefix) || properties.redisPrefix().startsWith(basePrefix + ":"))

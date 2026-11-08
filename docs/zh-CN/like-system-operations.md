@@ -13,7 +13,7 @@
 
 ## 2. 环境准备
 
-按运行环境复制`backend/.env.dev.example`或`backend/.env.prod.example`为对应真实文件，填写MySQL、Redis、RabbitMQ和现有文件存储配置。示例是Java Properties格式，无需引号，不支持shell变量展开；真实凭证不提交Git。
+按运行环境复制`backend/.env.dev.example`或`backend/.env.prod.example`为对应模板，填写MySQL、Redis、RabbitMQ和现有文件存储配置，再将所选模板复制为`backend/.env`。应用只读取`.env`，由其中的`SPRING_PROFILES_ACTIVE`选择环境；也可通过部署工具注入系统环境变量。示例是Java Properties格式，无需引号，不支持shell变量展开；真实凭证不提交Git。
 
 RabbitMQ应用连接参数为`RABBITMQ_HOST/PORT/USERNAME/PASSWORD/VHOST`。`PORT`默认5672，是AMQP端口；宿主机映射不同则填写实际映射端口。管理API地址是另一连接地址，默认15672，不能填入应用的AMQP端口。生产使用私网地址和专用账号，目标vhost需事先创建，账号需具有目标命名空间内资源的configure/write/read权限。示例文件和拓扑脚本不会创建账号或vhost。
 

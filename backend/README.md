@@ -15,38 +15,42 @@ Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `eas
 
 ## 本地启动
 
-必须显式选择 `dev` 或 `prod`，无默认运行环境。选定环境后自动读取对应的 `.env.dev` 或 `.env.prod`，数据库密码不写入仓库。
+应用只读取 `.env`，由其中的 `SPRING_PROFILES_ACTIVE` 选择 `dev` 或 `prod`；未指定时默认 `dev`。`.env.dev`、`.env.prod` 是完整环境模板，不会被应用自动加载，数据库密码不写入仓库。
 
-先独立配置并启动 MySQL、Redis、MinIO、RabbitMQ 容器，在 `backend/.env.dev` 中填写实际发布端口和凭证；已有文件不自动覆盖。
+先独立配置并启动 MySQL、Redis、MinIO、RabbitMQ 容器，在 `backend/.env.dev` 中填写实际发布端口和凭证，并确认 `SPRING_PROFILES_ACTIVE=dev`，再复制为同目录的 `.env`。
 直接使用 MinIO 原生上传响应时，现有 `upload.mjs` 仍需响应适配，详见文件服务说明。
 
 ```powershell
 # 在 backend 目录首次配置；已有文件时直接编辑，填写独立容器的连接及存储凭证。
 if (-not (Test-Path .env.dev)) { Copy-Item .env.dev.example .env.dev }
-# 配置完成后直接启动，无需每次手动设置数据库密码环境变量。
-mvn spring-boot:run '-Dspring-boot.run.profiles=dev'
+# 填写开发模板后复制为当前配置；会覆盖已有 .env，请先确认需要切换环境。
+Copy-Item .env.dev .env
+# 配置完成后直接启动。
+mvn spring-boot:run
 ```
 
 IDEA 首次启动：将 `backend/pom.xml` 添加为 Maven 项目，使用 JDK 25；
-在 `BackendApplication` 的运行配置中设置 Program arguments 为 `--spring.profiles.active=dev`，保存后即可点击运行。
+配置好 `.env` 后直接运行 `BackendApplication`，不需要填写 Profile 参数；已有 `--spring.profiles.active=dev` 时应移除，否则它会覆盖文件中的环境选择。
 Working directory 可以是仓库根目录或 `backend` 目录，环境文件统一放在 `backend` 内；不需要安装 EnvFile 插件。
 
 | 文件 | 用途 | 是否提交 |
 |---|---|---|
 | `.env.dev.example` | 开发环境配置模板 | 是 |
 | `.env.prod.example` | 生产环境配置模板 | 是 |
-| `.env.dev` | 本机开发连接和密码 | 否 |
-| `.env.prod` | 服务器生产连接和密码 | 否 |
+| `.env.dev` | 已填写的开发环境模板，含 `SPRING_PROFILES_ACTIVE=dev` | 否 |
+| `.env.prod` | 已填写的生产环境模板，含 `SPRING_PROFILES_ACTIVE=prod` | 否 |
+| `.env` | 从其中一份模板复制的完整运行配置，应用只读取此文件 | 否 |
 
-环境先由启动参数或系统环境变量 `SPRING_PROFILES_ACTIVE` 选择，再加载对应文件；不要在这些文件内设置运行环境。
-两种环境不会主动加载对方的文件。没有环境文件时，仍可只使用系统环境变量启动，适合容器部署。
+应用先读取 `.env`，再根据运行环境加载对应的 `application-dev.properties` 或 `application-prod.properties`。环境选择优先级为命令行 `--spring.profiles.active`、系统环境变量 `SPRING_PROFILES_ACTIVE`、`.env` 中的同名字段、默认 `dev`。
+修改模板后需重新复制为 `.env` 并重新启动；修改 `.env` 也不会使正在运行的应用热切换。覆盖 Profile 只切换应用规则，不会把 `.env` 中的业务参数替换成另一份模板，应优先复制完整模板完成环境切换。
+没有 `.env` 时仍可只使用系统环境变量启动，适合容器部署；生产必须明确选择 `prod` 并提供完整生产参数，不会因参数缺失回退为开发环境。
 文件使用 Java Properties 语法：`KEY=value`，无需给值添加引号，不支持 `export` 或 shell 变量展开；
 反斜杠需写成双反斜杠，密码中的 `$`、`#`、`=` 可直接出现在值中，避免在值前后添加无意义空格。
 系统环境变量优先于文件中的同名变量。不要同时在仓库根目录和 `backend` 目录存放同一环境文件；两处都存在时后者优先。
 此方式使用 [Spring Boot 配置导入](https://docs.spring.io/spring-boot/reference/features/external-config.html)，文件中的键属于应用配置，不会写入操作系统环境变量。
 
 开发环境默认 MySQL `127.0.0.1:13306/easy_community`、用户名 `ec_dev`、Redis `127.0.0.1:16379`。
-上述为应用默认值，实际连接以 `.env.dev` 为准。Navicat 使用 MySQL 容器发布到宿主机的实际端口和账号；Redis 密码与容器配置保持一致。
+上述为应用默认值，实际连接以 `.env` 和系统环境变量为准。Navicat 使用 MySQL 容器发布到宿主机的实际端口和账号；Redis 密码与容器配置保持一致。
 可覆盖 `DB_URL / DB_USERNAME / DB_PASSWORD / REDIS_HOST / REDIS_PORT / REDIS_PASSWORD / SERVER_PORT`。
 本地 HTTP Cookie 不设置 Secure；所有环境均为 HttpOnly、Host-only、Path=/、SameSite=Lax。
 
@@ -60,11 +64,11 @@ Maven测试对应参数为 `mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' 
 初始化事务使用SERIALIZABLE；并发初始化最多一笔成功，另一笔可能因冲突或死锁失败，不自动重试。
 
 ```powershell
-# 数据库连接沿用 .env.dev；管理员初始凭证通过临时环境变量传递。
+# 数据库连接沿用当前 .env；管理员初始凭证通过临时环境变量传递。
 mvn -DskipTests package
 $env:ADMIN_USERNAME = '<管理员用户名>'
 $env:ADMIN_PASSWORD = '<管理员初始密码>'
-java -jar target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --spring.main.web-application-type=none --app.bootstrap.enabled=true
+java -jar target/backend-0.0.1-SNAPSHOT.jar --spring.main.web-application-type=none --app.bootstrap.enabled=true
 Remove-Item Env:ADMIN_USERNAME,Env:ADMIN_PASSWORD
 ```
 
@@ -171,9 +175,9 @@ Spring Data Redis 复用单例脚本，优先 EVALSHA，缓存缺失时回退 EV
 - `TRUSTED_PROXY_REGEX` 示例：仅Nginx为172.31.0.2时使用 `172\.31\.0\.2`；不得配置 `.*` 或信任所有私网。
 
 首次部署数据库需预先创建，生产应用账号只授予业务库所需权限；迁移与运行目前共享数据源。
-直接运行 JAR 时，在服务器工作目录中由 `.env.prod.example` 创建 `.env.prod` 并填写实际值，
-执行 `java -jar /path/to/backend.jar --spring.profiles.active=prod`。
-容器可以由部署工具将 `.env.prod` 注入为系统环境变量，或者只读挂载到容器工作目录的 `.env.prod`，不要将文件打入镜像。
+直接运行 JAR 时，在服务器工作目录中由 `.env.prod.example` 创建 `.env.prod`，填写实际值并保留 `SPRING_PROFILES_ACTIVE=prod`，再复制为 `.env`，执行 `java -jar /path/to/backend.jar`。
+容器可以通过 Compose 的 `env_file: [.env]` 注入整份配置，或直接指定已填写的 `.env.prod`；后者由 Docker 读取，不是应用自动加载模板。也可以只读挂载 `.env` 到容器工作目录，不要将文件打入镜像。
+Compose 的 `--env-file` 负责变量插值，不会单独将全部字段注入应用容器，服务仍需配置 `env_file` 或 `environment`。修改注入文件后应重新创建容器，单纯 `restart` 不会更新已有容器的环境变量。
 生产默认同源API，不配置通配CORS。未来真实跨站部署需要另行确认Cookie的SameSite及来源白名单。
 
 ## 验证
