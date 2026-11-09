@@ -61,4 +61,4 @@
 
 ## 交付与启用边界
 
-实现按九个本地master提交拆分，不推送远端。查询默认关闭，正式环境需配置连接及共享游标密钥，按[运维说明](../public/operations/search/zh-CN/article-search-operations.md)完成导入、算分和对账后开启。本次不对业务库执行上线迁移或开启业务查询，原有未跟踪交接材料及ES开发目录保留。
+实现按九个本地master提交拆分，不推送远端。查询默认关闭，正式环境需配置连接及共享游标密钥，按[运维说明](../../../public/operations/search/zh-CN/article-search-operations.md)完成导入、算分和对账后开启。本次不对业务库执行上线迁移或开启业务查询，原有未跟踪交接材料及ES开发目录保留。

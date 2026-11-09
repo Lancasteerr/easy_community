@@ -44,4 +44,4 @@ mvn -f backend/pom.xml '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' clean ver
 
 ## 后续媒体超时修复说明
 
-上述历史失败与基线对照保持原样。后续独立修复采用“通知超时未确认成功，已发出的 SQL 可能提交；零引用文件由 GC 回收”的契约，替换超时后必定 ISSUED 的断言，并补充真实对象回收与绑定保护验证。当前修复及验证结果见[媒体验收补充](media-service-v2-validation.md)。
+上述历史失败与基线对照保持原样。后续独立修复采用“通知超时未确认成功，已发出的 SQL 可能提交；零引用文件由 GC 回收”的契约，替换超时后必定 ISSUED 的断言，并补充真实对象回收与绑定保护验证。当前修复及验证结果见[媒体验收补充](../media/media-service-v2-validation.md)。

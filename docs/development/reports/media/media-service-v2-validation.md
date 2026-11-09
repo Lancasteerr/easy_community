@@ -37,11 +37,11 @@
 
 生产部署前应使用专用测试账号与 `backend/examples/media/verify-cos.mjs`，验证真实验签、回调JSON转发、POST防覆盖、回调参数不可篡改及恰好10MiB图片审核。再以真实审核拒绝和复核样本检查失败分支，验证后端504到COS上传端203 CallbackFailed，并结合日志检查期限耗尽后没有启动后续操作。后端不再承诺线程恰好在第五秒退出，COS实际等待参数需要真实环境确认。离线响应替身与MinIO通过不能替代此项。
 
-部署需要新库以及更新后的环境配置，不对既有Flyway历史执行repair或clean。具体配置和已接受限制见[文件服务V2](../public/guides/media/zh-CN/media-service.md)。
+部署需要新库以及更新后的环境配置，不对既有Flyway历史执行repair或clean。具体配置和已接受限制见[文件服务V2](../../../public/guides/media/zh-CN/media-service.md)。
 
 ## 2026-11-06：通知 SQL 超时与无引用回收
 
-本节补充当前验收，上文 2026-10-29 的记录保留其原始范围和结论。此前整套真实依赖验证中的 `lockedFileMakesReadyTimeoutAndCannotCommitLater` 失败及重构前后对照记录继续保留，见[包结构重构验证](backend-package-refactor-validation-2026-11-06.md)与[点赞验证](like-validation-2026-11-06.md)。
+本节补充当前验收，上文 2026-10-29 的记录保留其原始范围和结论。此前整套真实依赖验证中的 `lockedFileMakesReadyTimeoutAndCannotCommitLater` 失败及重构前后对照记录继续保留，见[包结构重构验证](../backend/backend-package-refactor-validation-2026-11-06.md)与[点赞验证](../like/like-validation-2026-11-06.md)。
 
 本次按现有业务契约修正测试：超时表示未确认成功，已发出的自动提交更新可能实际已 READY，不承诺超时必定 ISSUED。未提交更新的 ISSUED 和已提交的零引用 READY 均须保留有效维护时间，由现有 GC 回收；已绑定文件受引用保护。运行逻辑、HTTP、数据库结构与超时配置不变，不增加事务、即时补偿或发布重试。
 
