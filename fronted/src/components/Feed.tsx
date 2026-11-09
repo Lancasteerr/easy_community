@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { errorMessage } from '../api/client';
+import { ApiError, errorMessage } from '../api/client';
 import { useFeed } from '../hooks/useFeed';
 import { useCooldown } from '../hooks/useCooldown';
 import { ArticleCard } from './ArticleCard';
@@ -9,6 +9,8 @@ export function Feed() {
   const feed = useFeed();
   const sentinel = useRef<HTMLDivElement>(null);
   const seconds = useCooldown(feed.retryAt);
+  // 无效游标重试不会恢复；与过期游标一样，需要用户明确开始新一轮读取。
+  const invalidCursor = feed.error instanceof ApiError && feed.error.code === 'ARTICLE_SEARCH_INVALID';
   useEffect(() => {
     if (!sentinel.current || feed.status !== 'ready' || feed.paused || feed.nextCursor === null || !window.IntersectionObserver) return;
     const observer = new IntersectionObserver((entries) => {
@@ -30,7 +32,7 @@ export function Feed() {
     <div ref={sentinel} className="feed-status" aria-live="polite">
       {feed.status === 'loading' && feed.items.length > 0 && <span className="loading-label"><i className="spinner" />正在加载更多…</span>}
       {feed.status === 'error' && <><p>{errorMessage(feed.error)}</p><button className="feed-action" disabled={seconds > 0}
-        onClick={() => void feed.loadMore(true)}>{seconds ? `${seconds}秒后重试` : '重试'}</button></>}
+        onClick={invalidCursor ? restart : () => void feed.loadMore(true)}>{seconds ? `${seconds}秒后重试` : invalidCursor ? '重新加载' : '重试'}</button></>}
       {feed.status === 'expired' && <><p>列表已过期，已读内容仍保留</p><button className="feed-action" onClick={restart}>重新加载</button></>}
       {feed.status === 'ready' && feed.nextCursor === null && <p>{feed.items.length ? '已经到底了' : '还没有推荐内容，稍后再来看看吧'}</p>}
       {feed.status === 'ready' && feed.nextCursor !== null && <>

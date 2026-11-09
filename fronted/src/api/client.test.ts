@@ -44,4 +44,13 @@ describe('同源请求边界', () => {
     await expect(request('/api/test', { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
     await expect(request('/api/test')).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
   });
+
+  it('10秒读取超时转换为可重试错误，而非主动取消', async () => {
+    const timeout = new AbortController();
+    timeout.abort();
+    const createTimeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('timeout', 'TimeoutError')));
+    await expect(request('/api/test')).rejects.toMatchObject({ code: 'REQUEST_TIMEOUT' });
+    expect(createTimeout).toHaveBeenCalledWith(10_000);
+  });
 });

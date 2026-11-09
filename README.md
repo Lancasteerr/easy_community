@@ -6,6 +6,8 @@
 
 文档入口：[文档中心](docs/README.md) · [公开文档](docs/public/README.md)。
 
+前端启动、页面范围与联调记录见 [前端说明](fronted/README.md)。
+
 功能：
 
 1. 文章crud，tag有限支持（文章元数据），浏览量 点赞量（可复用easy_blog相关逻辑），评论
