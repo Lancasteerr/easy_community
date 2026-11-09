@@ -81,6 +81,23 @@ img { display: block; max-width: 100%; }
 .feed-status { min-height: 100px; padding: 28px 24px; text-align: center; color: #aaa; font-size: 14px; }
 .toast { position: fixed; z-index: 100; left: 50%; bottom: 40px; transform: translate(-50%, 12px); padding: 12px 24px; max-width: calc(100vw - 32px); border: 1px solid #444; border-radius: 8px; background: #242428; color: #fff; box-shadow: 0 8px 32px #0003; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
 .toast-visible { opacity: 1; transform: translate(-50%, 0); }
+.feed-status p { margin: 0 0 14px; }
+.feed-status p:last-child { margin-bottom: 0; }
+.feed-action { padding: 8px 20px; background: rgb(155 206 255 / 8%); color: #9bceff; border: 1px solid rgb(155 206 255 / 30%); border-radius: 6px; font-size: 14px; }
+.feed-action:hover:not(:disabled) { background: rgb(155 206 255 / 16%); }
+.feed-action:disabled { opacity: .5; cursor: not-allowed; }
+.feed-skeleton { padding: 24px; }
+.feed-skeleton i, .feed-skeleton span, .skeleton-title, .skeleton-summary, .skeleton-cover { display: block; background: linear-gradient(100deg, #303036 20%, #3a3a40 50%, #303036 80%); background-size: 200% 100%; animation: shimmer 1.8s infinite; border-radius: 5px; }
+.skeleton-author { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.skeleton-author i { width: 36px; height: 36px; border-radius: 50%; }
+.skeleton-author span { width: 140px; height: 16px; }
+.skeleton-title { height: 24px; width: 80%; margin-bottom: 28px; }
+.skeleton-summary { height: 16px; margin-bottom: 24px; }
+.skeleton-cover { aspect-ratio: 16 / 9; }
+.loading-label { display: inline-flex; align-items: center; gap: 10px; }
+.spinner { display: inline-block; width: 18px; height: 18px; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

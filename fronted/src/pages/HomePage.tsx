@@ -2,6 +2,7 @@ import { Header } from '../components/Header';
 import { PublishPanel, Sidebar } from '../components/Sidebars';
 import { useUnavailable } from '../components/Toast';
 import banner from '../assets/home-banner.png';
+import { Feed } from '../components/Feed';
 
 /** body 承担双向滚动，吸顶元素的祖先不设置 overflow，避免改变滚动容器。 */
 export function HomePage() {
@@ -12,7 +13,7 @@ export function HomePage() {
       <Sidebar />
       <main className="home-main" aria-label="推荐信息流">
         <button className="home-banner" aria-label="首页横幅" onClick={unavailable}><img src={banner} alt="城市出行主题插画" /></button>
-        <section className="feed-list"><div className="feed-status" role="status">正在准备推荐内容…</div></section>
+        <Feed />
       </main>
       <PublishPanel />
     </div>
