@@ -1,5 +1,7 @@
 # 点赞功能部署、重启与故障处置手册
 
+> Windows 命令中的 `JAVA_SOCKET_TMPDIR` 需由运行者预先设置为本机可用的短ASCII绝对路径，并确保目录已创建；其他平台可省略该JVM参数。此环境变量仅用于展开本文命令，不是应用配置。
+
 点赞是项目固定功能。正常Web应用启动即提供点赞读写并消费MQ，不需要启用开关。本文适用于单节点MySQL、Redis、RabbitMQ及多个应用实例，不提供节点级容灾或自动故障恢复。
 
 ## 1. 操作原则和入口控制
@@ -37,8 +39,8 @@ $likeArgs = @('-jar', 'target/backend-0.0.1-SNAPSHOT.jar',
 Windows JDK25如遇`UnixDomainSockets Invalid argument`，先创建本机短ASCII目录，再在`-jar`之前增加JVM参数；此设置只作用于本次命令：
 
 ```powershell
-New-Item -ItemType Directory -Force -Path E:/temp | Out-Null
-$likeJvmArgs = @('-Djdk.net.unixdomain.tmpdir=E:/temp')
+New-Item -ItemType Directory -Force -Path $env:JAVA_SOCKET_TMPDIR | Out-Null
+$likeJvmArgs = @("-Djdk.net.unixdomain.tmpdir=$env:JAVA_SOCKET_TMPDIR")
 ```
 
 所有维护动作使用非Web进程，不启动监听器、自动MQ拓扑或业务定时任务；动作完成后关闭连接并退出。除显式重放外，状态、暂停、恢复及对账不需要连接RabbitMQ。

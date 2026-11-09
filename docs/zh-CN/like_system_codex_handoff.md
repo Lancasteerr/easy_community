@@ -1,6 +1,6 @@
 # 社区系统：文章点赞模块实施交接（定稿 V4）
 
-> 实施补充（优先于下文示意代码）：已确认只交付本仓库后端，单节点依赖并验证多实例；人工停写恢复；不做HTTP去重、Redis乐观计数、消费批处理或计数分片。点赞为固定功能，不设置模块/写入/消费启用开关。关闭外部入口后允许后台消费；恢复纪元前必须停止全部业务实例。详细接口见 `like-system-implementation.md`，重启、宕机及人工开放流程见 `like-system-operations.md`。
+> 实施补充（优先于下文示意代码）：已确认只交付本仓库后端，单节点依赖并验证多实例；人工停写恢复；不做HTTP去重、Redis乐观计数、消费批处理或计数分片。点赞为固定功能，不设置模块/写入/消费启用开关。关闭外部入口后允许后台消费；恢复纪元前必须停止全部业务实例。详细接口见 [like-system-implementation.md](../public/guides/like/zh-CN/like-system-implementation.md)，重启、宕机及人工开放流程见 [like-system-operations.md](../public/operations/like/zh-CN/like-system-operations.md)。
 >
 > 同版本不同状态必须隔离，不能被 `<=` 分支吞掉；关系初始化不使用 `INSERT IGNORE`。状态Hash固定600秒、计数缓存固定30秒，不滑动续期。STALE消息不得用原消息回写缓存。分配器增加绑定Redis运行标识的guard，重启后必须人工提升纪元。202只说明已可靠入队；HTTP结果未知不表示未执行。
 

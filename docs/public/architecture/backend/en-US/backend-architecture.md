@@ -6,9 +6,9 @@
 
 Search and feed share public card hydration, preserving ES order with batch cache/database reads. Known invalid items are skipped without an additional authoritative visibility query; author-management semantics remain unchanged. Counts and user-specific like state are assembled only for final response items. Ranking reads persisted seven-day views and uses date candidates plus daily calibration, without distributed ranking locks or persistent batch state.
 
-Relay and ranking have separate single-thread schedulers while the default scheduler remains explicit. Non-web maintenance supports import, audit, bounded replay and maintenance-window alias switching. See the [operations guide](../zh-CN/article-search-operations.md).
+Relay and ranking have separate single-thread schedulers while the default scheduler remains explicit. Non-web maintenance supports import, audit, bounded replay and maintenance-window alias switching. See the [operations guide](../../../operations/search/zh-CN/article-search-operations.md).
 
-[简体中文](../zh-CN/backend-architecture.md) · [Startup, API, and deployment guide](../../backend/README.md)
+[简体中文](../zh-CN/backend-architecture.md) · [Startup, API, and deployment guide](../../../../../backend/README.md)
 
 ## Find Code by Business Responsibility
 
@@ -211,7 +211,7 @@ Maintain these architecture documents separately under `zh-CN` and `en-US`, with
 
 ## Files and Live Avatar Profiles
 
-The media module now implements V2. See the [media guide](../zh-CN/media-service.md) for the protocol and deployment.
+The media module now implements V2. See the [media guide](../../../guides/media/zh-CN/media-service.md) for the protocol and deployment.
 
 - MediaService inserts ISSUED records and issues POST Policies. UploadStorage isolates provider signing, one copy, and idempotent deletion; there is no HEAD confirmation.
 - FinishUpload shares identity checks, a monotonic deadline, moderation, copy, and conditional READY commit. ContentModeration only returns a decision: real synchronous moderation in production and an immediate development bypass. Notification SQL uses a separate bounded connection pool.
@@ -226,7 +226,7 @@ The rewritten Flyway V2 definition is for new databases only. Old complete/prepa
 
 ## Article writes, reads, and cache
 
-See the [article contract and recovery guide](../zh-CN/article-crud-implementation.md). Deletion sets an irreversible hidden flag and preserves media references. Author management SQL selects only that author's public articles; there is no recycle bin, restore API, or private hidden-row hydration.
+See the [article contract and recovery guide](../../../guides/article/zh-CN/article-crud-implementation.md). Deletion sets an irreversible hidden flag and preserves media references. Author management SQL selects only that author's public articles; there is no recycle bin, restore API, or private hidden-row hydration.
 
 - ArticleService rejects surrounding transactions, prepares canonical JSON, safe HTML, summary and media through ArticleContentRenderer, then calls the independent ArticleCommitService proxy for one short RC transaction. Article locks precede media locks. Bounded post-commit cache maintenance cannot override confirmed SQL success.
 - Article permissions and hidden state are checked under the row lock. MediaReferenceService remains the binding gate. SQL is not automatically retried; metadata versions and Outbox events commit with content, then reach ES through MQ. Per-call in-memory commit observation classifies proxy failures; it is not persistent business state.
@@ -282,4 +282,4 @@ The management security chain belongs to `shared.management.ManagementSecurityCo
 
 Notification filtering, signature verification, parsing, and responses are grouped in `media.web.notification`. Raw body/query verification, the shared deadline, and the separate security chain stay intact, as do the private notification pool, auto-commit, exclusion from main Mapper scans, reference lock order, and cleanup transactions. Cross-component media tests retain their shared fixtures; notification Filter tests mirror the notification package.
 
-[Package reorganization validation record (Chinese)](../zh-CN/backend-package-refactor-validation-2026-11-06.md) covers the default build, real dependencies, and pre-refactor comparison.
+Validate package changes with the default build, isolated real-dependency integration tests, and before/after behavior comparisons. Historical results do not certify the current revision. See the [backend verification instructions (Chinese)](../../../../../backend/README.md#验证).

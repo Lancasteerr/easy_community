@@ -37,7 +37,7 @@
 
 生产部署前应使用专用测试账号与 `backend/examples/media/verify-cos.mjs`，验证真实验签、回调JSON转发、POST防覆盖、回调参数不可篡改及恰好10MiB图片审核。再以真实审核拒绝和复核样本检查失败分支，验证后端504到COS上传端203 CallbackFailed，并结合日志检查期限耗尽后没有启动后续操作。后端不再承诺线程恰好在第五秒退出，COS实际等待参数需要真实环境确认。离线响应替身与MinIO通过不能替代此项。
 
-部署需要新库以及更新后的环境配置，不对既有Flyway历史执行repair或clean。具体配置和已接受限制见[文件服务V2](media-service.md)。
+部署需要新库以及更新后的环境配置，不对既有Flyway历史执行repair或clean。具体配置和已接受限制见[文件服务V2](../public/guides/media/zh-CN/media-service.md)。
 
 ## 2026-11-06：通知 SQL 超时与无引用回收
 

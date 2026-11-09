@@ -1,8 +1,10 @@
 # 文件服务 V2：POST 直传、通知发布与引用回收
 
-当前实现采用 [V2 设计](media-service-v2-design.md)。生产通过 COS Callback 同步审核、复制并提交 READY；开发使用 MinIO Webhook 发布，原有上传联调方案经 Caddy 转换响应。日常开发使用独立配置的 Docker 容器。只支持新建空库，不提供旧协议、旧表和 Flyway 历史兼容。
+> Windows 命令中的 `JAVA_SOCKET_TMPDIR` 需由运行者预先设置为本机可用的短ASCII绝对路径，并确保目录已创建；其他平台可省略该JVM参数。此环境变量仅用于展开本文命令，不是应用配置。
 
-应用流程按 `media.application.upload`、`reference`、`lifecycle` 归组，`MediaUrls` 独立生成公开地址；通知HTTP适配集中在 `media.web.notification`。结构与调用边界见[后端架构约定](backend-architecture.md)。
+当前实现采用 [V2 设计](../../../designs/media/zh-CN/media-service-v2-design.md)。生产通过 COS Callback 同步审核、复制并提交 READY；开发使用 MinIO Webhook 发布，原有上传联调方案经 Caddy 转换响应。日常开发使用独立配置的 Docker 容器。只支持新建空库，不提供旧协议、旧表和 Flyway 历史兼容。
+
+应用流程按 `media.application.upload`、`reference`、`lifecycle` 归组，`MediaUrls` 独立生成公开地址；通知HTTP适配集中在 `media.web.notification`。结构与调用边界见[后端架构约定](../../../architecture/backend/zh-CN/backend-architecture.md)。
 
 ## 数据与职责
 
@@ -129,7 +131,7 @@ node --test examples/media/upload.test.mjs
 
 真实测试启动后端18080；专用MinIO预配MEDIA通知目标到该端口、token为测试专用 media-v2-test-token，Caddy桶名与IT_MEDIA_BUCKET相同。测试自行建立并清理专属桶和本次用户，不清空共享库或Redis。测试中等待Webhook仅用于观察结果，不属于产品前端协议。
 
-Windows Java25若出现 `Unable to establish loopback connection`，按本机已存在的短路径设置 `JDK_JAVA_OPTIONS=-Djdk.net.unixdomain.tmpdir=E:/temp` 后运行测试，不将此运行参数写入生产配置。
+Windows Java25若出现 `Unable to establish loopback connection`，按本机已存在的短路径设置 `$env:JDK_JAVA_OPTIONS = "-Djdk.net.unixdomain.tmpdir=$env:JAVA_SOCKET_TMPDIR"` 后运行测试，不将此运行参数写入生产配置。
 
 可设置 IT_COS_API_URL、IT_COS_USERNAME、IT_COS_PASSWORD、IT_COS_SMALL_IMAGE（PNG）和 IT_COS_LARGE_IMAGE（恰好10MiB的JPEG），运行 `node examples/media/verify-cos.mjs`。使用专用测试账号；脚本不绑定头像，成功上传的无引用图片交给正常GC。脚本不会把本地SDK响应替身视为真实云端。
 

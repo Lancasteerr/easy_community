@@ -4,6 +4,8 @@
 
 本地开发使用 IDEA / Vite 运行应用，MySQL、Redis、MinIO、RabbitMQ 使用独立配置的 Docker 容器。填写 `backend/.env.dev` 后复制为 `backend/.env`，后端根据其中的 `SPRING_PROFILES_ACTIVE=dev` 加载开发配置并连接宿主机发布的端口；生产改用已填写的 `.env.prod` 模板。
 
+文档入口：[文档中心](docs/README.md) · [公开文档](docs/public/README.md)。
+
 功能：
 
 1. 文章crud，tag有限支持（文章元数据），浏览量 点赞量（可复用easy_blog相关逻辑），评论

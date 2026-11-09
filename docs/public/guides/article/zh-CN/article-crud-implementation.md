@@ -1,10 +1,12 @@
 # 文章 CRUD：最终契约与恢复
 
+> Windows 命令中的 `JAVA_SOCKET_TMPDIR` 需由运行者预先设置为本机可用的短ASCII绝对路径，并确保目录已创建；其他平台可省略该JVM参数。此环境变量仅用于展开本文命令，不是应用配置。
+
 ## 范围
 
 同步保存、不可恢复隐藏、详情、作者编辑读取、本人公开文章管理、最小 Tag 目录及文章双投影缓存。不包含前端、公共信息流、计数、搜索、消息队列、修订或请求幂等。隐藏保留文件引用，不物理删除图片。
 
-代码先按文章能力分包：`article.content` 处理正文读写及缓存，`article.tag` 管理标签目录，`article.view` 管理浏览统计，`article.like` 管理点赞；各能力内部再分 web、application 和 infrastructure。完整结构与共享事务边界见[后端架构约定](backend-architecture.md)。Controller 不直接访问数据库或 Redis。作者显示资料经用户应用层读取，文件引用复用媒体应用服务；不创建空 domain 包或 Service/ServiceImpl。
+代码先按文章能力分包：`article.content` 处理正文读写及缓存，`article.tag` 管理标签目录，`article.view` 管理浏览统计，`article.like` 管理点赞；各能力内部再分 web、application 和 infrastructure。完整结构与共享事务边界见[后端架构约定](../../../architecture/backend/zh-CN/backend-architecture.md)。Controller 不直接访问数据库或 Redis。作者显示资料经用户应用层读取，文件引用复用媒体应用服务；不创建空 domain 包或 Service/ServiceImpl。
 
 ## HTTP
 
@@ -52,7 +54,7 @@ Redis故障或争锁超限，读返回503；写入已确认则仍成功。返回
 
 ```powershell
 $env:ARTICLE_CACHE_VERSION = 'recovery_20261101_1'
-java '-Djdk.net.unixdomain.tmpdir=E:/temp' -jar backend/target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --spring.main.web-application-type=none --app.article.cache-rebuild.enabled=true
+java "-Djdk.net.unixdomain.tmpdir=$env:JAVA_SOCKET_TMPDIR" -jar backend/target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --spring.main.web-application-type=none --app.article.cache-rebuild.enabled=true
 ```
 
 命令成功后自动退出，仅新文章命名空间写入墓碑与完成标记；已有Key的版本会被拒绝。失败时保持停流量，排除故障后选择另一个全新版本重建。全部Web实例使用同一个ARTICLE_CACHE_VERSION正常启动，**不携带cache-rebuild.enabled参数**，再恢复流量。下次恢复不得复用本次版本；Redis自身恢复还须遵循现有Session服务要求。
@@ -60,6 +62,8 @@ java '-Djdk.net.unixdomain.tmpdir=E:/temp' -jar backend/target/backend-0.0.1-SNA
 GET响应附带服务端生成的X-Request-Id，写入日志包含操作、articleId、准备/事务耗时和关联ID。缓存日志分别记录详情三态、列表回源数量、token丢失及维护失败；不记录正文或凭证。
 
 ## 分批验证
+
+> 以下分批顺序保留原实施背景，不是当前待办；验证命令须结合当前版本和专用环境使用。
 
 分别提交文档、模型/Tag、渲染、事务、HTTP/查询、缓存原子操作、缓存接入/恢复。测试随功能加入，每批mvn test，最终mvn clean verify。真实MySQL/Redis测试显式启用，仅使用专用库及随机前缀；跳过不算通过。用屏障控制并发，验证事务代理、双写覆盖、双向删写、GC、锁过期、提交结果未知及缓存失败隔离。
 
@@ -70,14 +74,16 @@ GET响应附带服务端生成的X-Request-Id，写入日志包含操作、artic
 $env:IT_ARTICLE = 'true'
 $env:IT_REDIS = 'true'
 $env:IT_DB_URL = 'jdbc:mysql://127.0.0.1:3306/easy_community_article_test?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true'
-mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' '-Dtest=Article*Tests' test
+mvn "-DargLine=-Djdk.net.unixdomain.tmpdir=$env:JAVA_SOCKET_TMPDIR" '-Dtest=Article*Tests' test
 ```
 
 IT_DB_USERNAME、IT_DB_PASSWORD及IT_REDIS_HOST/PORT/PASSWORD沿用后端测试约定。普通mvn test不启用外部服务；最终启用这些变量执行mvn clean verify时，也会执行既有认证/持久层集成测试。Windows临时套接字参数仅为本地测试使用，其他平台可省略。
 
 ## 本次验收记录（2026-11-01）
 
-在专用easy_community_article_test库及真实Redis上，启用IT_ARTICLE、IT_REDIS与数据库凭证后运行 `mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' clean verify`，构建成功：142项通过、0失败、0错误；文章模块39项全部通过。另有10项既有MediaV2IntegrationTests因未启用真实对象存储联调环境而跳过，未计入通过数量。
+> 以下为2026-11-01的历史验收，保留当时结果与范围，不代表当前版本已重新运行或通过。
+
+在专用easy_community_article_test库及真实Redis上，启用IT_ARTICLE、IT_REDIS与数据库凭证后运行 `mvn "-DargLine=-Djdk.net.unixdomain.tmpdir=$env:JAVA_SOCKET_TMPDIR" clean verify`，构建成功：142项通过、0失败、0错误；文章模块39项全部通过。另有10项既有MediaV2IntegrationTests因未启用真实对象存储联调环境而跳过，未计入通过数量。
 
 已实测安全正文/摘要/输入边界、HTTP/Session/CSRF/角色、不可恢复隐藏及公开管理列表、真实事务回滚/自增回填/媒体关联、完整修改覆盖、双向删写、一致读取视图、真实MySQL锁等待超时及死锁、双投影Lua与旧token拒绝、批量装配/负缓存核对、提交后缓存异常隔离，以及新命名空间恢复规则。
 

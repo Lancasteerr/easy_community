@@ -2,9 +2,9 @@
 
 > 状态：已实现，验收记录见最终接入文档。更新日期：2026-11-01。
 >
-> 最终实施契约见 [文章 CRUD 接入与恢复](article-crud-implementation.md)。本文与最终契约共同描述当前实现：删除不可恢复，作者管理列表只展示公开文章；不实现隐藏条目私有装配、回收站或恢复接口。游客仅开放文章详情，Tag 目录仍要求登录。正文采用 Java 白名单渲染，摘要自动生成。
+> 最终实施契约见 [文章 CRUD 接入与恢复](../../../guides/article/zh-CN/article-crud-implementation.md)。本文与最终契约共同描述当前实现：删除不可恢复，作者管理列表只展示公开文章；不实现隐藏条目私有装配、回收站或恢复接口。游客仅开放文章详情，Tag 目录仍要求登录。正文采用 Java 白名单渲染，摘要自动生成。
 >
-> 本文依据[最新讨论](https://chatgpt.com/share/6ae60ec2-6cf0-83ee-93c0-dba0bf64b296)与[交接文档](community_article_codex_handoff.md)修订，取代[V1 的异步 CRUD 计划](article-feed-v1-design.md)。对话中途的 MQ、操作状态机和编辑版本建议已被后续决定替换，不继续叠加。
+> 本文依据[最新讨论](https://chatgpt.com/share/6ae60ec2-6cf0-83ee-93c0-dba0bf64b296)与原始交接资料修订，取代V1 的异步 CRUD 历史计划。对话中途的 MQ、操作状态机和编辑版本建议已被后续决定替换，不继续叠加。
 >
 > 原交接文档及 V1 仅作历史资料，不叠加执行其中已取消的异步方案。
 
@@ -61,7 +61,7 @@ HTTP 写入成功表示 SQL 已确认提交，不表示所有读缓存已经同�
 | 缓存 Lua 原子校验 | 认证已使用固定 Lua；文章复用现有 Spring Data Redis 加载方式，不引入通用脚本框架 |
 | 信息流、计数随后衔接 | 本期做 CRUD、详情／列表 DTO 缓存；不缓存整页排序，不提前建 Feed、计数及搜索组件 |
 
-实际约束来源：[媒体表](../../backend/src/main/resources/db/migration/V2__create_media.sql)、[媒体引用服务](../../backend/src/main/java/com/febrie/backend/media/application/MediaReferenceService.java)、[文件回收服务](../../backend/src/main/java/com/febrie/backend/media/application/MediaLifecycleService.java)、[用户 Repository](../../backend/src/main/java/com/febrie/backend/user/infrastructure/persistence/AccountRepository.java)。
+实际约束来源：[媒体表](../../../../../backend/src/main/resources/db/migration/V2__create_media.sql)、[媒体引用服务](../../../../../backend/src/main/java/com/febrie/backend/media/application/reference/MediaReferenceService.java)、[文件回收服务](../../../../../backend/src/main/java/com/febrie/backend/media/application/lifecycle/MediaLifecycleService.java)、[用户 Repository](../../../../../backend/src/main/java/com/febrie/backend/user/infrastructure/persistence/AccountRepository.java)。
 
 发现现有数据处于“有引用文件却非 READY”等异常状态时，本次保存失败并记录错误，不静默删除旧引用来掩盖问题。
 
@@ -571,6 +571,8 @@ COMMIT 结果未确认属于应用与数据库的通信确认问题：可能数�
 
 ## 12. 代码组织与分批计划
 
+> 本节分批表保留原实施顺序，不是当前待办；代码组织和契约仍按当前实现维护。
+
 保持当前单 Maven 工程和按业务分包，不为未来功能创建空模块：
 
 | 位置／组件 | 职责 |
@@ -623,8 +625,8 @@ COMMIT 结果未确认属于应用与数据库的通信确认问题：可能数�
 ## 14. 审核依据
 
 - [最新完整对话：同步短事务、最后写入覆盖、自增 ID 和缓存操作锁](https://chatgpt.com/share/6ae60ec2-6cf0-83ee-93c0-dba0bf64b296)。
-- [用户提供的原始交接文档](community_article_codex_handoff.md)，作为来源保留，不直接执行其本次范围外实施指令。
-- [V1 历史计划](article-feed-v1-design.md)，与本版不累计执行。
+- 用户提供的原始交接资料 `community_article_codex_handoff.md`，作为来源保留，不直接执行其本次范围外实施指令。
+- V1 历史计划 `article-feed-v1-design.md`，与本版不累计执行。
 - [Easy_blog_full 文章模块参考实现（本次检视提交 37d0489）](https://github.com/Lancasteerr/Easy_blog_full/tree/37d0489e024f2d0e8cbbedcf52973218d2340aa3/demo_bk/src/main/java/com/febrie/demo_bk/article)：参考双 DTO 缓存、CacheValue、批量加载及 token 条件操作，以第 8.7 节列出的社区修订为准。
-- [现有文件服务](media-service.md)、[代码组织约定](backend-architecture.md)、[媒体引用服务](../../backend/src/main/java/com/febrie/backend/media/application/MediaReferenceService.java)、[文件生命周期服务](../../backend/src/main/java/com/febrie/backend/media/application/MediaLifecycleService.java)。
+- [现有文件服务](../../../guides/media/zh-CN/media-service.md)、[代码组织约定](../../../architecture/backend/zh-CN/backend-architecture.md)、[媒体引用服务](../../../../../backend/src/main/java/com/febrie/backend/media/application/reference/MediaReferenceService.java)、[文件生命周期服务](../../../../../backend/src/main/java/com/febrie/backend/media/application/lifecycle/MediaLifecycleService.java)。
 - 官方参考：[MySQL 锁定读](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html)、[死锁处理](https://dev.mysql.com/doc/refman/8.4/en/innodb-deadlocks-handling.html)、[UPDATE 行数](https://dev.mysql.com/doc/refman/8.4/en/update.html)、[MyBatis 自增主键](https://mybatis.org/mybatis-3/zh_CN/sqlmap-xml.html)、[Spring 事务代理](https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html)、[Redis Lua](https://redis.io/docs/latest/develop/programmability/eval-intro/)、[Redis 锁 token 与租期](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)。

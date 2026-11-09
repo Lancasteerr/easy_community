@@ -1,12 +1,14 @@
 # 社区后端：Session 登录、用户、文件与文章管理
 
-文章标题搜索、Tag筛选、全局推荐流及索引恢复见[搜索与推荐流运维说明](../docs/zh-CN/article-search-operations.md)。查询默认关闭，首次导入和对账后再开启。
+文档导航见[公开文档](../docs/public/README.md)。
 
-代码组织与包职责见架构文档：[简体中文](../docs/zh-CN/backend-architecture.md) · [English](../docs/en-US/backend-architecture.md)。
+文章标题搜索、Tag筛选、全局推荐流及索引恢复见[搜索与推荐流运维说明](../docs/public/operations/search/zh-CN/article-search-operations.md)。查询默认关闭，首次导入和对账后再开启。
 
-文章CRUD已接入，接口、正文白名单、最终一致缓存及维护命令见[文章接入与恢复](../docs/zh-CN/article-crud-implementation.md)。删除不可恢复；本人管理列表只展示公开文章，游客仅可读取单篇详情。
+代码组织与包职责见架构文档：[简体中文](../docs/public/architecture/backend/zh-CN/backend-architecture.md) · [English](../docs/public/architecture/backend/en-US/backend-architecture.md)。
 
-文件上传、MinIO/COS桶配置、头像接口和文章接入见[文件服务V2](../docs/zh-CN/media-service.md)。
+文章CRUD已接入，接口、正文白名单、最终一致缓存及维护命令见[文章接入与恢复](../docs/public/guides/article/zh-CN/article-crud-implementation.md)。删除不可恢复；本人管理列表只展示公开文章，游客仅可读取单篇详情。
+
+文件上传、MinIO/COS桶配置、头像接口和文章接入见[文件服务V2](../docs/public/guides/media/zh-CN/media-service.md)。
 升级已有本机环境文件时，必须补充示例中的全部`MEDIA_*`字段；应用只校验配置，不自动创建桶或修改权限。
 
 Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `easy_community`，Flyway 自动建表。

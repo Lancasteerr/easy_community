@@ -6,9 +6,9 @@
 
 搜索/feed共用公开卡片装配，按ES顺序批量回源，只过滤已知无效项，不额外强查主库状态；作者管理页约束保留。响应阶段批量装配计数和个人点赞状态。排名只读SQL七日浏览量，日期候选与每日校准共用分数Bulk，不建立排名锁或批次状态表。
 
-Relay与排名分别使用专用单线程调度器，默认taskScheduler归属保持明确。非Web维护负责导入/对账、有限重放及维护窗口别名切换，见[检索运维说明](article-search-operations.md)。
+Relay与排名分别使用专用单线程调度器，默认taskScheduler归属保持明确。非Web维护负责导入/对账、有限重放及维护窗口别名切换，见[检索运维说明](../../../operations/search/zh-CN/article-search-operations.md)。
 
-[English](../en-US/backend-architecture.md) · [启动、接口和部署说明](../../backend/README.md)
+[English](../en-US/backend-architecture.md) · [启动、接口和部署说明](../../../../../backend/README.md)
 
 ## 从业务找到代码
 
@@ -207,7 +207,7 @@ package com.febrie.backend.user.web;
 
 ## 文件与实时头像
 
-文件服务已整体切换V2，协议与部署见[文件服务V2](media-service.md)。
+文件服务已整体切换V2，协议与部署见[文件服务V2](../../../guides/media/zh-CN/media-service.md)。
 
 - MediaService只建档与签发POST Policy；UploadStorage隔离两家签名、一次复制与幂等删除，不提供HEAD确认。
 - FinishUpload共用通知身份检查、单调时钟预算、审核、复制和条件READY提交；ContentModeration只返回结论，生产真实审核，开发立即跳过。通知SQL使用独立短等待连接池，网络调用不在业务事务内。
@@ -222,7 +222,7 @@ Flyway V2定义直接重写，仅用于新建空库。不存在旧complete/prepa
 
 ## 文章保存、查询与缓存
 
-文章接口与维护流程见[文章CRUD接入](article-crud-implementation.md)。删除只设置不可恢复的hidden，保留媒体引用；作者管理SQL只选本人公开文章，不建立回收站、恢复API或隐藏条目私有装配。
+文章接口与维护流程见[文章CRUD接入](../../../guides/article/zh-CN/article-crud-implementation.md)。删除只设置不可恢复的hidden，保留媒体引用；作者管理SQL只选本人公开文章，不建立回收站、恢复API或隐藏条目私有装配。
 
 - ArticleService明确禁止外层事务，先经ArticleContentRenderer准备规范JSON、安全HTML、摘要及媒体集合，再经独立ArticleCommitService代理执行一次RC短事务；文章行先于媒体行锁定。最后执行有界缓存维护，缓存异常不覆盖已确认提交。
 - 写事务只在文章锁内复核资源权限及hidden，媒体门禁复用MediaReferenceService。无SQL自动重试；元数据版本和Outbox与内容同事务，提交后经MQ同步ES。当前调用内存中的提交确认只用于区分代理提交异常，不是持久化业务状态。
@@ -278,4 +278,4 @@ Redis 异常及无效返回沿现有依赖失败处理，不降级放行，不�
 
 存储通知的过滤、验签、解析和响应集中在 `media.web.notification`，仍使用原始body/query验签、同一截止时间和独立安全链。通知私有连接池、自动提交、主库排除扫描、引用排序锁及回收事务边界不变。媒体跨组件测试保留共用夹具，通知Filter测试镜像通知包。
 
-[包结构调整验证记录](backend-package-refactor-validation-2026-11-06.md)包含默认构建、真实依赖及重构前对照结果。
+包结构调整应验证默认构建、专用真实依赖集成和重构前后行为对照；历史验证结果不代表当前版本已重新通过。执行方式见[后端验证说明](../../../../../backend/README.md#验证)。

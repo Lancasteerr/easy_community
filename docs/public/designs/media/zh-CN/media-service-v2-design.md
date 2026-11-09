@@ -1,6 +1,6 @@
 # 文件服务 V2 计划：动态 Upload URL、POST Policy 与上传通知
 
-本文是文件服务V2设计，当前实现及部署见[接入说明](media-service.md)，更新于 2026-10-29。设计基于[上传系统讨论](https://chatgpt.com/share/6ae1b282-8034-83e8-980a-3b32bafc78de)、[开发与生产差异讨论](https://chatgpt.com/share/6ae2127c-f0e0-83ec-9438-62df62d03aaf)及[最新一轮精简表设计](https://chatgpt.com/share/6ae21d69-0af0-83ee-8e31-93c103ae2633)。后端签发凭证时动态返回 Upload URL，前端只按返回的上传描述和 COS 生产结果契约实现一套逻辑。生产 Callback 使用默认4.5秒的入口协作式预算，超时由COS向浏览器报告CallbackFailed，本地由 MinIO Webhook 发布，允许成功响应早于公开对象可读。不模拟等待 1 秒，不使用开发 complete、状态轮询或 Spring 文件中转网关；本地兼容上传入口负责统一响应格式。
+本文是文件服务V2设计，当前实现及部署见[接入说明](../../../guides/media/zh-CN/media-service.md)，更新于 2026-10-29。设计基于[上传系统讨论](https://chatgpt.com/share/6ae1b282-8034-83e8-980a-3b32bafc78de)、[开发与生产差异讨论](https://chatgpt.com/share/6ae2127c-f0e0-83ec-9438-62df62d03aaf)及[最新一轮精简表设计](https://chatgpt.com/share/6ae21d69-0af0-83ee-8e31-93c103ae2633)。后端签发凭证时动态返回 Upload URL，前端只按返回的上传描述和 COS 生产结果契约实现一套逻辑。生产 Callback 使用默认4.5秒的入口协作式预算，超时由COS向浏览器报告CallbackFailed，本地由 MinIO Webhook 发布，允许成功响应早于公开对象可读。不模拟等待 1 秒，不使用开发 complete、状态轮询或 Spring 文件中转网关；本地兼容上传入口负责统一响应格式。
 
 本次重构不兼容 V1：直接重整数据定义、上传协议、服务和测试，移除旧入口与旧状态，不设计旧版迁移、双写、双轨运行或兼容开关。本文与当前协作式截止实现保持一致；数据结构与存储定位规则不因超时简化而改变。
 
@@ -425,6 +425,8 @@ MinIO Policy 不包含 If-None-Match: *，也不附加条件 PUT 或对象版本
 统一的是前端协议、结果字段和业务调用方式。本地明确允许结果返回时公开对象尚未就绪，不为这点时序差异编写第二套前端；生产仍保证成功前已经完成审核、复制和 READY 提交。
 
 ## 9. 直接重构范围与分批实施
+
+> 标题中的“计划”和本节分批步骤保留V2实施背景，不是当前待办；设计契约仍按当前实现维护。
 
 重写旧 complete / prepare / prepareAvatar / prepareArticle 上传确认和按需发布流程，删除 PROMOTING 恢复、发布租约、SQL 领取及相关字段。头像与文章接口只绑定 READY，不执行复制。
 
