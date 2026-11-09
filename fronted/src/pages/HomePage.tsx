@@ -1,14 +1,35 @@
 import { Header } from '../components/Header';
 import { PublishPanel, Sidebar } from '../components/Sidebars';
-import { useUnavailable } from '../components/Toast';
+import { useToast, useUnavailable } from '../components/Toast';
 import banner from '../assets/home-banner.png';
 import { Feed } from '../components/Feed';
+import { useAuth } from '../auth/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { errorMessage } from '../api/client';
 
 /** body 承担双向滚动，吸顶元素的祖先不设置 overflow，避免改变滚动容器。 */
 export function HomePage() {
   const unavailable = useUnavailable();
+  const auth = useAuth();
+  const navigate = useNavigate();
+  const notify = useToast();
+  useEffect(() => {
+    document.title = 'Easy Community';
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, []);
+  const onAvatarClick = () => {
+    if (auth.status === 'guest') navigate('/login');
+    else if (auth.status === 'authenticated') notify('个人中心暂未开放');
+    else {
+      notify(auth.status === 'error' ? errorMessage(auth.error) : '正在确认登录状态，请稍后重试');
+      void auth.refresh();
+    }
+  };
+  const avatarLabel = auth.status === 'authenticated' ? `${auth.user!.username} 的个人中心`
+    : auth.status === 'guest' ? '登录' : auth.status === 'loading' ? '正在确认登录状态' : '重新检查登录状态';
   return <div className="home-page">
-    <Header />
+    <Header avatarUrl={auth.user?.avatarUrl} avatarLabel={avatarLabel} onAvatarClick={onAvatarClick} />
     <div className="home-columns">
       <Sidebar />
       <main className="home-main" aria-label="推荐信息流">
