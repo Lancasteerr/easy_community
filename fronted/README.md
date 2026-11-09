@@ -12,7 +12,7 @@ npm ci
 npm run dev
 ```
 
-浏览器访问 `http://localhost:5173`。Vite 将相对 `/api` 请求转发到 `http://127.0.0.1:8080`，保留 Host、路径前缀和 Cookie。开发时统一使用 localhost，避免与 127.0.0.1 混用导致 Cookie 隔离。
+浏览器访问 `http://127.0.0.1:5173`。开发服务器与构建预览显式监听 IPv4，避免 localhost 解析到 IPv6 时连接失败。Vite 将相对 `/api` 请求转发到 `http://127.0.0.1:8080`，保留 Host、路径前缀和 Cookie。开发时统一使用 127.0.0.1，避免与 localhost 混用导致 Cookie 隔离。
 
 ```powershell
 npm run typecheck
