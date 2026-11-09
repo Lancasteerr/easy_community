@@ -20,6 +20,7 @@ Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `eas
 应用只读取 `.env`，由其中的 `SPRING_PROFILES_ACTIVE` 选择 `dev` 或 `prod`；未指定时默认 `dev`。`.env.dev`、`.env.prod` 是完整环境模板，不会被应用自动加载，数据库密码不写入仓库。
 
 先独立配置并启动 MySQL、Redis、MinIO、RabbitMQ 容器，在 `backend/.env.dev` 中填写实际发布端口和凭证，并确认 `SPRING_PROFILES_ACTIVE=dev`，再复制为同目录的 `.env`。
+开发模板默认开启管理员初始化；首次启动前填写 `ADMIN_USERNAME`、`ADMIN_PASSWORD`，正常启动即可创建首个管理员，无需先打包或单独执行命令。
 直接使用 MinIO 原生上传响应时，现有 `upload.mjs` 仍需响应适配，详见文件服务说明。
 
 ```powershell
@@ -62,8 +63,33 @@ Maven测试对应参数为 `mvn '-DargLine=-Djdk.net.unixdomain.tmpdir=E:/temp' 
 
 ## 初始化管理员
 
-先构建JAR。初始化仅允许非Web模式，已经存在ADMIN时拒绝重复初始化，没有默认密码和公网初始化接口。
-初始化事务使用SERIALIZABLE；并发初始化最多一笔成功，另一笔可能因冲突或死锁失败，不自动重试。
+设置 `ADMIN_BOOTSTRAP_ENABLED=true` 后，应用在数据库迁移完成后的启动阶段初始化首个管理员，成功后继续提供服务。内部开关为 `app.bootstrap.enabled`，仍可使用命令行参数覆盖；未配置时默认关闭，不查询管理员或读取初始凭证。
+
+```properties
+# 写入 backend/.env；首次启动前填写，没有默认密码。
+ADMIN_BOOTSTRAP_ENABLED=true
+ADMIN_USERNAME=local_admin
+ADMIN_PASSWORD=填写自己的初始密码
+```
+
+已有任意 `ADMIN` 时直接跳过，不要求提供初始凭证，也不修改已有用户名或密码；禁用或删除状态的管理员同样阻止再次创建。初始化不承担账号恢复职责，后续改密使用现有改密接口。修改配置密码或更换初始化用户名不会重置密码或创建第二个管理员。
+
+没有管理员时，用户名须为4至32位英文字母、数字或下划线，密码至少8字符且UTF-8编码不超过72字节；凭证缺失、不合法或用户名已被其他账号占用会使启动失败，不自动提权。日志不输出初始密码或密码哈希。
+
+创建仍使用原有 `SERIALIZABLE` 事务。启动编排遇到悲观锁或序列化冲突时，在事务回滚后重新检查是否已有管理员，最多尝试创建3次；最后检查仍无管理员时保留失败，其他业务错误或数据库连接失败不重试。
+
+容器使用同一镜像及启动命令，通过已有的 `env_file` 或 `environment` 注入配置即可，例如合并到应用服务的配置中：
+
+```yaml
+environment:
+  ADMIN_BOOTSTRAP_ENABLED: "true"
+  ADMIN_USERNAME: ${ADMIN_USERNAME:?请配置管理员用户名}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请配置管理员初始密码}
+```
+
+生产模板默认关闭初始化，首次部署需要创建管理员时显式开启并提供凭证。完成后可关闭并移除初始凭证；使用上述必填插值示例时，也需同步移除对应的凭证配置项。不要将真实凭证写入镜像或提交到 Git。
+
+如需单独执行，仍支持非 Web 命令；已有管理员时成功跳过并退出，失败时以非零状态退出：
 
 ```powershell
 # 数据库连接沿用当前 .env；管理员初始凭证通过临时环境变量传递。
@@ -73,6 +99,8 @@ $env:ADMIN_PASSWORD = '<管理员初始密码>'
 java -jar target/backend-0.0.1-SNAPSHOT.jar --spring.main.web-application-type=none --app.bootstrap.enabled=true
 Remove-Item Env:ADMIN_USERNAME,Env:ADMIN_PASSWORD
 ```
+
+执行文章缓存重建、点赞或搜索维护等其他非 Web 命令时，显式追加 `--app.bootstrap.enabled=false`，避免继承开发环境文件中的初始化开关。
 
 ## 浏览器接入
 

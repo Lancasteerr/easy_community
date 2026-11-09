@@ -34,16 +34,18 @@ class EnvironmentSelectionTests {
         assertEquals("dev", result.getProperty("environment"));
         assertEquals("8080", result.getProperty("port"));
         assertEquals("ec:dev", result.getProperty("namespace"));
+        assertEquals("false", result.getProperty("bootstrapEnabled"));
     }
 
     @Test
     void readsCompleteDevFileFromRepositoryAndBackendDirectories() throws Exception {
-        write("backend/.env", "SPRING_PROFILES_ACTIVE=dev\nDB_USERNAME=selected_dev\nSERVER_PORT=18090\n");
+        write("backend/.env", "SPRING_PROFILES_ACTIVE=dev\nDB_USERNAME=selected_dev\nSERVER_PORT=18090\nADMIN_BOOTSTRAP_ENABLED=true\n");
         for (Path workingDirectory : List.of(directory, directory.resolve("backend"))) {
             var result = run(workingDirectory, Map.of());
             assertEquals("dev", result.getProperty("profiles"));
             assertEquals("selected_dev", result.getProperty("databaseUser"));
             assertEquals("18090", result.getProperty("port"));
+            assertEquals("true", result.getProperty("bootstrapEnabled"));
         }
     }
 
@@ -72,23 +74,28 @@ class EnvironmentSelectionTests {
     @Test
     void systemEnvironmentAndCommandLineOverrideFileSelection() throws Exception {
         write(".env", "SPRING_PROFILES_ACTIVE=dev\nSERVER_PORT=18090\nTRUSTED_PROXY_REGEX=172[.]31[.]0[.]2\n");
-        var variables = Map.of("SPRING_PROFILES_ACTIVE", "prod", "SERVER_PORT", "18091");
+        var variables = Map.of("SPRING_PROFILES_ACTIVE", "prod", "SERVER_PORT", "18091",
+                "ADMIN_BOOTSTRAP_ENABLED", "true");
         var system = run(directory, variables);
         assertEquals("prod", system.getProperty("profiles"));
         assertEquals("18091", system.getProperty("port"));
-        var command = run(directory, variables, "--spring.profiles.active=test", "--server.port=18092");
+        assertEquals("true", system.getProperty("bootstrapEnabled"));
+        var command = run(directory, variables, "--spring.profiles.active=test", "--server.port=18092",
+                "--app.bootstrap.enabled=false");
         assertEquals("test", command.getProperty("profiles"));
         assertEquals("test", command.getProperty("environment"));
         assertEquals("18092", command.getProperty("port"));
+        assertEquals("false", command.getProperty("bootstrapEnabled"));
     }
 
     @Test
     void activeProfilesAnnotationOverridesLocalDevSelection() throws Exception {
-        write(".env", "SPRING_PROFILES_ACTIVE=dev\n");
+        write(".env", "SPRING_PROFILES_ACTIVE=dev\nADMIN_BOOTSTRAP_ENABLED=true\n");
         var result = run(directory, Map.of(), "--probe.test-context=true");
         assertEquals("test", result.getProperty("profiles"));
         assertEquals("test", result.getProperty("environment"));
         assertEquals("ec:test", result.getProperty("namespace"));
+        assertEquals("false", result.getProperty("bootstrapEnabled"));
     }
 
     @Test
@@ -129,7 +136,8 @@ class EnvironmentSelectionTests {
                 .redirectErrorStream(true).redirectOutput(log.toFile());
         // 移除宿主机运行参数，避免本机凭证或环境选择污染隔离测试。
         builder.environment().keySet().removeIf(key -> key.startsWith("SPRING_") || key.startsWith("APP_")
-                || key.equals("SERVER_PORT") || key.equals("DB_USERNAME") || key.equals("TRUSTED_PROXY_REGEX"));
+                || key.equals("SERVER_PORT") || key.equals("DB_USERNAME") || key.equals("TRUSTED_PROXY_REGEX")
+                || key.equals("ADMIN_BOOTSTRAP_ENABLED"));
         builder.environment().putAll(variables);
         var process = builder.start();
         try {
@@ -176,6 +184,7 @@ class EnvironmentSelectionTests {
                 result.setProperty("forwardHeaders", env.getRequiredProperty("server.forward-headers-strategy"));
                 result.setProperty("port", env.getProperty("server.port", "8080"));
                 result.setProperty("databaseUser", env.getProperty("DB_USERNAME", ""));
+                result.setProperty("bootstrapEnabled", env.getProperty("app.bootstrap.enabled", "false"));
                 try (var writer = Files.newBufferedWriter(Path.of(arguments.getOptionValues("probe.output").getFirst()), StandardCharsets.UTF_8)) {
                     result.store(writer, "Isolated environment selection result");
                 }
