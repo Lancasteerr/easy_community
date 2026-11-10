@@ -1,6 +1,7 @@
 package com.febrie.backend.article.search;
 
-import com.febrie.backend.article.content.application.dto.ArticleListView;
+import com.febrie.backend.article.content.application.dto.*;
+import com.febrie.backend.article.content.application.ArticleDisplayAssembler;
 import com.febrie.backend.article.like.application.LikeQueryService;
 import com.febrie.backend.article.search.application.*;
 import com.febrie.backend.article.search.web.*;
@@ -18,11 +19,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ArticleSearchHttpTests {
     @Test void feedUsesRecommendedQueryAndDoesNotRecordViews() throws Exception {
         var service = mock(ArticleSearchService.class);
+        var display = mock(ArticleDisplayAssembler.class);
         var views = mock(ArticleViewService.class); var likes = mock(LikeQueryService.class);
         when(service.page(new ArticleSearchQuery("feed", null, null, "recommended", 20), null))
                 .thenReturn(new ArticleSearchService.Page(List.of(), null));
         when(views.totals(List.of())).thenReturn(Map.of()); when(likes.summaries(null, List.of())).thenReturn(Map.of());
-        var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes)))
+        var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes, display)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
         mvc.perform(get("/api/articles/feed")).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
         verify(service).page(new ArticleSearchQuery("feed", null, null, "recommended", 20), null);
@@ -30,13 +32,15 @@ class ArticleSearchHttpTests {
     }
     @Test void guestGetsFlatCardWithOnlyFinalItemCounts() throws Exception {
         var service = mock(ArticleSearchService.class);
+        var display = mock(ArticleDisplayAssembler.class);
         var views = mock(ArticleViewService.class); var likes = mock(LikeQueryService.class);
-        var card = new ArticleListView("1", "Java", "2", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
+        var card = new ArticleListView("1", "Java", "2", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH, null);
         when(service.page(new ArticleSearchQuery("search", "Java", null, null, 20), null))
-                .thenReturn(new ArticleSearchService.Page(List.of(card), null));
+                .thenReturn(new ArticleSearchService.Page(List.of(new ArticleBriefData("1", "Java", "2", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH)), null));
+        when(display.lists(anyList())).thenReturn(List.of(card));
         when(views.totals(List.of(1L))).thenReturn(Map.of(1L, 10L));
         when(likes.summaries(null, List.of(1L))).thenReturn(Map.of(1L, new LikeQueryService.Summary(3, false)));
-        var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes)))
+        var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes, display)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
         mvc.perform(get("/api/articles/search").param("q", "Java"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].articleId").value("1"))

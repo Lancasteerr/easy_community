@@ -1,7 +1,7 @@
 package com.febrie.backend.article.content.infrastructure.cache;
 
-import com.febrie.backend.article.content.application.dto.ArticleDetailView;
-import com.febrie.backend.article.content.application.dto.ArticleListView;
+import com.febrie.backend.article.content.application.dto.ArticleDetailData;
+import com.febrie.backend.article.content.application.dto.ArticleBriefData;
 import com.febrie.backend.article.tag.application.dto.TagView;
 
 import com.febrie.backend.article.content.infrastructure.config.ArticleCacheProperties;
@@ -54,8 +54,8 @@ class ArticleCacheIntegrationTests {
         long ttl = redis.getExpire(cache.key(1, "detail"), java.util.concurrent.TimeUnit.MILLISECONDS);
         assertTrue(ttl <= 300_000 && ttl >= 269_000);
         redis.expire(cache.key(1, "detail"), Duration.ofSeconds(30));
-        assertEquals("https://cover.test/1", details.get(1).data().coverUrl());
-        assertEquals("author", lists.get(List.of(1L)).get(1L).data().authorName());
+        assertEquals("cover-id", details.get(1).data().coverMediaId());
+        assertEquals("2", lists.get(List.of(1L)).get(1L).data().authorId());
         assertTrue(redis.getExpire(cache.key(1, "detail")) <= 30);
         assertTrue(cache.unlock(1, token));
     }
@@ -108,12 +108,12 @@ class ArticleCacheIntegrationTests {
         assertThrows(IllegalStateException.class, () -> rebuild.run(new org.springframework.boot.DefaultApplicationArguments()));
         context.close();
     }
-    private static ArticleListView list() {
-        return new ArticleListView("1", "title", "2", "author", "summary", "https://cover.test/1",
+    private static ArticleBriefData list() {
+        return new ArticleBriefData("1", "title", "2", "summary", "cover-id",
                 List.of(new TagView("3", "Java")), Instant.EPOCH, Instant.EPOCH);
     }
-    private static ArticleDetailView detail() {
-        return new ArticleDetailView("1", "title", "2", "author", "summary", null, "https://cover.test/1",
+    private static ArticleDetailData detail() {
+        return new ArticleDetailData("1", "title", "2", "summary", "cover-id",
                 List.of(new TagView("3", "Java")), Instant.EPOCH, Instant.EPOCH, "<p>text</p>");
     }
 }

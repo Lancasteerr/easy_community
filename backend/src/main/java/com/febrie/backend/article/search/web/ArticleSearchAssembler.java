@@ -1,6 +1,7 @@
 package com.febrie.backend.article.search.web;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import com.febrie.backend.article.content.application.ArticleDisplayAssembler;
 import com.febrie.backend.article.content.application.dto.ArticleListView;
 import com.febrie.backend.article.like.application.LikeQueryService;
 import com.febrie.backend.article.search.application.ArticleSearchService;
@@ -13,12 +14,16 @@ import org.springframework.stereotype.Component;
 public class ArticleSearchAssembler {
     private final ArticleViewService views;
     private final LikeQueryService likes;
-    public ArticleSearchAssembler(ArticleViewService views, LikeQueryService likes) { this.views = views; this.likes = likes; }
+    private final ArticleDisplayAssembler display;
+    public ArticleSearchAssembler(ArticleViewService views, LikeQueryService likes, ArticleDisplayAssembler display) {
+        this.views = views; this.likes = likes; this.display = display;
+    }
     public Response assemble(ArticleSearchService.Page page, Long user) {
-        var ids = page.items().stream().map(v -> Long.parseLong(v.articleId())).toList();
+        var articles = display.lists(page.items());
+        var ids = articles.stream().map(v -> Long.parseLong(v.articleId())).toList();
         var totals = views.totals(ids);
         var summaries = likes.summaries(user, ids);
-        return new Response(page.items().stream().map(v -> {
+        return new Response(articles.stream().map(v -> {
             long id = Long.parseLong(v.articleId()); var summary = summaries.get(id);
             return new Card(v, totals.get(id), summary.likeCount(), summary.likedByMe());
         }).toList(), page.nextCursor());

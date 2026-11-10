@@ -1,7 +1,7 @@
 package com.febrie.backend.article.search;
 
 import com.febrie.backend.article.content.application.ArticleListHydrator;
-import com.febrie.backend.article.content.application.dto.ArticleListView;
+import com.febrie.backend.article.content.application.dto.ArticleBriefData;
 import com.febrie.backend.article.search.application.*;
 import com.febrie.backend.article.search.infrastructure.elasticsearch.ArticleSearchIndex;
 import com.febrie.backend.shared.error.ApiException;
@@ -58,7 +58,7 @@ class ArticleSearchServiceTests {
         return new ArticleSearchIndex.Batch(pit, LongStream.rangeClosed(from, to).mapToObj(id -> new ArticleSearchIndex.Hit(id,
                 List.of(new SearchCursor.Value("long", Long.toString(id))))).toList());
     }
-    private static ArticleListView card(long id) {
-        return new ArticleListView(Long.toString(id), "title", "1", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
+    private static ArticleBriefData card(long id) {
+        return new ArticleBriefData(Long.toString(id), "title", "1", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
     }
 }

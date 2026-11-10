@@ -4,9 +4,6 @@ import com.febrie.backend.user.application.dto.AccountAuthState;
 import com.febrie.backend.user.application.dto.AccountSnapshot;
 import com.febrie.backend.user.infrastructure.persistence.AccountRepository;
 import java.util.Optional;
-import java.util.Collection;
-import java.util.Map;
-import com.febrie.backend.user.application.dto.UserDisplayView;
 import org.springframework.stereotype.Service;
 
 /** 提供认证所需的账户读取入口，让其他业务无需直接调用用户数据库组件。 */
@@ -28,6 +25,4 @@ public class AccountQueryService {
         return accounts.authState(userId);
     }
 
-    /** 加入调用者当前读取事务，供文章在一致快照内批量组装署名。 */
-    public Map<Long, UserDisplayView> displays(Collection<Long> ids) { return accounts.displays(ids); }
 }

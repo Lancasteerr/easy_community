@@ -5,7 +5,7 @@ import com.febrie.backend.media.domain.MediaIds;
 import com.febrie.backend.user.application.dto.AccountAuthState;
 import com.febrie.backend.user.application.dto.AccountSnapshot;
 import com.febrie.backend.user.application.dto.UserProfileSnapshot;
-import com.febrie.backend.user.application.dto.UserDisplayView;
+import com.febrie.backend.user.application.dto.UserBasicData;
 import com.febrie.backend.user.domain.Role;
 import com.febrie.backend.user.infrastructure.persistence.entity.AccountRow;
 import com.febrie.backend.user.infrastructure.persistence.entity.AuthIdentityEntity;
@@ -34,11 +34,11 @@ public class AccountRepository {
     }
 
     /** 历史文章仍保留软删除账号的署名，不能以ACTIVE筛选代替作者存在性。 */
-    public Map<Long, UserDisplayView> displays(Collection<Long> ids) {
+    public Map<Long, UserBasicData> basics(Collection<Long> ids) {
         if (ids.isEmpty()) { return Map.of(); }
-        return users.selectList(Wrappers.<UserEntity>lambdaQuery().select(UserEntity::getId, UserEntity::getUsername)
+        return users.selectList(Wrappers.<UserEntity>lambdaQuery().select(UserEntity::getId, UserEntity::getUsername, UserEntity::getAvatarMediaId)
                 .in(UserEntity::getId, ids)).stream().collect(Collectors.toMap(UserEntity::getId,
-                        row -> new UserDisplayView(row.getId(), row.getUsername())));
+                        row -> new UserBasicData(row.getId(), row.getUsername(), MediaIds.text(row.getAvatarMediaId()))));
     }
 
     public Optional<AccountSnapshot> lockById(long userId) {

@@ -1,6 +1,6 @@
 package com.febrie.backend.article.content.application;
 
-import com.febrie.backend.article.content.application.dto.ArticleListView;
+import com.febrie.backend.article.content.application.dto.ArticleBriefData;
 import com.febrie.backend.article.content.application.dto.LoadedArticle;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleCache;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleListCacheStore;
@@ -27,7 +27,7 @@ class ArticleListHydratorTests {
     }
     @Test void warmBatchKeepsInputOrderWithoutSql() {
         when(lists.get(anyCollection())).thenReturn(Map.of(2L, CacheValue.hit(view(2)), 1L, CacheValue.hit(view(1))));
-        assertEquals(List.of("1", "2"), hydrator.authorPage(9, List.of(1L, 2L)).stream().map(ArticleListView::articleId).toList());
+        assertEquals(List.of("1", "2"), hydrator.authorPage(9, List.of(1L, 2L)).stream().map(ArticleBriefData::articleId).toList());
         verifyNoInteractions(reader);
         verify(cache, never()).tryLock(anyLong());
     }
@@ -57,7 +57,7 @@ class ArticleListHydratorTests {
         verify(lists, never()).publish(anyLong(), anyString(), any());
     }
     @Test void publicCandidatesSkipKnownInvalidWithoutSqlAndAllowDifferentAuthors() {
-        var other = new ArticleListView("2", "other", "100", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
+        var other = new ArticleBriefData("2", "other", "100", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
         when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.negative(), 2L, CacheValue.hit(other)));
         assertEquals(List.of(other), hydrator.publicCandidates(List.of(1L, 2L)));
         verifyNoInteractions(reader);
@@ -66,12 +66,12 @@ class ArticleListHydratorTests {
         when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss(), 2L, CacheValue.miss()));
         when(cache.tryLock(1)).thenReturn("a"); when(cache.tryLock(2)).thenReturn("b");
         when(reader.lists(List.of(2L, 1L))).thenReturn(Map.of(1L, LoadedArticle.visible(view(1)), 2L, LoadedArticle.visible(view(2))));
-        assertEquals(List.of("2", "1"), hydrator.publicCandidates(List.of(2L, 1L)).stream().map(ArticleListView::articleId).toList());
+        assertEquals(List.of("2", "1"), hydrator.publicCandidates(List.of(2L, 1L)).stream().map(ArticleBriefData::articleId).toList());
         verify(reader, times(1)).lists(List.of(2L, 1L));
     }
     @Test void publicColdReadsAreBoundedToFourWithoutLeakingSlots() throws Exception {
         when(lists.get(anyCollection())).thenAnswer(call -> {
-            Map<Long, CacheValue<ArticleListView>> values = new HashMap<>();
+            Map<Long, CacheValue<ArticleBriefData>> values = new HashMap<>();
             for (long id : (Collection<Long>) call.getArgument(0)) { values.put(id, CacheValue.miss()); }
             return values;
         });
@@ -97,7 +97,7 @@ class ArticleListHydratorTests {
         } finally { release.countDown(); }
         assertEquals(1, hydrator.publicCandidates(List.of(6L)).size());
     }
-    private static ArticleListView view(long id) {
-        return new ArticleListView(Long.toString(id), "title", "9", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
+    private static ArticleBriefData view(long id) {
+        return new ArticleBriefData(Long.toString(id), "title", "9", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);
     }
 }

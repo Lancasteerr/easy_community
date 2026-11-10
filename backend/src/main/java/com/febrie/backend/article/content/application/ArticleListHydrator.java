@@ -1,7 +1,7 @@
 package com.febrie.backend.article.content.application;
 
 import com.febrie.backend.article.common.ArticleErrors;
-import com.febrie.backend.article.content.application.dto.ArticleListView;
+import com.febrie.backend.article.content.application.dto.ArticleBriefData;
 import com.febrie.backend.article.content.application.dto.LoadedArticle;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleCache;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleListCacheStore;
@@ -56,7 +56,7 @@ public class ArticleListHydrator {
     }
 
     /** ES候选不带作者授权前提；只跳过已知无效项，不额外强查主库状态。 */
-    public List<ArticleListView> publicCandidates(List<Long> ids) {
+    public List<ArticleBriefData> publicCandidates(List<Long> ids) {
         if (ids.isEmpty()) { return List.of(); }
         var assembly = assemble(ids, true);
         cache.hidden(assembly.result.keySet()).forEach((id, hidden) -> {
@@ -65,7 +65,7 @@ public class ArticleListHydrator {
         return ids.stream().map(assembly.result::get).filter(Objects::nonNull).toList();
     }
 
-    public List<ArticleListView> authorPage(long author, List<Long> ids) {
+    public List<ArticleBriefData> authorPage(long author, List<Long> ids) {
         if (ids.isEmpty()) { return List.of(); }
         var assembly = assemble(ids, false);
         // 返回前再查墓碑；与已授权分页SQL矛盾的项由主库批量核对，不绕锁写共享缓存。
@@ -85,7 +85,7 @@ public class ArticleListHydrator {
         return ids.stream().map(assembly.result::get).filter(Objects::nonNull).toList();
     }
 
-    private boolean acceptCached(long id, boolean hidden, CacheValue<ArticleListView> value, Assembly assembly) {
+    private boolean acceptCached(long id, boolean hidden, CacheValue<ArticleBriefData> value, Assembly assembly) {
         if (hidden || value.state() == CacheValue.State.NEGATIVE) { assembly.conflicts.add(id); }
         else if (value.state() == CacheValue.State.HIT) { assembly.result.put(id, value.data()); }
         else { return false; }
@@ -102,7 +102,7 @@ public class ArticleListHydrator {
             if (!acceptCached(id, hidden.get(id), values.get(id), assembly)) { load.add(id); }
         }
         if (load.isEmpty()) { return; }
-        Map<Long, LoadedArticle<ArticleListView>> loaded;
+        Map<Long, LoadedArticle<ArticleBriefData>> loaded;
         if (assembly.publicCandidates && !publicReads.tryAcquire()) { throw ArticleErrors.unavailable(); }
         try { loaded = reader.lists(load); }
         finally { if (assembly.publicCandidates) { publicReads.release(); } }
@@ -122,7 +122,7 @@ public class ArticleListHydrator {
 
     /** 单次装配的局部结果，不能作为跨请求缓存或操作状态保存。 */
     private static final class Assembly {
-        private final Map<Long, ArticleListView> result = new HashMap<>();
+        private final Map<Long, ArticleBriefData> result = new HashMap<>();
         private final Set<Long> pending;
         private final Set<Long> conflicts = new HashSet<>();
         private final boolean publicCandidates;

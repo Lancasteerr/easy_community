@@ -2,7 +2,7 @@ package com.febrie.backend.article.search.application;
 
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import com.febrie.backend.article.content.application.ArticleListHydrator;
-import com.febrie.backend.article.content.application.dto.ArticleListView;
+import com.febrie.backend.article.content.application.dto.ArticleBriefData;
 import com.febrie.backend.article.search.infrastructure.config.SearchProperties;
 import com.febrie.backend.article.search.infrastructure.elasticsearch.ArticleSearchIndex;
 import com.febrie.backend.shared.error.ApiException;
@@ -34,7 +34,7 @@ public class ArticleSearchService {
         var sample = io.micrometer.core.instrument.Timer.start(metrics);
         try {
             if (pit == null) { pit = index.open(); }
-            List<ArticleListView> items = new ArrayList<>();
+            List<ArticleBriefData> items = new ArrayList<>();
             for (int round = 0; round < 3; round++) {
                 var batch = index.search(query, pit, after);
                 pit = batch.pit();
@@ -62,5 +62,5 @@ public class ArticleSearchService {
             throw SearchErrors.unavailable();
         } finally { sample.stop(metrics.timer("article.search.duration")); }
     }
-    public record Page(List<ArticleListView> items, String nextCursor) { }
+    public record Page(List<ArticleBriefData> items, String nextCursor) { }
 }

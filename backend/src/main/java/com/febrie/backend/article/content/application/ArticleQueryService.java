@@ -2,6 +2,7 @@ package com.febrie.backend.article.content.application;
 
 import com.febrie.backend.article.common.ArticleErrors;
 import com.febrie.backend.article.content.application.dto.ArticleDetailView;
+import com.febrie.backend.article.content.application.dto.ArticleDetailData;
 import com.febrie.backend.article.content.application.dto.ArticleEditView;
 import com.febrie.backend.article.content.application.dto.ArticlePage;
 import com.febrie.backend.article.content.application.dto.LoadedArticle;
@@ -26,11 +27,12 @@ public class ArticleQueryService {
     private final ArticleCache cache;
     private final ArticleDetailCacheStore details;
     private final ArticleListHydrator lists;
-    public ArticleQueryService(ArticleReader reader, ArticleCache cache, ArticleDetailCacheStore details, ArticleListHydrator lists) {
-        this.reader = reader; this.cache = cache; this.details = details; this.lists = lists;
+    private final ArticleDisplayAssembler display;
+    public ArticleQueryService(ArticleReader reader, ArticleCache cache, ArticleDetailCacheStore details, ArticleListHydrator lists, ArticleDisplayAssembler display) {
+        this.reader = reader; this.cache = cache; this.details = details; this.lists = lists; this.display = display;
     }
     public ArticleDetailView detail(long id) {
-        try { return cachedDetail(id); }
+        try { return display.detail(cachedDetail(id)); }
         catch (ApiException error) { throw error; }
         catch (RuntimeException error) {
             log.warn("文章详情依赖异常 articleId={} error={}", id, error.getClass().getSimpleName());
@@ -41,7 +43,7 @@ public class ArticleQueryService {
     public ArticlePage page(UserActor actor, int page, int size) {
         if (page < 1 || size < 1 || size > 50) { throw ArticleErrors.invalid(); }
         var selected = reader.page(actor.userId(), page, size);
-        try { return new ArticlePage(lists.authorPage(actor.userId(), selected.ids()), page, size, selected.total()); }
+        try { return new ArticlePage(display.lists(lists.authorPage(actor.userId(), selected.ids())),  page, size, selected.total()); }
         catch (ApiException error) { throw error; }
         catch (RuntimeException error) {
             log.warn("文章列表依赖异常 error={}", error.getClass().getSimpleName());
@@ -49,7 +51,7 @@ public class ArticleQueryService {
         }
     }
 
-    private ArticleDetailView cachedDetail(long id) {
+    private ArticleDetailData cachedDetail(long id) {
         long deadline = System.nanoTime() + ArticleCache.WAIT_BUDGET.toNanos();
         while (true) {
             if (cache.hidden(id)) { throw ArticleErrors.notFound(); }
@@ -79,7 +81,7 @@ public class ArticleQueryService {
             LockSupport.parkNanos(Math.min(25_000_000, Math.max(0, deadline - System.nanoTime())));
         }
     }
-    private ArticleDetailView visible(long id, ArticleDetailView data) {
+    private ArticleDetailData visible(long id, ArticleDetailData data) {
         if (cache.hidden(id)) { throw ArticleErrors.notFound(); }
         return data;
     }
