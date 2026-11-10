@@ -81,6 +81,8 @@ class ArticleHttpIntegrationTests {
         assertEquals(200, detail.statusCode(), detail.body());
         assertEquals("no-store", detail.headers().firstValue("Cache-Control").orElseThrow());
         assertTrue(mapper.readTree(detail.body()).path("contentHtml").asString().contains("&lt;safe&gt;"));
+        assertTrue(mapper.readTree(detail.body()).has("authorAvatarUrl"));
+        assertTrue(mapper.readTree(detail.body()).path("authorAvatarUrl").isNull());
         assertEquals(401, visitor.call("GET", "/api/articles/" + id + "/edit", null, false).statusCode());
         assertEquals(401, visitor.call("GET", "/api/users/me/articles", null, false).statusCode());
         assertEquals(401, visitor.call("GET", "/api/tags", null, false).statusCode());

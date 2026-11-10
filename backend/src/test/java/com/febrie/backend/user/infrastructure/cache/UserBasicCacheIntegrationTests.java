@@ -27,7 +27,8 @@ class UserBasicCacheIntegrationTests {
         server.setPassword(System.getenv().getOrDefault("IT_REDIS_PASSWORD", ""));
         connections = new LettuceConnectionFactory(server, LettuceClientConfiguration.builder().commandTimeout(Duration.ofSeconds(2)).build());
         connections.afterPropertiesSet(); redis = new StringRedisTemplate(connections);
-        cache = new UserBasicCacheStore(redis, new UserBasicCacheProperties(namespace), new ObjectMapper());
+        cache = new UserBasicCacheStore(redis, new UserBasicCacheProperties(namespace), new ObjectMapper(),
+                new com.febrie.backend.shared.cache.CacheMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
     }
     @AfterEach void clean() {
         if (redis != null) {

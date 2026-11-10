@@ -18,9 +18,10 @@ public class UserService {
     private final AccountRepository accounts;
     private final PasswordEncoder encoder;
     private final UserProfileService profiles;
+    private final UserCacheMaintenance cache;
 
-    public UserService(AccountRepository accounts, PasswordEncoder encoder, UserProfileService profiles) {
-        this.accounts = accounts; this.encoder = encoder; this.profiles = profiles;
+    public UserService(AccountRepository accounts, PasswordEncoder encoder, UserProfileService profiles, UserCacheMaintenance cache) {
+        this.accounts = accounts; this.encoder = encoder; this.profiles = profiles; this.cache = cache;
     }
 
     @Transactional
@@ -46,6 +47,7 @@ public class UserService {
         AccountPolicy.password(password);
         try {
             long userId = accounts.insert(trimmedUsername, role, encoder.encode(password));
+            cache.invalidateAfterCommit(userId);
             return new UserView(Long.toString(userId), trimmedUsername, role);
         } catch (DuplicateKeyException duplicate) {
             throw new ApiException(HttpStatus.CONFLICT, "USERNAME_EXISTS", "用户名已被使用");
@@ -80,6 +82,7 @@ public class UserService {
             profiles.detachFromLockedUser(userId);
             accounts.softDelete(userId);
         }
+        cache.invalidateAfterCommit(userId);
     }
 
     /** 仅供未来内部角色管理调用；本期不开放HTTP入口。 */

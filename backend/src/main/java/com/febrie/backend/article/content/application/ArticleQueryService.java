@@ -45,7 +45,7 @@ public class ArticleQueryService {
     public ArticlePage page(UserActor actor, int page, int size) {
         if (page < 1 || size < 1 || size > 50) { throw ArticleErrors.invalid(); }
         var selected = reader.page(actor.userId(), page, size);
-        try { return new ArticlePage(display.lists(lists.authorPage(actor.userId(), selected.ids())),  page, size, selected.total()); }
+        try { return new ArticlePage(display.lists(lists.authorPage(actor.userId(), selected.ids())), page, size, selected.total()); }
         catch (ApiException error) { throw error; }
         catch (RuntimeException error) {
             log.warn("文章列表依赖异常 error={}", error.getClass().getSimpleName());
@@ -61,7 +61,7 @@ public class ArticleQueryService {
             log.debug("文章详情缓存 articleId={} state={}", id, value.state());
             if (value.state() == CacheValue.State.NEGATIVE) { throw ArticleErrors.notFound(); }
             if (value.state() == CacheValue.State.HIT) { return visible(id, value.data()); }
-            if (!sourceReads.tryAcquire()) { throw ArticleErrors.unavailable(); }
+            if (!sourceReads.tryAcquire()) { cache.record("source_rejected"); throw ArticleErrors.unavailable(); }
             String token = null;
             CacheValue<ArticleDetailData> checked = CacheValue.miss();
             try {
@@ -74,7 +74,7 @@ public class ArticleQueryService {
             // 可见性检查和响应组装均在释放文章锁之后执行。
             if (checked.state() == CacheValue.State.NEGATIVE) { throw ArticleErrors.notFound(); }
             if (checked.state() == CacheValue.State.HIT) { return visible(id, checked.data()); }
-            if (!CacheProtocol.awaitRetry(deadline)) { throw ArticleErrors.unavailable(); }
+            if (!CacheProtocol.awaitRetry(deadline)) { cache.record("contention_timeout"); throw ArticleErrors.unavailable(); }
         }
     }
 
@@ -83,6 +83,7 @@ public class ArticleQueryService {
         if (cache.hidden(id)) { return CacheValue.negative(); }
         var value = details.get(id);
         if (value.state() != CacheValue.State.MISS) { return value; }
+        cache.record("source");
         var loaded = reader.detail(id);
         boolean published = switch (loaded.state()) {
             case PUBLIC -> details.publish(id, token, loaded.data());

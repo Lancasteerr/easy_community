@@ -24,6 +24,7 @@ public class ArticleCacheMaintenance {
             if (System.nanoTime() >= deadline || Thread.currentThread().isInterrupted()) { break; }
             LockSupport.parkNanos(Math.min(25_000_000, Math.max(0, deadline - System.nanoTime())));
         }
+        cache.record("invalidation_failed");
         log.warn("文章提交后双缓存维护未完成 articleId={} hide={}", id, hidden);
     }
 }

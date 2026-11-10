@@ -18,8 +18,6 @@ class UserBasicQueryServiceTests {
     private final UserBasicQueryService service = new UserBasicQueryService(reader, cache);
 
     @Test void warmAndNegativeHitsNeverCompeteForLocks() {
-        when(cache.get(List.of(1L, 2L))).thenReturn(Map.of(1L, CacheValue.hit(user(1)), 2L, CacheValue.negative()));
-        // 实际调用使用去重后的Set，不依赖集合具体类型。
         when(cache.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.hit(user(1)), 2L, CacheValue.negative()));
         assertEquals(Map.of(1L, user(1)), service.get(List.of(1L, 2L, 1L)));
         verifyNoInteractions(reader);
@@ -90,6 +88,14 @@ class UserBasicQueryServiceTests {
         });
         assertEquals(101, service.get(LongStream.rangeClosed(1, 101).boxed().toList()).size());
         verify(reader, times(2)).load(anyCollection());
+    }
+
+    @Test void lockContentionIsBoundedAndNeverBypassesSqlProtection() {
+        when(cache.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss()));
+        assertTimeout(java.time.Duration.ofSeconds(2), () -> assertThrows(ApiException.class, () -> service.get(1)));
+        verify(cache).record("contention_timeout");
+        verifyNoInteractions(reader);
+        verify(cache, never()).missing(anyLong(), anyString());
     }
 
     @Test void limitsSourcesBeforeCompetingForAnotherLockAndRecoversSlots() throws Exception {

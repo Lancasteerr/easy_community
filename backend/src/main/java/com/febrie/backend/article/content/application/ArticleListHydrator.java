@@ -13,7 +13,7 @@ import org.slf4j.*;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.*;
 
-/** 装配已由主库选出的本人公开文章；批量查询不把异常项静默当作删除。 */
+/** 批量读取文章简略投影；作者与计数在解锁后由业务层组装。 */
 @Component
 @Transactional(propagation = Propagation.NEVER)
 public class ArticleListHydrator {
@@ -21,13 +21,13 @@ public class ArticleListHydrator {
     private final ArticleCache cache;
     private final ArticleListCacheStore lists;
     private final ArticleReader reader;
-    private final java.util.concurrent.Semaphore publicReads = new java.util.concurrent.Semaphore(4);
+    private final java.util.concurrent.Semaphore sourceReads = new java.util.concurrent.Semaphore(4);
     public ArticleListHydrator(ArticleCache cache, ArticleListCacheStore lists, ArticleReader reader) {
         this.cache = cache; this.lists = lists; this.reader = reader;
     }
 
-    private Assembly assemble(List<Long> ids, boolean publicCandidates) {
-        Assembly assembly = new Assembly(ids, publicCandidates);
+    private Assembly assemble(List<Long> ids) {
+        Assembly assembly = new Assembly(ids);
         long deadline = System.nanoTime() + ArticleCache.WAIT_BUDGET.toNanos();
         while (!assembly.pending.isEmpty()) {
             var hidden = cache.hidden(assembly.pending);
@@ -38,7 +38,7 @@ public class ArticleListHydrator {
             }
 
             if (misses.isEmpty()) { break; }
-            if (!publicReads.tryAcquire()) { throw ArticleErrors.unavailable(); }
+            if (!sourceReads.tryAcquire()) { cache.record("source_rejected"); throw ArticleErrors.unavailable(); }
             Map<Long, String> held = new LinkedHashMap<>();
             try {
                 // 所有锁仅非阻塞尝试，不能持有A锁阻塞等待B锁。
@@ -49,9 +49,10 @@ public class ArticleListHydrator {
                 if (!held.isEmpty()) { loadLocked(held, assembly); }
             } finally {
                 held.forEach(cache::release);
-                publicReads.release();
+                sourceReads.release();
             }
             if (!assembly.pending.isEmpty() && !CacheProtocol.awaitRetry(deadline)) {
+                cache.record("contention_timeout");
                 throw ArticleErrors.unavailable();
             }
         }
@@ -62,7 +63,7 @@ public class ArticleListHydrator {
     /** ES候选不带作者授权前提；只跳过已知无效项，不额外强查主库状态。 */
     public List<ArticleBriefData> publicCandidates(List<Long> ids) {
         if (ids.isEmpty()) { return List.of(); }
-        var assembly = assemble(ids, true);
+        var assembly = assemble(ids);
         cache.hidden(assembly.result.keySet()).forEach((id, hidden) -> {
             if (hidden) { assembly.result.remove(id); }
         });
@@ -71,7 +72,7 @@ public class ArticleListHydrator {
 
     public List<ArticleBriefData> authorPage(long author, List<Long> ids) {
         if (ids.isEmpty()) { return List.of(); }
-        var assembly = assemble(ids, false);
+        var assembly = assemble(ids);
         // 返回前再查墓碑；与已授权分页SQL矛盾的项由主库批量核对，不绕锁写共享缓存。
         cache.hidden(assembly.result.keySet()).forEach((id, hidden) -> {
             if (hidden) { assembly.conflicts.add(id); assembly.result.remove(id); }
@@ -106,6 +107,7 @@ public class ArticleListHydrator {
         }
         if (held.isEmpty()) { return; }
         var load = new ArrayList<>(held.keySet());
+        cache.record("source");
         var loaded = reader.lists(load);
         log.debug("文章列表批量回源 count={}", load.size());
         for (long id : load) {
@@ -135,9 +137,8 @@ public class ArticleListHydrator {
         private final Map<Long, ArticleBriefData> result = new HashMap<>();
         private final Set<Long> pending;
         private final Set<Long> conflicts = new HashSet<>();
-        private final boolean publicCandidates;
-        private Assembly(List<Long> ids, boolean publicCandidates) {
-            pending = new LinkedHashSet<>(ids); this.publicCandidates = publicCandidates;
+        private Assembly(List<Long> ids) {
+            pending = new LinkedHashSet<>(ids);
         }
     }
 }

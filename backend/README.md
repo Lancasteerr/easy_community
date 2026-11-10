@@ -8,6 +8,8 @@
 
 文章CRUD已接入，接口、正文白名单、最终一致缓存及维护命令见[文章接入与恢复](../docs/public/guides/article/zh-CN/article-crud-implementation.md)。删除不可恢复；本人管理列表只展示公开文章，游客仅可读取单篇详情。
 
+文章与用户公开展示现使用独立的三类缓存，响应新增可空的`authorAvatarUrl`；锁范围、用户提交后失效、指标及文章v3发布步骤见[公开读取缓存说明](docs/public-read-cache.md)。前端展示适配另行实施。
+
 文件上传、MinIO/COS桶配置、头像接口和文章接入见[文件服务V2](../docs/public/guides/media/zh-CN/media-service.md)。
 升级已有本机环境文件时，必须补充示例中的全部`MEDIA_*`字段；应用只校验配置，不自动创建桶或修改权限。
 

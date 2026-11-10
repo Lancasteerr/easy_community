@@ -62,6 +62,13 @@ class ArticleMysqlIntegrationTests {
     @MockitoSpyBean ArticleRepository articles;
     @MockitoSpyBean HikariDataSource dataSource;
     @MockitoBean UploadStorage storage;
+    @Autowired com.febrie.backend.user.application.UserBasicQueryService basics;
+    @Autowired com.febrie.backend.user.application.UserProfileService profiles;
+    @Autowired com.febrie.backend.user.application.UserService users;
+    @Autowired org.springframework.transaction.PlatformTransactionManager manager;
+    @Autowired io.micrometer.core.instrument.MeterRegistry metrics;
+    @MockitoSpyBean com.febrie.backend.user.infrastructure.cache.UserBasicCacheStore userCache;
+    private final List<Long> createdUsers = new ArrayList<>();
     private UserActor actor;
     private final List<Long> createdTags = new ArrayList<>();
 
@@ -83,12 +90,18 @@ class ArticleMysqlIntegrationTests {
         reset(articles);
         reset(dataSource);
         reset(indexMapper);
+        reset(userCache);
         articleFixtures.deleteTagsForAuthor(actor.userId());
         articleFixtures.deleteLikeStatesForAuthor(actor.userId()); articleFixtures.deleteLikeCountsForAuthor(actor.userId()); articleFixtures.deleteArticlesForAuthor(actor.userId());
+        fixtures.clearAvatar(actor.userId());
         fixtures.deleteOwnedReferences(actor.userId());
         fixtures.deleteOwnedFiles(actor.userId());
         fixtures.deleteIdentities(actor.userId()); fixtures.deleteUser(actor.userId());
         createdTags.forEach(articleFixtures::deleteTag);
+        for (long userId : createdUsers) { fixtures.deleteIdentities(userId); fixtures.deleteUser(userId); }
+        try (var keys = redis.scan(org.springframework.data.redis.core.ScanOptions.scanOptions().match(PREFIX + ":*").count(100).build())) {
+            while (keys.hasNext()) { redis.delete(keys.next()); }
+        }
     }
     @Test void indexVersionAndOutboxShareTransaction() {
         long id = commits.create(actor, content("v1", null), new ArticleCommitService.Attempt());
@@ -402,6 +415,115 @@ class ArticleMysqlIntegrationTests {
         assertEquals("after-crash", queries.detail(id).title());
         assertEquals("after-crash", queries.page(actor, 1, 20).items().getFirst().title());
         for (String suffix : List.of("detail", "list", "cache-lock", "hidden")) { redis.delete(cache.key(id, suffix)); }
+    }
+
+    @Test void avatarUpdateAndClearRefreshAuthorWithoutChangingArticleCaches() {
+        long id = commits.create(actor, content("cached", null), new ArticleCommitService.Attempt());
+        assertNull(queries.detail(id).authorAvatarUrl());
+        queries.page(actor, 1, 20);
+        String detailBefore = cache.value(id, "detail"), briefBefore = cache.value(id, "list");
+        assertFalse(detailBefore.contains("authorName"));
+        assertFalse(briefBefore.contains("Avatar"));
+        String avatar = readyAvatar();
+        profiles.setAvatar(actor, avatar);
+        assertEquals(detailBefore, cache.value(id, "detail"));
+        assertEquals(briefBefore, cache.value(id, "list"));
+        assertNotNull(queries.detail(id).authorAvatarUrl());
+        assertEquals(queries.detail(id).authorAvatarUrl(), queries.page(actor, 1, 20).items().getFirst().authorAvatarUrl());
+        assertEquals(1, fixtures.authVersion(actor.userId()));
+        profiles.clearAvatar(actor);
+        assertNull(queries.detail(id).authorAvatarUrl());
+        assertEquals(detailBefore, cache.value(id, "detail"));
+        assertFalse(Boolean.TRUE.equals(redis.hasKey(userCache.key(actor.userId(), "cache-lock"))));
+    }
+
+    @Test void outerAvatarRollbackKeepsSqlReferencesAndCacheUnchanged() {
+        basics.get(actor.userId());
+        String before = redis.opsForValue().get(userCache.key(actor.userId(), "data"));
+        String avatar = readyAvatar();
+        var outer = new TransactionTemplate(manager);
+        outer.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        clearInvocations(userCache);
+        outer.executeWithoutResult(status -> {
+            profiles.setAvatar(actor, avatar);
+            verify(userCache, never()).tryLock(anyLong());
+            assertEquals(before, redis.opsForValue().get(userCache.key(actor.userId(), "data")));
+            // 本人资料直接读取主库，能看到当前事务内的修改，不读取旧展示缓存。
+            assertEquals(avatar, profiles.profile(actor).avatarMediaId());
+            status.setRollbackOnly();
+        });
+        assertNull(profiles.profile(actor).avatarMediaId());
+        assertEquals(before, redis.opsForValue().get(userCache.key(actor.userId(), "data")));
+        assertTrue(files.references(ReferenceType.USER_AVATAR, actor.userId()).isEmpty());
+        verify(userCache, never()).invalidate(anyLong(), anyString());
+    }
+
+    @Test void failedAvatarInvalidationPreservesCommitAndConvergesAfterExpiry() {
+        assertNull(basics.get(actor.userId()).orElseThrow().avatarMediaId());
+        String avatar = readyAvatar();
+        doThrow(new org.springframework.data.redis.RedisSystemException("模拟删除失败", null))
+                .when(userCache).invalidate(eq(actor.userId()), anyString());
+        double before = metrics.counter("community.cache.events", "cache", "user_basic", "outcome", "invalidation_failed").count();
+        assertEquals(avatar, profiles.setAvatar(actor, avatar).avatarMediaId());
+        assertEquals(avatar, profiles.profile(actor).avatarMediaId());
+        assertNull(basics.get(actor.userId()).orElseThrow().avatarMediaId());
+        verify(userCache, times(3)).invalidate(eq(actor.userId()), anyString());
+        assertEquals(before + 1, metrics.counter("community.cache.events", "cache", "user_basic", "outcome", "invalidation_failed").count());
+        assertFalse(Boolean.TRUE.equals(redis.hasKey(userCache.key(actor.userId(), "cache-lock"))));
+        redis.expire(userCache.key(actor.userId(), "data"), java.time.Duration.ofMillis(50));
+        org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(3)).until(() ->
+                !Boolean.TRUE.equals(redis.hasKey(userCache.key(actor.userId(), "data"))));
+        reset(userCache);
+        assertEquals(avatar, basics.get(actor.userId()).orElseThrow().avatarMediaId());
+    }
+
+    @Test void softDeletionInvalidatesOnlyAfterOuterCommitAndKeepsHistoricalName() {
+        String avatar = readyAvatar();
+        profiles.setAvatar(actor, avatar);
+        long article = commits.create(actor, content("history", null), new ArticleCommitService.Attempt());
+        String name = queries.detail(article).authorName();
+        var admin = administrator();
+        var outer = new TransactionTemplate(manager);
+        outer.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        clearInvocations(userCache);
+        outer.executeWithoutResult(status -> {
+            users.deleteManaged(admin, actor.userId());
+            verify(userCache, never()).tryLock(anyLong());
+            assertEquals(avatar, userCache.get(List.of(actor.userId())).get(actor.userId()).data().avatarMediaId());
+        });
+        verify(userCache).invalidate(eq(actor.userId()), anyString());
+        assertEquals(name, basics.get(actor.userId()).orElseThrow().username());
+        assertNull(basics.get(actor.userId()).orElseThrow().avatarMediaId());
+        assertEquals(name, queries.detail(article).authorName());
+        assertNull(queries.detail(article).authorAvatarUrl());
+    }
+
+    @Test void managedCreationClearsPossibleNegativeOnlyWhenOuterTransactionCommits() {
+        var admin = administrator();
+        long id = transaction.execute(status -> {
+            var created = users.createManaged(admin, "managed_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16), "StrongPass123!", Role.USER);
+            long userId = Long.parseLong(created.userId()); createdUsers.add(userId);
+            String token = userCache.tryLock(userId);
+            try { assertTrue(userCache.missing(userId, token)); }
+            finally { userCache.release(userId, token); }
+            assertEquals(com.febrie.backend.shared.cache.CacheValue.State.NEGATIVE, userCache.get(List.of(userId)).get(userId).state());
+            return userId;
+        });
+        assertEquals(com.febrie.backend.shared.cache.CacheValue.State.MISS, userCache.get(List.of(id)).get(id).state());
+        assertTrue(basics.get(id).isPresent());
+    }
+
+    private UserActor administrator() {
+        long id = transaction.execute(status -> accounts.insert("admin_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16), Role.ADMIN, "unused"));
+        createdUsers.add(id);
+        return new UserActor(id, Role.ADMIN, 1);
+    }
+    private String readyAvatar() {
+        String id = UUID.randomUUID().toString();
+        files.insert(new FileRecord(id, actor.userId(), MediaPurpose.AVATAR, MediaStatus.ISSUED, null, null,
+                Instant.now(), Instant.now().plusSeconds(7200)));
+        fixtures.makeReady(MediaIds.bytes(id), 100);
+        return id;
     }
 
     private String readyImage() {

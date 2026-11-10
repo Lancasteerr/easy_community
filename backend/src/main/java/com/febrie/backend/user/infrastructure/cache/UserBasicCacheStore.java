@@ -19,9 +19,10 @@ public class UserBasicCacheStore {
     private final StringRedisTemplate redis;
     private final String namespace;
     private final ObjectMapper mapper;
+    private final CacheMetrics metrics;
 
-    public UserBasicCacheStore(StringRedisTemplate redis, UserBasicCacheProperties properties, ObjectMapper mapper) {
-        this.redis = redis; this.namespace = properties.namespace(); this.mapper = mapper;
+    public UserBasicCacheStore(StringRedisTemplate redis, UserBasicCacheProperties properties, ObjectMapper mapper, CacheMetrics metrics) {
+        this.redis = redis; this.namespace = properties.namespace(); this.mapper = mapper; this.metrics = metrics;
     }
     public String key(long id, String suffix) { return namespace + ":{" + id + "}:" + suffix; }
     public Map<Long, CacheValue<UserBasicData>> get(Collection<Long> ids) {
@@ -44,6 +45,7 @@ public class UserBasicCacheStore {
                 }
                 decoded = CacheValue.hit(data);
             } else { throw new IllegalStateException("用户缓存格式无效"); }
+            record(switch (decoded.state()) { case HIT -> "hit"; case NEGATIVE -> "negative_hit"; case MISS -> "miss"; });
             result.put(ordered.get(i), decoded);
         }
         return result;
@@ -64,10 +66,13 @@ public class UserBasicCacheStore {
         try { unlock(id, token); }
         catch (RuntimeException error) { log.warn("用户缓存解锁异常 userId={} error={}", id, error.getClass().getSimpleName()); }
     }
+    public void record(String outcome) { metrics.record("user_basic", outcome); }
+
     private boolean operate(long id, String token, String action, String payload, long ttl) {
         Long result = redis.execute(OPERATE, List.of(key(id, "cache-lock"), key(id, "data")),
                 token, action, payload, Long.toString(ttl));
         if (result == null || (result != 0 && result != 1)) { throw new RedisSystemException("用户脚本返回值无效", null); }
+        if (result == 0) { record("token_rejected"); }
         return result == 1;
     }
 }

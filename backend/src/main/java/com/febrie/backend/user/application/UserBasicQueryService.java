@@ -46,7 +46,7 @@ public class UserBasicQueryService {
             for (long id : new ArrayList<>(pending)) { accept(id, cached.get(id), pending, result); }
             if (pending.isEmpty()) { return; }
             // 必须先取得名额再竞争Redis锁，不能持锁等待数据库并发名额。
-            if (!sourceReads.tryAcquire()) { throw unavailable(); }
+            if (!sourceReads.tryAcquire()) { cache.record("source_rejected"); throw unavailable(); }
             Map<Long, String> held = new LinkedHashMap<>();
             try {
                 for (long id : pending) {
@@ -58,7 +58,9 @@ public class UserBasicQueryService {
                 held.forEach(cache::release);
                 sourceReads.release();
             }
-            if (!pending.isEmpty() && !CacheProtocol.awaitRetry(deadline)) { throw unavailable(); }
+            if (!pending.isEmpty() && !CacheProtocol.awaitRetry(deadline)) {
+                cache.record("contention_timeout"); throw unavailable();
+            }
         }
     }
 
@@ -68,6 +70,7 @@ public class UserBasicQueryService {
             if (accept(id, checked.get(id), pending, result)) { release(held, id); }
         }
         if (held.isEmpty()) { return; }
+        cache.record("source");
         var loaded = reader.load(new ArrayList<>(held.keySet()));
         for (long id : new ArrayList<>(held.keySet())) {
             var data = loaded.get(id);

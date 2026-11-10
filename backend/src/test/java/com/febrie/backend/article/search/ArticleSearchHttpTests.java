@@ -34,7 +34,7 @@ class ArticleSearchHttpTests {
         var service = mock(ArticleSearchService.class);
         var display = mock(ArticleDisplayAssembler.class);
         var views = mock(ArticleViewService.class); var likes = mock(LikeQueryService.class);
-        var card = new ArticleListView("1", "Java", "2", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH, null);
+        var card = new ArticleListView("1", "Java", "2", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH, "https://avatars.test/2");
         when(service.page(new ArticleSearchQuery("search", "Java", null, null, 20), null))
                 .thenReturn(new ArticleSearchService.Page(List.of(new ArticleBriefData("1", "Java", "2", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH)), null));
         when(display.lists(anyList())).thenReturn(List.of(card));
@@ -44,6 +44,8 @@ class ArticleSearchHttpTests {
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
         mvc.perform(get("/api/articles/search").param("q", "Java"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].articleId").value("1"))
+                .andExpect(jsonPath("$.items[0].authorName").value("author"))
+                .andExpect(jsonPath("$.items[0].authorAvatarUrl").value("https://avatars.test/2"))
                 .andExpect(jsonPath("$.items[0].viewCount").value(10))
                 .andExpect(jsonPath("$.items[0].likeCount").value(3))
                 .andExpect(jsonPath("$.items[0].likedByMe").value(false));

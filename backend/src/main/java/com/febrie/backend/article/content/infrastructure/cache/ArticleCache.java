@@ -3,6 +3,7 @@ package com.febrie.backend.article.content.infrastructure.cache;
 import com.febrie.backend.article.content.infrastructure.config.ArticleCacheProperties;
 import java.time.Duration;
 import com.febrie.backend.shared.cache.CacheProtocol;
+import com.febrie.backend.shared.cache.CacheMetrics;
 import java.util.*;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.RedisSystemException;
@@ -20,8 +21,9 @@ public class ArticleCache {
     private static final RedisScript<Long> OPERATE = RedisScript.of(new ClassPathResource("redis/article-cache.lua"), Long.class);
     private final StringRedisTemplate redis;
     private final String namespace;
-    public ArticleCache(StringRedisTemplate redis, ArticleCacheProperties properties) {
-        this.redis = redis; this.namespace = properties.namespace();
+    private final CacheMetrics metrics;
+    public ArticleCache(StringRedisTemplate redis, ArticleCacheProperties properties, CacheMetrics metrics) {
+        this.redis = redis; this.namespace = properties.namespace(); this.metrics = metrics;
     }
     public String key(long id, String suffix) { return namespace + ":{" + id + "}:" + suffix; }
 
@@ -74,10 +76,13 @@ public class ArticleCache {
         try { if (!unlock(id, token)) { log.debug("文章锁已失效 articleId={}", id); } }
         catch (RuntimeException error) { log.warn("文章缓存解锁异常 articleId={} error={}", id, error.getClass().getSimpleName()); }
     }
+    public void record(String outcome) { metrics.record("article", outcome); }
+
     private boolean operate(long id, String token, String action, String payload, long ttl) {
         Long result = redis.execute(OPERATE, List.of(key(id, "cache-lock"), key(id, "hidden"), key(id, "detail"), key(id, "list")),
                 token, action, payload, Long.toString(ttl));
         if (result == null || (result != 0 && result != 1)) { throw new RedisSystemException("文章脚本返回值无效", null); }
+        if (result == 0) { record("token_rejected"); }
         return result == 1;
     }
 }

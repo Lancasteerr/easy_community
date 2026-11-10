@@ -35,7 +35,7 @@ class ArticleCacheIntegrationTests {
         connections = new LettuceConnectionFactory(server, LettuceClientConfiguration.builder().commandTimeout(Duration.ofSeconds(2)).build());
         connections.afterPropertiesSet();
         redis = new StringRedisTemplate(connections);
-        cache = new ArticleCache(redis, new ArticleCacheProperties(namespace));
+        cache = new ArticleCache(redis, new ArticleCacheProperties(namespace), new com.febrie.backend.shared.cache.CacheMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
         details = new ArticleDetailCacheStore(cache, new ObjectMapper());
         lists = new ArticleListCacheStore(cache, new ObjectMapper());
     }

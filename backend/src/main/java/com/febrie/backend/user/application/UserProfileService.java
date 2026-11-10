@@ -18,9 +18,11 @@ public class UserProfileService {
     private final MediaUrls urls;
     private final MediaReferenceService references;
     private final TransactionTemplate transaction;
+    private final UserCacheMaintenance cache;
 
     public UserProfileService(AccountRepository accounts, MediaUrls urls, MediaReferenceService references,
-                              PlatformTransactionManager manager) {
+                              PlatformTransactionManager manager, UserCacheMaintenance cache) {
+        this.cache = cache;
         this.accounts = accounts; this.urls = urls; this.references = references;
         transaction = new TransactionTemplate(manager);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
@@ -39,6 +41,7 @@ public class UserProfileService {
             requireActive(actor, current);
             references.replaceAvatar(actor.userId(), current.avatarMediaId(), mediaId);
             accounts.updateAvatar(actor.userId(), mediaId);
+            cache.invalidateAfterCommit(actor.userId());
             return view(current, mediaId);
         });
     }
@@ -49,6 +52,7 @@ public class UserProfileService {
             requireActive(actor, current);
             references.replaceAvatar(actor.userId(), current.avatarMediaId(), null);
             accounts.updateAvatar(actor.userId(), null);
+            cache.invalidateAfterCommit(actor.userId());
         });
     }
 

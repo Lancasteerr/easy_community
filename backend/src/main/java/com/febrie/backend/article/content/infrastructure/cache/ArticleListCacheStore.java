@@ -20,6 +20,9 @@ public class ArticleListCacheStore {
             else if (value.startsWith("D")) { result.put(id, CacheValue.hit(mapper.readValue(value.substring(1), ArticleBriefData.class))); }
             else { throw new IllegalStateException("文章列表缓存格式无效"); }
         });
+        result.values().forEach(value -> cache.record(switch (value.state()) {
+            case HIT -> "hit"; case NEGATIVE -> "negative_hit"; case MISS -> "miss";
+        }));
         return result;
     }
     public boolean publish(long id, String token, ArticleBriefData data) {
