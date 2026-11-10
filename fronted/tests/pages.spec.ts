@@ -94,38 +94,64 @@ test('主页作者头像支持真实加载、空地址及加载失败回退', as
   expect(userRequests.filter((path) => path !== '/api/users/me')).toEqual([]);
 });
 
-test('主页还原三栏、触底续页、吸顶与卡片缺图状态', async ({ page }, testInfo) => {
-  await guest(page);
-  let requests = 0;
-  await page.route('**/api/articles/feed?**', (route) => {
-    requests++;
-    return route.fulfill({ json: new URL(route.request().url()).searchParams.has('cursor')
-      ? { items: [article('4'), { ...article('5'), coverUrl: '/missing-cover.png' }, { ...article('6'), title: '很长的标题'.repeat(30), summary: '很长的摘要'.repeat(60), likedByMe: true }], nextCursor: null }
-      : { items: firstPage, nextCursor: 'next+/=' } });
+for (const viewport of [
+  { name: 'desktop', width: 1440, height: 1024 },
+  { name: 'wide', width: 1920, height: 1080 },
+  { name: 'short', width: 1440, height: 768 },
+]) {
+  test(`主页仅信息流内部滚动、触底续页与卡片缺图状态（${viewport.name}）`, async ({ page }, testInfo) => {
+    await guest(page);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    let requests = 0;
+    await page.route('**/api/articles/feed?**', (route) => {
+      requests++;
+      return route.fulfill({ json: new URL(route.request().url()).searchParams.has('cursor')
+        ? { items: [article('4'), { ...article('5'), coverUrl: '/missing-cover.png' }, { ...article('6'), title: '很长的标题'.repeat(30), summary: '很长的摘要'.repeat(60), likedByMe: true }], nextCursor: null }
+        : { items: firstPage, nextCursor: 'next+/=' } });
+    });
+    await page.goto('/');
+    await expect(page.locator('.article-card')).toHaveCount(3);
+    await page.evaluate(() => document.fonts.ready);
+    const header = await page.locator('.home-header').boundingBox();
+    const headerX = (viewport.width - 1227) / 2;
+    expect(header).toMatchObject({ x: headerX, y: 34, width: 1227, height: 90 });
+    expect((await page.locator('.search-form').boundingBox())?.x).toBe(headerX + 630);
+    expect((await page.locator('.home-main').boundingBox())?.x).toBe(headerX + 242);
+    const feed = page.getByRole('region', { name: '推荐文章' });
+    expect(await feed.boundingBox()).toMatchObject({ x: headerX + 242, y: 411, width: 681, height: viewport.height - 411 });
+    // 完整页面不能随文章数量增长；只滚列表时，四个固定区域的位置及尺寸均不变。
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(viewport.height);
+    const fixedRegions = page.locator('.home-header, .home-sidebar, .home-banner, .publish-panel');
+    const originalBounds = await Promise.all((await fixedRegions.all()).map((region) => region.boundingBox()));
+    expect(requests).toBe(1);
+    await page.screenshot({ path: testInfo.outputPath(`home-${viewport.name}.png`) });
+    await feed.hover();
+    await page.mouse.wheel(0, 1400);
+    await expect.poll(() => feed.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect(page.locator('.article-card')).toHaveCount(6);
+    expect(requests).toBe(2);
+    await feed.evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: 'instant' }));
+    await expect(page.getByText('已经到底了')).toBeVisible();
+    // 触底继续滚动也不传递给页面；横幅及其下方间隔不能被文章命中覆盖。
+    await page.mouse.wheel(0, 1000);
+    expect(await page.evaluate(() => scrollY)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(viewport.height);
+    expect(await Promise.all((await fixedRegions.all()).map((region) => region.boundingBox()))).toEqual(originalBounds);
+    expect(await page.locator('.home-banner').evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const atBanner = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      const atGap = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.bottom + 7);
+      return atBanner?.closest('.home-banner') === element && !atGap?.closest('.article-card');
+    })).toBe(true);
+    await expect(page.getByText('封面暂时无法显示')).toHaveCount(1);
+    await expect(page.locator('.article-card').nth(3).locator('.article-cover')).toHaveCount(0);
+    await expect(page.locator('.article-card').last().getByRole('button', { name: '点赞 328' })).toHaveAttribute('aria-pressed', 'true');
+    const title = page.locator('.article-card').last().locator('h2');
+    expect((await title.boundingBox())!.height).toBeLessThanOrEqual(52);
+    expect(await page.locator('.home-main').evaluate((element) => element.scrollTop)).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath(`home-${viewport.name}-scrolled.png`) });
   });
-  await page.goto('/');
-  await expect(page.locator('.article-card')).toHaveCount(3);
-  await page.evaluate(() => document.fonts.ready);
-  const header = await page.locator('.home-header').boundingBox();
-  expect(header).toMatchObject({ x: 106.5, y: 34, width: 1227, height: 90 });
-  expect((await page.locator('.search-form').boundingBox())?.x).toBe(736.5);
-  expect((await page.locator('.home-main').boundingBox())?.x).toBe(348.5);
-  expect(requests).toBe(1);
-  await page.screenshot({ path: testInfo.outputPath('home-desktop.png') });
-  await page.evaluate(() => window.scrollTo(0, 1400));
-  await expect(page.locator('.article-card')).toHaveCount(6);
-  await expect(page.getByText('已经到底了')).toBeVisible();
-  expect((await page.locator('.home-header').boundingBox())?.y).toBe(34);
-  expect((await page.locator('.home-sidebar').boundingBox())?.y).toBe(167);
-  expect((await page.locator('.publish-panel').boundingBox())?.y).toBe(167);
-  await expect(page.getByText('封面暂时无法显示')).toHaveCount(1);
-  await expect(page.locator('.article-card').nth(3).locator('.article-cover')).toHaveCount(0);
-  await expect(page.locator('.article-card').last().getByRole('button', { name: '点赞 328' })).toHaveAttribute('aria-pressed', 'true');
-  const title = page.locator('.article-card').last().locator('h2');
-  expect((await title.boundingBox())!.height).toBeLessThanOrEqual(52);
-  expect(await page.locator('.home-main').evaluate((element) => element.scrollTop)).toBe(0);
-  await page.screenshot({ path: testInfo.outputPath('home-scrolled.png') });
-});
+}
 
 test('主页窄屏允许横滚，宽屏背景持续覆盖窗口', async ({ page }, testInfo) => {
   await guest(page);
@@ -226,22 +252,37 @@ test('游客头像、CSRF、HttpOnly 会话与登录后刷新推荐形成闭环'
   await expect(page).toHaveURL(/:5175\/$/);
 });
 
-test('游标过期保留文章，用户重载才替换列表', async ({ page }) => {
+test('游标过期保留文章，重载只让信息流回顶并保留横向位置', async ({ page }) => {
   await guest(page);
+  await page.setViewportSize({ width: 1280, height: 768 });
   let firstReads = 0;
   await page.route('**/api/articles/feed?**', (route) => {
     if (new URL(route.request().url()).searchParams.has('cursor')) return route.fulfill({ status: 409, json: { code: 'ARTICLE_CURSOR_EXPIRED' } });
     firstReads++;
-    return route.fulfill({ json: { items: [{ ...article(firstReads === 1 ? 'old' : 'fresh'), title: firstReads === 1 ? '已读文章' : '刷新后的文章' }], nextCursor: firstReads === 1 ? 'expired' : null } });
+    // 刷新前后均提供超过一屏的文章，避免短列表自然回顶掩盖重置逻辑缺失。
+    return route.fulfill({ json: {
+      items: firstPage.map((item, index) => ({ ...item, articleId: `${firstReads}-${index}`, title: index === 0 ? (firstReads === 1 ? '已读文章' : '刷新后的文章') : item.title })),
+      nextCursor: firstReads === 1 ? 'expired' : null,
+    } });
   });
   await page.goto('/');
+  await expect(page.locator('.article-card')).toHaveCount(3);
+  await page.evaluate(() => window.scrollTo(100, 0));
+  const horizontalPosition = await page.evaluate(() => scrollX);
+  expect(horizontalPosition).toBeGreaterThan(0);
+  const feed = page.getByRole('region', { name: '推荐文章' });
+  await feed.evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: 'instant' }));
   await expect(page.getByText('列表已过期，已读内容仍保留')).toBeVisible();
   await expect(page.getByRole('heading', { name: '已读文章' })).toBeVisible();
   expect(firstReads).toBe(1);
+  expect(await feed.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await page.getByRole('button', { name: '重新加载' }).click();
   await expect(page.getByRole('heading', { name: '刷新后的文章' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '已读文章' })).toHaveCount(0);
+  expect(firstReads).toBe(2);
+  expect(await feed.evaluate((element) => element.scrollTop)).toBe(0);
   expect(await page.evaluate(() => scrollY)).toBe(0);
+  expect(await page.evaluate(() => scrollX)).toBe(horizontalPosition);
 });
 
 test('登录限流期间不重发请求，倒计时结束恢复按钮', async ({ page }) => {

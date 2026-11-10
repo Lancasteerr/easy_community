@@ -4,27 +4,29 @@ import { useFeed } from '../hooks/useFeed';
 import { useCooldown } from '../hooks/useCooldown';
 import { ArticleCard } from './ArticleCard';
 
-/** 观察器绑定窗口滚动；每次游标变化重建，以支持短列表自动填充首屏。 */
+/** 观察器绑定文章滚动区域；每次游标变化重建，以支持短列表自动填充首屏。 */
 export function Feed() {
   const feed = useFeed();
+  const scrollContainer = useRef<HTMLElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
   const seconds = useCooldown(feed.retryAt);
   // 无效游标重试不会恢复；与过期游标一样，需要用户明确开始新一轮读取。
   const invalidCursor = feed.error instanceof ApiError && feed.error.code === 'ARTICLE_SEARCH_INVALID';
   useEffect(() => {
-    if (!sentinel.current || feed.status !== 'ready' || feed.paused || feed.nextCursor === null || !window.IntersectionObserver) return;
+    if (!scrollContainer.current || !sentinel.current || feed.status !== 'ready' || feed.paused || feed.nextCursor === null || !window.IntersectionObserver) return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void feed.loadMore();
-    }, { rootMargin: '600px 0px' });
+    }, { root: scrollContainer.current, rootMargin: '600px 0px' });
     observer.observe(sentinel.current);
     return () => observer.disconnect();
   }, [feed.status, feed.nextCursor, feed.paused, feed.loadMore]);
 
   const restart = () => {
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    // 重载只重置文章位置，避免改变窄屏横滚或影响主页其他区域。
+    scrollContainer.current?.scrollTo({ top: 0, behavior: 'instant' });
     feed.restart();
   };
-  return <section className="feed-list" aria-label="推荐文章" aria-busy={feed.status === 'loading'}>
+  return <section ref={scrollContainer} className="feed-list" tabIndex={0} aria-label="推荐文章" aria-busy={feed.status === 'loading'}>
     {feed.items.map((article) => <ArticleCard key={article.articleId} article={article} />)}
     {feed.status === 'loading' && !feed.items.length && <div className="feed-skeleton" role="status" aria-label="正在加载推荐文章">
       <div className="skeleton-author"><i /><span /></div><div className="skeleton-title" /><div className="skeleton-summary" /><div className="skeleton-cover" />

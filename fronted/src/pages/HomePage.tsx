@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { errorMessage } from '../api/client';
 
-/** body 承担双向滚动，吸顶元素的祖先不设置 overflow，避免改变滚动容器。 */
+/** 主页限定在视口内，横幅与两侧栏保持原位，文章列表负责内部纵向滚动。 */
 export function HomePage() {
   const unavailable = useUnavailable();
   const auth = useAuth();
