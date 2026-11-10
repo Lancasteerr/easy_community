@@ -28,10 +28,13 @@ img { display: block; max-width: 100%; }
 .site-title { flex-shrink: 0; font-size: 32px; font-weight: 700; line-height: 1.2; text-decoration: none; }
 .header-actions { display: flex; align-items: center; gap: 66px; }
 .search-form { display: flex; align-items: center; width: 393px; height: 41px; background: #323237; border-radius: 24px; padding: 0 12px 0 16px; }
-.search-form input { min-width: 0; flex: 1; padding: 0; border: 0; color: #ddd; background: transparent; font-size: 14px; outline-offset: 8px; }
+/* 聚焦强调完整搜索框，外环不参与布局；按钮仍保留独立的键盘焦点。 */
+.search-form:focus-within { box-shadow: 0 0 0 2px #9bceff; }
+.search-form input { min-width: 0; flex: 1; padding: 0; border: 0; outline: none; color: #ddd; background: transparent; font-size: 14px; }
 .search-form input::placeholder { color: #757575; }
 .search-form input::-webkit-search-cancel-button { cursor: pointer; }
-.search-form button { display: grid; place-items: center; border: 0; padding: 0; background: none; width: 24px; height: 32px; color: #757575; }
+.search-form button { display: grid; place-items: center; border: 0; border-radius: 24px; padding: 0; background: none; width: 24px; height: 32px; color: #757575; }
+.search-form button:focus-visible { outline-offset: 2px; }
 .header-tools { display: flex; align-items: center; gap: 20px; }
 .icon-button { border: 0; padding: 0; background: none; }
 .publish-entry { display: grid; place-items: center; width: 40px; height: 40px; border: 2px solid #d9d9d9; border-radius: 50%; }
@@ -41,13 +44,16 @@ img { display: block; max-width: 100%; }
 .home-columns { display: grid; grid-template-columns: 225px 681px 287px; gap: 17px; width: 1227px; margin: 43px auto 0; align-items: start; }
 .home-sidebar, .publish-panel { position: sticky; top: 167px; }
 .home-sidebar { min-height: 240px; height: calc(100dvh - 167px); padding: 25px 16px; }
-.panel-heading { display: table; margin: 0; padding: 0 0 2px; border-bottom: 1px solid #9bceff; font-size: 18px; font-weight: 500; line-height: 22px; white-space: nowrap; }
+/* 用圆角线条替代边框，保留标题总高度，避免下方导航随线宽变化而移动。 */
+.panel-heading { position: relative; display: table; margin: 0; padding: 0 0 3px; font-size: 18px; font-weight: 500; line-height: 22px; white-space: nowrap; }
+.panel-heading::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 1px; background: #9bceff; }
 .panel-heading span { font-size: 14px; color: #757575; margin-left: 3px; }
 .feed-nav { display: flex; flex-direction: column; margin-top: 23px; }
-.nav-item { position: relative; display: flex; align-items: center; gap: 3px; width: 195px; height: 48px; padding: 0 13px; color: #757575; border: 0; border-radius: 8px; background: none; font-size: 14px; text-align: left; }
+.nav-item { position: relative; display: flex; align-items: center; gap: 3px; width: 195px; height: 48px; padding: 0 13px; color: #757575; border: 0; border-radius: 10px; background: none; font-size: 14px; text-align: left; }
 .nav-selected { color: #9bceff; background: rgb(155 206 255 / 15%); }
 .nav-selected::before { position: absolute; content: ''; left: 0; top: 14px; width: 2px; height: 20px; border-radius: 2px; background: #9bceff; }
-.nav-item:hover { color: #9bceff; background: rgb(155 206 255 / 12%); }
+/* 灰色悬浮反馈仅用于未选中项，选中态始终保留蓝色高光及指示线。 */
+.nav-item:not(.nav-selected):hover { background: rgb(60 60 67 / 60%); }
 .publish-panel { height: 182px; padding: 17px 16px; }
 .publish-options { display: flex; gap: 33px; margin: 27px 0 0 17px; }
 .publish-options button { display: flex; align-items: center; flex-direction: column; border: 0; padding: 0; background: transparent; }

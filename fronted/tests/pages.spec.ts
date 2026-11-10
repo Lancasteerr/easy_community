@@ -10,6 +10,54 @@ async function guest(page: Page) {
 const cover = '/test-cover.png';
 const firstPage = [1, 2, 3].map((id) => ({ ...article(String(id)), coverUrl: cover }));
 
+test('首页搜索聚焦外框不跳动，导航悬浮与选中保持区分', async ({ page }, testInfo) => {
+  await guest(page);
+  await page.route('**/api/articles/feed?**', (route) => route.fulfill({ json: { items: firstPage, nextCursor: null } }));
+  await page.goto('/');
+  await page.evaluate(() => document.fonts.ready);
+  const search = page.getByRole('searchbox', { name: '搜索内容' });
+  const form = page.getByRole('search');
+  const originalBounds = await form.boundingBox();
+  await search.click();
+  await expect(search).toBeFocused();
+  await expect(search).toHaveCSS('outline-style', 'none');
+  await expect(form).toHaveCSS('box-shadow', 'rgb(155, 206, 255) 0px 0px 0px 2px');
+  expect(await form.boundingBox()).toEqual(originalBounds);
+  // 在输入框与提交按钮之间切换，完整外环持续可见，按钮有独立键盘焦点。
+  await search.press('Tab');
+  const submit = page.getByRole('button', { name: '搜索', exact: true });
+  await expect(submit).toBeFocused();
+  await expect(submit).toHaveCSS('outline-style', 'solid');
+  await submit.press('Shift+Tab');
+  await expect(search).toBeFocused();
+  await expect(form).toHaveCSS('box-shadow', 'rgb(155, 206, 255) 0px 0px 0px 2px');
+
+  const popular = page.getByRole('button', { name: '热门', exact: true });
+  await popular.hover();
+  await expect(popular).toHaveCSS('background-color', 'rgba(60, 60, 67, 0.6)');
+  await expect(popular).toHaveCSS('color', 'rgb(117, 117, 117)');
+  await expect(popular.locator('.icon')).toHaveCSS('color', 'rgb(117, 117, 117)');
+  await expect(popular).toHaveCSS('border-radius', '10px');
+  // 共享标题线紧贴标题组，左右两侧都采用相同的圆头线条。
+  for (const heading of await page.locator('.panel-heading').all()) {
+    const line = await heading.evaluate((element) => {
+      const style = getComputedStyle(element, '::after');
+      return { height: style.height, radius: style.borderRadius, width: parseFloat(style.width), headingWidth: element.getBoundingClientRect().width };
+    });
+    expect(line.height).toBe('2px');
+    expect(line.radius).toBe('1px');
+    expect(line.width).toBeCloseTo(line.headingWidth, 1);
+  }
+  await page.screenshot({ path: testInfo.outputPath('home-search-focus-nav-hover.png') });
+  const selected = page.getByRole('button', { name: '推荐', exact: true });
+  await selected.hover();
+  await expect(selected).toHaveCSS('color', 'rgb(155, 206, 255)');
+  await expect(selected).toHaveCSS('background-color', 'rgba(155, 206, 255, 0.15)');
+  await expect(popular).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await selected.click();
+  await expect(form).toHaveCSS('box-shadow', 'none');
+});
+
 test('主页作者头像支持真实加载、空地址及加载失败回退', async ({ page }) => {
   await guest(page);
   const avatar = '/test-author-avatar.jpg';
