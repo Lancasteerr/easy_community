@@ -2,6 +2,7 @@ package com.febrie.backend.article.content.infrastructure.cache;
 
 import com.febrie.backend.article.content.infrastructure.config.ArticleCacheProperties;
 import java.time.Duration;
+import com.febrie.backend.shared.cache.CacheProtocol;
 import java.util.*;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.RedisSystemException;
@@ -14,8 +15,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class ArticleCache {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ArticleCache.class);
-    public static final Duration LOCK_TTL = Duration.ofSeconds(5);
-    public static final Duration WAIT_BUDGET = Duration.ofMillis(300);
+    public static final Duration LOCK_TTL = CacheProtocol.LOCK_TTL;
+    public static final Duration WAIT_BUDGET = CacheProtocol.WAIT_BUDGET;
     private static final RedisScript<Long> OPERATE = RedisScript.of(new ClassPathResource("redis/article-cache.lua"), Long.class);
     private final StringRedisTemplate redis;
     private final String namespace;
@@ -61,7 +62,7 @@ public class ArticleCache {
 
     public boolean publish(long id, String token, String projection, String payload) {
         if (!(projection.equals("detail") || projection.equals("list"))) { throw new IllegalArgumentException("无效文章投影"); }
-        long ttl = java.util.concurrent.ThreadLocalRandom.current().nextLong(270_000, 300_001);
+        long ttl = CacheProtocol.dataTtlMillis();
         return operate(id, token, projection.equals("detail") ? "PUBLISH_DETAIL" : "PUBLISH_LIST", payload, ttl);
     }
     public boolean missing(long id, String token) { return operate(id, token, "MISSING", "", 20_000); }

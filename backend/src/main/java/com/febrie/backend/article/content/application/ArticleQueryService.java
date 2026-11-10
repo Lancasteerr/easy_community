@@ -8,12 +8,13 @@ import com.febrie.backend.article.content.application.dto.ArticlePage;
 import com.febrie.backend.article.content.application.dto.LoadedArticle;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleCache;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleDetailCacheStore;
-import com.febrie.backend.article.content.infrastructure.cache.CacheValue;
+import com.febrie.backend.shared.cache.CacheValue;
 
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.shared.error.ApiException;
 import java.util.*;
-import java.util.concurrent.locks.LockSupport;
+import com.febrie.backend.shared.cache.CacheProtocol;
+import java.util.concurrent.Semaphore;
 import org.slf4j.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
@@ -28,6 +29,7 @@ public class ArticleQueryService {
     private final ArticleDetailCacheStore details;
     private final ArticleListHydrator lists;
     private final ArticleDisplayAssembler display;
+    private final Semaphore sourceReads = new Semaphore(4);
     public ArticleQueryService(ArticleReader reader, ArticleCache cache, ArticleDetailCacheStore details, ArticleListHydrator lists, ArticleDisplayAssembler display) {
         this.reader = reader; this.cache = cache; this.details = details; this.lists = lists; this.display = display;
     }
@@ -59,27 +61,36 @@ public class ArticleQueryService {
             log.debug("文章详情缓存 articleId={} state={}", id, value.state());
             if (value.state() == CacheValue.State.NEGATIVE) { throw ArticleErrors.notFound(); }
             if (value.state() == CacheValue.State.HIT) { return visible(id, value.data()); }
-            String token = cache.tryLock(id);
-            if (token != null) {
-                try {
-                    if (cache.hidden(id)) { throw ArticleErrors.notFound(); }
-                    value = details.get(id);
-                    if (value.state() == CacheValue.State.NEGATIVE) { throw ArticleErrors.notFound(); }
-                    if (value.state() == CacheValue.State.HIT) { return visible(id, value.data()); }
-                    var loaded = reader.detail(id);
-                    boolean published = switch (loaded.state()) {
-                        case PUBLIC -> details.publish(id, token, loaded.data());
-                        case MISSING -> cache.missing(id, token);
-                        case HIDDEN -> cache.hide(id, token);
-                    };
-                    if (!published) { log.debug("文章详情回填被拒 articleId={}", id); }
-                    if (loaded.state() != LoadedArticle.State.PUBLIC) { throw ArticleErrors.notFound(); }
-                    return visible(id, loaded.data());
-                } finally { cache.release(id, token); }
+            if (!sourceReads.tryAcquire()) { throw ArticleErrors.unavailable(); }
+            String token = null;
+            CacheValue<ArticleDetailData> checked = CacheValue.miss();
+            try {
+                token = cache.tryLock(id);
+                if (token != null) { checked = loadDetailLocked(id, token); }
+            } finally {
+                if (token != null) { cache.release(id, token); }
+                sourceReads.release();
             }
-            if (System.nanoTime() >= deadline || Thread.currentThread().isInterrupted()) { throw ArticleErrors.unavailable(); }
-            LockSupport.parkNanos(Math.min(25_000_000, Math.max(0, deadline - System.nanoTime())));
+            // 可见性检查和响应组装均在释放文章锁之后执行。
+            if (checked.state() == CacheValue.State.NEGATIVE) { throw ArticleErrors.notFound(); }
+            if (checked.state() == CacheValue.State.HIT) { return visible(id, checked.data()); }
+            if (!CacheProtocol.awaitRetry(deadline)) { throw ArticleErrors.unavailable(); }
         }
+    }
+
+    /** 已持有当前文章锁；只执行二次检查、短事务回源与回填。 */
+    private CacheValue<ArticleDetailData> loadDetailLocked(long id, String token) {
+        if (cache.hidden(id)) { return CacheValue.negative(); }
+        var value = details.get(id);
+        if (value.state() != CacheValue.State.MISS) { return value; }
+        var loaded = reader.detail(id);
+        boolean published = switch (loaded.state()) {
+            case PUBLIC -> details.publish(id, token, loaded.data());
+            case MISSING -> cache.missing(id, token);
+            case HIDDEN -> cache.hide(id, token);
+        };
+        if (!published) { return CacheValue.miss(); }
+        return loaded.state() == LoadedArticle.State.PUBLIC ? CacheValue.hit(loaded.data()) : CacheValue.negative();
     }
     private ArticleDetailData visible(long id, ArticleDetailData data) {
         if (cache.hidden(id)) { throw ArticleErrors.notFound(); }

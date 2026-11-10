@@ -4,7 +4,7 @@ import com.febrie.backend.article.content.application.dto.ArticleBriefData;
 import com.febrie.backend.article.content.application.dto.LoadedArticle;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleCache;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleListCacheStore;
-import com.febrie.backend.article.content.infrastructure.cache.CacheValue;
+import com.febrie.backend.shared.cache.CacheValue;
 
 import java.time.Instant;
 import java.util.*;
@@ -19,6 +19,7 @@ class ArticleListHydratorTests {
     private final ArticleReader reader = mock(ArticleReader.class);
     private final ArticleListHydrator hydrator = new ArticleListHydrator(cache, lists, reader);
     @BeforeEach void noHidden() {
+        when(lists.publish(anyLong(), anyString(), any())).thenReturn(true);
         when(cache.hidden(anyCollection())).thenAnswer(call -> {
             Map<Long, Boolean> result = new HashMap<>();
             for (long id : (Collection<Long>) call.getArgument(0)) { result.put(id, false); }
@@ -31,7 +32,7 @@ class ArticleListHydratorTests {
         verifyNoInteractions(reader);
         verify(cache, never()).tryLock(anyLong());
     }
-    @Test void mergesMissesIntoOneSqlAndChecksEachTokenEvenIfPublishRejected() {
+    @Test void mergesMissesIntoOneSqlAndChecksEachToken() {
         when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss(), 2L, CacheValue.miss()));
         when(cache.tryLock(1)).thenReturn("a"); when(cache.tryLock(2)).thenReturn("b");
         when(reader.lists(List.of(1L, 2L))).thenReturn(Map.of(2L, LoadedArticle.visible(view(2)), 1L, LoadedArticle.visible(view(1))));
@@ -68,6 +69,33 @@ class ArticleListHydratorTests {
         when(reader.lists(List.of(2L, 1L))).thenReturn(Map.of(1L, LoadedArticle.visible(view(1)), 2L, LoadedArticle.visible(view(2))));
         assertEquals(List.of("2", "1"), hydrator.publicCandidates(List.of(2L, 1L)).stream().map(ArticleBriefData::articleId).toList());
         verify(reader, times(1)).lists(List.of(2L, 1L));
+    }
+    @Test void releasesSecondCheckHitBeforeSqlAndEachWriteBeforeNextWrite() {
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss(), 2L, CacheValue.miss(), 3L, CacheValue.miss()),
+                Map.of(1L, CacheValue.hit(view(1)), 2L, CacheValue.miss(), 3L, CacheValue.miss()));
+        when(cache.tryLock(anyLong())).thenReturn("token");
+        when(reader.lists(List.of(2L, 3L))).thenReturn(Map.of(2L, LoadedArticle.visible(view(2)), 3L, LoadedArticle.visible(view(3))));
+        assertEquals(3, hydrator.publicCandidates(List.of(1L, 2L, 3L)).size());
+        var order = inOrder(cache, reader, lists);
+        order.verify(cache).release(1, "token");
+        order.verify(reader).lists(List.of(2L, 3L));
+        order.verify(lists).publish(2, "token", view(2));
+        order.verify(cache).release(2, "token");
+        order.verify(lists).publish(3, "token", view(3));
+        order.verify(cache).release(3, "token");
+        verify(cache, times(1)).release(1, "token");
+    }
+    @Test void rejectedPublicationIsReReadAfterUnlockInsteadOfReturningOldValue() {
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss()), Map.of(1L, CacheValue.miss()),
+                Map.of(1L, CacheValue.hit(view(1))));
+        when(cache.tryLock(1)).thenReturn("expired");
+        when(reader.lists(List.of(1L))).thenReturn(Map.of(1L, LoadedArticle.visible(view(1))));
+        when(lists.publish(1, "expired", view(1))).thenReturn(false);
+        assertEquals(List.of(view(1)), hydrator.publicCandidates(List.of(1L)));
+        var order = inOrder(cache, lists);
+        order.verify(cache).release(1, "expired");
+        order.verify(lists).get(anyCollection());
+        verify(reader, times(1)).lists(anyCollection());
     }
     @Test void publicColdReadsAreBoundedToFourWithoutLeakingSlots() throws Exception {
         when(lists.get(anyCollection())).thenAnswer(call -> {

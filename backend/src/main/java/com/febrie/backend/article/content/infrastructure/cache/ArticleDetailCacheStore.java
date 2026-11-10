@@ -1,5 +1,6 @@
 package com.febrie.backend.article.content.infrastructure.cache;
 
+import com.febrie.backend.shared.cache.CacheValue;
 import com.febrie.backend.article.content.application.dto.ArticleDetailData;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;

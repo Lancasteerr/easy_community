@@ -1,4 +1,4 @@
-package com.febrie.backend.article.content.infrastructure.cache;
+package com.febrie.backend.shared.cache;
 
 /** 单投影的三态，不把无Key和明确不存在混为一谈。 */
 public record CacheValue<T>(State state, T data) {

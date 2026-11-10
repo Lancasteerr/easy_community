@@ -18,7 +18,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /** 独立代理建立短只读RR视图；缓存调用方必须先获得缓存锁，再调用此Bean。 */
 @Service
-@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, propagation = Propagation.REQUIRES_NEW)
 public class ArticleReader {
     private final ArticleRepository articles;
     private final MediaUrls urls;
