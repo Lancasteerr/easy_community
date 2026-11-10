@@ -23,7 +23,7 @@ export function ArticleCard({ article }: { article: ArticleCardData }) {
   return <article className="article-card" aria-labelledby={`article-${article.articleId}`}>
     <div className="article-author-row">
       <button className="author-entry" aria-label={`查看作者 ${article.authorName}`} onClick={unavailable}>
-        <Avatar /><span className="author-details"><span className="author-name">{article.authorName}</span>
+        <Avatar src={article.authorAvatarUrl} /><span className="author-details"><span className="author-name">{article.authorName}</span>
           <span className="article-meta"><time dateTime={article.publishedAt} title={new Date(article.publishedAt).toLocaleString('zh-CN')}>
             {relativeTime(article.publishedAt)}</time><span> · 阅读 {number.format(article.viewCount)}</span></span>
         </span>

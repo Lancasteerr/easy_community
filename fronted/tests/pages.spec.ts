@@ -10,6 +10,42 @@ async function guest(page: Page) {
 const cover = '/test-cover.png';
 const firstPage = [1, 2, 3].map((id) => ({ ...article(String(id)), coverUrl: cover }));
 
+test('主页作者头像支持真实加载、空地址及加载失败回退', async ({ page }) => {
+  await guest(page);
+  const avatar = '/test-author-avatar.jpg';
+  const userRequests: string[] = [];
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/api/users/')) userRequests.push(path);
+  });
+  // 使用现有本地图片和确定的404，实际验证浏览器解码与组件回退。
+  await page.route('**/test-author-avatar.jpg', (route) => route.fulfill({ path: 'src/assets/default-avatar.jpg', contentType: 'image/jpeg' }));
+  await page.route('**/missing-author-avatar.jpg', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.route('**/api/articles/feed?**', (route) => route.fulfill({ json: {
+    items: [
+      { ...article('1'), authorAvatarUrl: avatar },
+      article('2'),
+      { ...article('3'), authorAvatarUrl: '/missing-author-avatar.jpg' },
+    ],
+    nextCursor: null,
+  } }));
+  await page.goto('/');
+  const avatars = page.locator('.article-card .author-entry img');
+  await expect(avatars).toHaveCount(3);
+  await expect(avatars.nth(0)).toHaveAttribute('src', avatar);
+  await expect(avatars.nth(1)).toHaveAttribute('src', /default-avatar/);
+  await expect(avatars.nth(2)).toHaveAttribute('src', /default-avatar/);
+  for (const image of await avatars.all()) {
+    await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
+    await expect(image).toHaveAttribute('width', '36');
+    await expect(image).toHaveAttribute('height', '36');
+  }
+  await expect(page.locator('.article-card h2')).toHaveText(['文章 1', '文章 2', '文章 3']);
+  await expect(page.getByText('已经到底了')).toBeVisible();
+  // 除既有登录态读取外，不能为信息流作者额外查询用户资料。
+  expect(userRequests.filter((path) => path !== '/api/users/me')).toEqual([]);
+});
+
 test('主页还原三栏、触底续页、吸顶与卡片缺图状态', async ({ page }, testInfo) => {
   await guest(page);
   let requests = 0;

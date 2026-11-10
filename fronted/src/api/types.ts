@@ -15,6 +15,8 @@ export interface ArticleCardData {
   title: string;
   authorId: string;
   authorName: string;
+  /** 信息流直接提供作者头像地址；未设置头像时为空。 */
+  authorAvatarUrl: string | null;
   summary: string | null;
   coverUrl: string | null;
   tags: { tagId: string; name: string }[];
