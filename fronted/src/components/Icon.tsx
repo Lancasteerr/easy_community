@@ -20,6 +20,8 @@ const sources = { search, edit, like, comment, terminal, trending, compass, publ
 
 /** 用原稿 SVG 轮廓作遮罩，使悬停、点赞和聚焦颜色随组件状态继承。 */
 export function Icon({ name, size = 20 }: { name: keyof typeof sources; size?: number }) {
+  // 文档占位含背景和双色描边，保留原始SVG，避免遮罩将其压成实心矩形。
+  if (name === 'document') return <img className="document-icon" aria-hidden="true" src={document} alt="" width={size} height={size} />;
   return <span aria-hidden="true" className="icon" style={{
     '--icon-source': `url("${sources[name]}")`, width: size, height: size,
   } as CSSProperties} />;

@@ -3,7 +3,7 @@ import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { useUnavailable } from './Toast';
 
-/** 导航仅接收展示资料，头像行为由掌握登录态的主页决定。 */
+/** 导航仅接收展示资料，头像行为由掌握登录态的使用页面决定。 */
 export function Header({ avatarUrl, onAvatarClick, avatarLabel }: {
   avatarUrl?: string | null; onAvatarClick: () => void; avatarLabel: string;
 }) {

@@ -36,7 +36,9 @@ function MyArticles({ userId }: { userId: string }) {
   const seconds = useCooldown(list.retryAt);
   const identitySeconds = useCooldown(auth.error instanceof ApiError ? auth.error.retryAt : 0);
   return <>
-    <div className="manage-toolbar"><h1>已发布</h1><button className="manage-text-action" disabled={!enabled || !!deletion.state.article || seconds > 0 || list.status === 'refreshing'}
+    <div className="manage-toolbar"><h1>已发布</h1>
+      {list.status === 'refreshError' && <span className="manage-toolbar-feedback" role="alert" title={errorMessage(list.error)}>刷新失败，原内容已保留，请重试</span>}
+      <button className="manage-text-action" disabled={!enabled || !!deletion.state.article || seconds > 0 || list.status === 'refreshing'}
       onClick={() => { void list.refresh(); }}>{list.status === 'refreshing' ? '刷新中…' : seconds > 0 ? `${seconds}秒后重试` : '刷新'}</button></div>
     {auth.refreshing && <div className="manage-notice" role="status">正在确认登录状态…</div>}
     {!!auth.error && <div className="manage-notice" role="status">登录状态暂时无法确认，操作已暂停<button className="manage-text-action" disabled={identitySeconds > 0}

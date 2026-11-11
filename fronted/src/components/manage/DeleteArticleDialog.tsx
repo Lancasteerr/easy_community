@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { ArticleCardData } from '../../api/types';
 
 export interface DeleteDialogState {
@@ -17,14 +17,29 @@ export function DeleteArticleDialog({ state, seconds = 0, blocked = false, onClo
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const articleId = state.article?.articleId;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = dialog.current;
     if (!element || !articleId) return;
     element.showModal();
     cancel.current?.focus({ preventScroll: true });
     return () => { element.close(); };
   }, [articleId]);
-  return <dialog className="manage-dialog" ref={dialog} aria-labelledby="delete-heading" aria-describedby="delete-description"
+  useLayoutEffect(() => {
+    // 提交时所有按钮可能禁用，焦点留在模态容器；完成后回到可用的取消入口。
+    if (state.busy) dialog.current?.focus({ preventScroll: true });
+    else if (articleId && document.activeElement === dialog.current) cancel.current?.focus({ preventScroll: true });
+  }, [state.busy, articleId]);
+  return <dialog className="manage-dialog" ref={dialog} tabIndex={-1} aria-labelledby="delete-heading" aria-describedby="delete-description"
+    onKeyDown={(event) => {
+      if (event.key !== 'Tab') return;
+      // 明确首尾循环，避免浏览器将反向Tab移向地址栏；禁用控件不进入焦点顺序。
+      const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (!first) { event.preventDefault(); event.currentTarget.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }}
     onCancel={(event) => { event.preventDefault(); if (!state.busy) onClose(); }}>
     <h2 id="delete-heading">{state.unknown ? '删除结果待确认' : '删除这篇内容？'}</h2>
     <p className="manage-dialog-title">「{state.article?.title}」</p>
