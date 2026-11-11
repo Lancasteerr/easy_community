@@ -8,7 +8,9 @@
 
 文章CRUD已接入，接口、正文白名单、最终一致缓存及维护命令见[文章接入与恢复](../docs/public/guides/article/zh-CN/article-crud-implementation.md)。删除不可恢复；本人列表从Session取身份，仅展示公开文章，采用size/cursor分页；游客可读取公开详情、搜索和推荐流。
 
-文章与用户公开展示现使用独立的三类缓存，响应新增可空的`authorAvatarUrl`；锁范围、用户提交后失效、指标及文章v3发布步骤见[公开读取缓存说明](docs/public-read-cache.md)。前端展示适配另行实施。
+文章标签已改为 JSON 元数据，搜索使用本地目录；缺失 ID 只在主库目录版本更新时同步一次。V8/V9 迁移、v4 缓存切换及回滚约束见[标签接入与恢复](../docs/public/guides/article/zh-CN/article-tags.md)。本次不修改前端。
+
+文章与用户公开展示现使用独立的三类缓存，响应新增可空的`authorAvatarUrl`；锁范围、用户提交后失效、指标及文章v4发布步骤见[公开读取缓存说明](docs/public-read-cache.md)。前端展示适配另行实施。
 
 文件上传、MinIO/COS桶配置、头像接口和文章接入见[文件服务V2](../docs/public/guides/media/zh-CN/media-service.md)。
 升级已有本机环境文件时，必须补充示例中的全部`MEDIA_*`字段；应用只校验配置，不自动创建桶或修改权限。

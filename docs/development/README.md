@@ -7,6 +7,7 @@
 ## 当前阅读入口
 
 - 当前功能说明以[公开文档](../public/README.md)为入口。
+- 文章标签 JSON 元数据、本地目录搜索与按版本校验的实施方案见[2026-11-12 后端计划](plans/article/article-tags-json-local-cache-plan.md)。
 - 内容管理页的本轮前端验收及真实ES联调限制见[2026-11-11验收记录](reports/frontend/content-management-validation-2026-11-11.md)。
 - 文章旧异步 CRUD V1 已被同步短事务 CRUD V2 取代，旧文件名中的 feed 不代表其内容属于当前推荐流。
 - ES 早期审阅 → 补充复核 → 2026-11-08 实施计划依次收敛；后续已存在 2026-11-08 验收记录，原计划及交接中的“尚未实现／待实施”保留为历史状态。

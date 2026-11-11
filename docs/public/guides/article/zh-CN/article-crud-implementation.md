@@ -17,12 +17,12 @@
 | GET /api/articles/{id} | 游客可读，隐藏/不存在 404 |
 | GET /api/articles/{id}/edit | 仅作者，主库直读，隐藏 409 |
 | GET /api/users/me/articles | 登录身份来自Session；仅本人公开文章；size默认20、最大50，cursor续页；发布时间/ID倒序 |
-| GET /api/tags | 登录后读取目录 |
+| GET /api/tags | 登录后本地搜索；q为空返回[]，limit默认10、范围1～20 |
 | POST /api/admin/tags | 管理员新增，201 |
 
 所有响应 no-store，文章、作者和 Tag ID 为字符串。编辑权不因管理员/巡查员角色扩展。保存为完整替换；非法 ID 不回退新增，不存在不 UPSERT。
 
-保存体字段仅限 articleId、title、content、coverMediaId、tagIds。除 articleId 外必须显式提交，coverMediaId=null 清除封面，tagIds=[] 清除关联。content={schemaVersion:1,doc:受限Tiptap文档}。摘要从正文生成，不接收 HTML、身份、状态、时间或独立摘要。
+保存体字段仅限 articleId、title、content、coverMediaId、tagIds。除 articleId 外必须显式提交，coverMediaId=null 清除封面，tagIds=[] 清空标签数组。content={schemaVersion:1,doc:受限Tiptap文档}。摘要从正文生成，不接收 HTML、身份、状态、时间或独立摘要。
 
 标题1～100个Unicode码点，摘要合并空白后取前200码点；纯图片允许，空白正文拒绝。请求最多1MiB，深度32、节点10000、图片节点50、Tag5。Tag名去首尾空白，1～32码点，区分大小写唯一，不支持改名/删除/排序。
 
@@ -30,13 +30,13 @@
 
 ## SQL 与错误
 
-Flyway V3新增 article、tag、article_tag，不重写历史迁移。JSON保存schemaVersion/doc，SQL仅存封面ID。主键AUTO，作者管理索引(author_id,hidden,id)。创建时间和发布时间为同一创建事务时间，编辑只改更新时间。
+Flyway V3的历史定义保留；V8新增目录版本，V9回填article.tag_ids JSON并停止关系读写，旧表留待后续发布清理。标签搜索、校验和迁移详见[标签接入说明](article-tags.md)。正文JSON保存schemaVersion/doc，封面保存媒体ID。主键AUTO，作者管理索引(author_id,hidden,id)。创建时间和发布时间为同一创建事务时间，编辑只改更新时间。
 
-无外层事务的保存服务先准备内容，再调用独立代理的RC写服务：创建INSERT取得ID；修改/隐藏先锁文章行，再锁内验权限和状态。保存调用现有syncArticle维护文件引用，内容/封面/Tag/引用同事务。隐藏只改状态。不使用客户端版本CAS或SQL自动重试；文章元数据版本与Outbox随内容事务提交，用于ES同步防倒退。
+无外层事务的保存服务先准备内容并完成本地目录校验（缺ID时检查SQL版本，落后才同步一次），再调用独立代理的RC写服务：创建INSERT取得ID；修改/隐藏先锁文章行，再锁内验权限和状态。保存调用现有syncArticle维护文件引用，内容/封面/Tag/引用同事务。隐藏只改状态。不使用客户端版本CAS或SQL自动重试；文章元数据版本与Outbox随内容事务提交，用于ES同步防倒退。
 
 提交已确认后才维护缓存。明确回滚结束请求；提交通信故障不确定时返回503 ARTICLE_WRITE_RESULT_UNKNOWN，提示正常查询核对，不重发。确认SQL成功而Redis失败仍返回成功。无变化修改不依赖影响行数判断冲突。
 
-详情、编辑及列表回源在短只读RR事务中读取，写事务RC。作者显示信息批量读取并在文章缓存解锁后组装，软删除账号不影响历史署名。列表不读取HTML/JSON；共享文章投影保存封面ID与Tag信息，URL、作者资料及个人点赞状态在最终响应中组装。
+详情、编辑及列表回源在短只读RR事务中读取，写事务RC。作者显示信息批量读取并在文章缓存解锁后组装，软删除账号不影响历史署名。列表不读取HTML/正文JSON，只读取小字段和标签JSON；共享文章投影保存封面ID与标签ID，标签名称、URL、作者资料及个人点赞状态在最终响应中组装。文章缓存默认v4，不复用旧TagView载荷。
 
 本人列表由article.search承接，固定按Session作者及公开状态从ES发现候选，再通过共享投影回查；不再执行本人SQL分页或COUNT。返回items/nextCursor及浏览、点赞字段，移除page/size/total响应字段，不保留页码兼容层。无效候选按既有预算补齐，空items且nextCursor非空仍可继续。当前不展示隐藏或私有文章。
 

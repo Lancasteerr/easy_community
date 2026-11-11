@@ -24,7 +24,7 @@ PIT空闲期限2分钟，游标版本2，签名绑定入口、实际作者条件
 
 - V6新增meta_version及六字段Outbox，V7增加日期候选索引。创建最终v1/单事件，编辑与首次隐藏增版同事务写事件；重复隐藏、浏览和点赞不增版。
 - Relay每轮10条，短RC领取、30秒令牌租约、事务外发送；Confirm ACK且无Return才删除。失败5～15秒退避，旧令牌不能修改新领取事件。
-- 消费者实时GET预检查，再读主库短RR元数据/Tag快照，ES脚本原子防倒退；隐藏留墓碑，元数据与分数字段分开写，冲突内部重试3次。
+- 消费者实时GET预检查，再读主库短RR元数据快照（含文章tag_ids JSON），ES脚本原子防倒退；隐藏留墓碑，元数据与分数字段分开写，冲突内部重试3次。
 - 推荐分：`ln(1+view7d)+ln(2)/48×hours(publishedAt-2020-01-01T00:00:00Z)`，只读SQL已落库pv，不合并Redis、不读取点赞，编辑不刷新发布时间。
 - 业务日Asia/Shanghai。每轮结束后间隔5分钟扫描D/D-1/D-7候选，热度只统计D-6～D；建档后尽力首次算分，每日03:10全量校准。
 - scoreVersion为计算开始时间戳，允许近时覆盖。分数不upsert，404跳过；临时失败最多3次，后续候选和每日校准补遗漏。
@@ -100,3 +100,7 @@ java -jar backend/target/backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev
 报告位于backend/target/surefire-reports，日志search-integration.log，性能样本search-performance.json记录三场景p95/p99、卡片SQL回源批次与采样到的连接池等待者。样本不代表容量上限或高并发SLA。
 
 指标：article.index.outbox.count/oldest.seconds、publish.failure、consume.failure；article.rank.missing/failure、refresh/calibration.last.success.seconds；article.search.duration、article.search.candidate.rejected（reason=author_mismatch）。RabbitMQ管理面核对ready/unacked、DLQ及绑定，结合池等待和既有刷盘日志观察压力。
+
+## 标签元数据来源
+
+文章tag_ids JSON是标签引用事实，索引读取一次批量小字段查询，不再访问article_tag或标签目录。按标签发现候选后使用当前文章投影核对tagIds，过滤已移除标签的旧候选，不增加SQL。标签选择器搜索独立使用本地目录，接口及V8/V9迁移见[标签接入说明](../../../guides/article/zh-CN/article-tags.md)。
