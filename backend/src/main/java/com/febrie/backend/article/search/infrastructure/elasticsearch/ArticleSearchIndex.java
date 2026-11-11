@@ -23,6 +23,7 @@ public class ArticleSearchIndex {
         var filters = new BoolQuery.Builder().filter(f -> f.term(t -> t.field("visible").value(true)));
         if (!query.q().isEmpty()) { filters.must(m -> m.match(t -> t.field("title").query(query.q()))); }
         if (query.tagId() != null) { filters.filter(f -> f.term(t -> t.field("tagIds").value(query.tagId().toString()))); }
+        if (query.authorId() != null) { filters.filter(f -> f.term(t -> t.field("authorId").value(query.authorId()))); }
         var request = new SearchRequest.Builder().pit(p -> p.id(pit).keepAlive(t -> t.time("2m")))
                 .query(filters.build()._toQuery()).size(query.size() + 10).source(s -> s.fetch(false))
                 .trackTotalHits(t -> t.enabled(false)).allowPartialSearchResults(false).timeout("2s");

@@ -17,16 +17,17 @@ public class ArticleSearchController {
     }
     @GetMapping("/api/articles/search")
     public ArticleSearchAssembler.Response search(@RequestParam(required = false) String q,
-            @RequestParam(required = false) Long tagId, @RequestParam(required = false) String sort,
+            @RequestParam(required = false) Long tagId, @RequestParam(required = false) Long authorId,
+            @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "20") int size, @RequestParam(required = false) String cursor,
             @AuthenticationPrincipal SessionPrincipal principal) {
-        return assembler.assemble(searches.page(new ArticleSearchQuery("search", q, tagId, sort, size), cursor),
+        return assembler.assemble(searches.page(new ArticleSearchQuery("search", q, tagId, authorId, sort, size), cursor),
                 principal == null ? null : principal.userId());
     }
     @GetMapping("/api/articles/feed")
     public ArticleSearchAssembler.Response feed(@RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String cursor, @AuthenticationPrincipal SessionPrincipal principal) {
-        return assembler.assemble(searches.page(new ArticleSearchQuery("feed", null, null, "recommended", size), cursor),
+        return assembler.assemble(searches.page(new ArticleSearchQuery("feed", null, null, null, "recommended", size), cursor),
                 principal == null ? null : principal.userId());
     }
 }

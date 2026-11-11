@@ -14,6 +14,8 @@ import tools.jackson.databind.ObjectMapper;
 /** 无服务端分页会话；签名绑定查询及页大小，密钥由各实例共享。 */
 @Component
 public class SearchCursorCodec {
+    // 作者及入口纳入指纹后不接受旧协议游标，客户端需重新开始查询。
+    private static final int VERSION = 2;
     private final ObjectMapper json;
     private final byte[] secret;
     private final Clock clock;
@@ -21,7 +23,7 @@ public class SearchCursorCodec {
         this.json = json; this.secret = p.cursorSecret().getBytes(StandardCharsets.UTF_8); this.clock = clock;
     }
     public String encode(ArticleSearchQuery query, String pit, List<SearchCursor.Value> sort) {
-        var state = new SearchCursor(1, query.fingerprint(), pit, sort, clock.millis() + 120_000);
+        var state = new SearchCursor(VERSION, query.fingerprint(), pit, sort, clock.millis() + 120_000);
         String payload = Base64.getUrlEncoder().withoutPadding().encodeToString(json.writeValueAsBytes(state));
         return payload + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(sign(payload));
     }
@@ -30,7 +32,7 @@ public class SearchCursorCodec {
             String[] parts = cursor.split("\\.", -1);
             if (parts.length != 2 || !MessageDigest.isEqual(sign(parts[0]), Base64.getUrlDecoder().decode(parts[1]))) { throw SearchErrors.invalid(); }
             var state = json.readValue(Base64.getUrlDecoder().decode(parts[0]), SearchCursor.class);
-            if (state.version() != 1 || !query.fingerprint().equals(state.fingerprint())
+            if (state.version() != VERSION || !query.fingerprint().equals(state.fingerprint())
                     || state.pit() == null || state.pit().isBlank() || state.sort() == null || state.sort().isEmpty()) { throw SearchErrors.invalid(); }
             state.sort().forEach(SearchCursor.Value::field);
             if (state.expiresAt() <= clock.millis()) { throw SearchErrors.expired(); }

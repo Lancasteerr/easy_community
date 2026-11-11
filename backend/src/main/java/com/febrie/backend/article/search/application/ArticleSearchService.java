@@ -44,6 +44,11 @@ public class ArticleSearchService {
                 for (var hit : batch.hits()) {
                     after = hit.sort(); processed++;
                     var card = loaded.get(hit.articleId());
+                    // ES只负责发现；缓存或主库投影中的作者才是本页筛选依据。
+                    if (card != null && query.authorId() != null && !query.authorId().toString().equals(card.authorId())) {
+                        metrics.counter("article.search.candidate.rejected", "reason", "author_mismatch").increment();
+                        card = null;
+                    }
                     if (card != null) { items.add(card); }
                     if (items.size() == query.size()) { break; }
                 }

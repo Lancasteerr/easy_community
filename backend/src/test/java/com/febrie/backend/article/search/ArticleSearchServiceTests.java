@@ -22,7 +22,7 @@ class ArticleSearchServiceTests {
             "app.search.query-enabled", true, "app.search.cursor-secret", "test-secret-32-bytes-abcdefghijklmnop"));
     private final SearchCursorCodec cursors = new SearchCursorCodec(new ObjectMapper(), p, Clock.systemUTC());
     private final ArticleSearchService service = new ArticleSearchService(p, index, cards, cursors, new SimpleMeterRegistry());
-    private final ArticleSearchQuery query = new ArticleSearchQuery("search", "Java", null, null, 20);
+    private final ArticleSearchQuery query = new ArticleSearchQuery("search", "Java", null, null, null, 20);
     @Test void lastProcessedHitIs23InsteadOfPrefetched30() throws Exception {
         when(index.open()).thenReturn("pit0");
         when(index.search(eq(query), eq("pit0"), eq(List.of()))).thenReturn(batch("pit1", 1, 30));
@@ -53,6 +53,23 @@ class ArticleSearchServiceTests {
         when(cards.publicCandidates(anyList())).thenThrow(new IllegalStateException("SQL超时"));
         assertEquals(503, assertThrows(ApiException.class, () -> service.page(query, null)).status().value());
         verify(index).close("pit");
+    }
+
+    @Test void authorMismatchIsConsumedAndPageIsRefilledBeforeCursorIsPublished() throws Exception {
+        var authorQuery = new ArticleSearchQuery("search", null, null, 1L, "latest", 1);
+        when(index.open()).thenReturn("pit");
+        when(index.search(eq(authorQuery), eq("pit"), anyList())).thenReturn(batch("pit", 1, 11));
+        when(cards.publicCandidates(anyList())).thenReturn(List.of(
+                new ArticleBriefData("1", "wrong", "2", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH), card(2)));
+        var page = service.page(authorQuery, null);
+        assertEquals(List.of(card(2)), page.items());
+        assertEquals("2", cursors.decode(page.nextCursor(), authorQuery).sort().getFirst().value());
+    }
+
+    @Test void disabledQueriesDoNotFallBackToAnotherDiscoverySource() {
+        var disabled = new ArticleSearchService(SearchTestSupport.properties(Map.of()), index, cards, cursors, new SimpleMeterRegistry());
+        assertEquals(503, assertThrows(ApiException.class, () -> disabled.page(query, null)).status().value());
+        verifyNoInteractions(index, cards);
     }
     private static ArticleSearchIndex.Batch batch(String pit, long from, long to) {
         return new ArticleSearchIndex.Batch(pit, LongStream.rangeClosed(from, to).mapToObj(id -> new ArticleSearchIndex.Hit(id,

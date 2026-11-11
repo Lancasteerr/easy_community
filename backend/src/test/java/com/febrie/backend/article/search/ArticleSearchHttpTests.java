@@ -21,13 +21,13 @@ class ArticleSearchHttpTests {
         var service = mock(ArticleSearchService.class);
         var display = mock(ArticleDisplayAssembler.class);
         var views = mock(ArticleViewService.class); var likes = mock(LikeQueryService.class);
-        when(service.page(new ArticleSearchQuery("feed", null, null, "recommended", 20), null))
+        when(service.page(new ArticleSearchQuery("feed", null, null, null, "recommended", 20), null))
                 .thenReturn(new ArticleSearchService.Page(List.of(), null));
         when(views.totals(List.of())).thenReturn(Map.of()); when(likes.summaries(null, List.of())).thenReturn(Map.of());
         var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes, display)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
         mvc.perform(get("/api/articles/feed")).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
-        verify(service).page(new ArticleSearchQuery("feed", null, null, "recommended", 20), null);
+        verify(service).page(new ArticleSearchQuery("feed", null, null, null, "recommended", 20), null);
         verify(views, never()).record(anyLong());
     }
     @Test void guestGetsFlatCardWithOnlyFinalItemCounts() throws Exception {
@@ -35,14 +35,14 @@ class ArticleSearchHttpTests {
         var display = mock(ArticleDisplayAssembler.class);
         var views = mock(ArticleViewService.class); var likes = mock(LikeQueryService.class);
         var card = new ArticleListView("1", "Java", "2", "author", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH, "https://avatars.test/2");
-        when(service.page(new ArticleSearchQuery("search", "Java", null, null, 20), null))
+        when(service.page(new ArticleSearchQuery("search", "Java", null, 2L, null, 20), null))
                 .thenReturn(new ArticleSearchService.Page(List.of(new ArticleBriefData("1", "Java", "2", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH)), null));
         when(display.lists(anyList())).thenReturn(List.of(card));
         when(views.totals(List.of(1L))).thenReturn(Map.of(1L, 10L));
         when(likes.summaries(null, List.of(1L))).thenReturn(Map.of(1L, new LikeQueryService.Summary(3, false)));
         var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes, display)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
-        mvc.perform(get("/api/articles/search").param("q", "Java"))
+        mvc.perform(get("/api/articles/search").param("q", "Java").param("authorId", "2"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].articleId").value("1"))
                 .andExpect(jsonPath("$.items[0].authorName").value("author"))
                 .andExpect(jsonPath("$.items[0].authorAvatarUrl").value("https://avatars.test/2"))
