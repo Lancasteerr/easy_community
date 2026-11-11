@@ -4,6 +4,7 @@ import com.febrie.backend.article.common.ArticleErrors;
 
 import com.febrie.backend.article.content.application.dto.SaveArticleCommand;
 import com.febrie.backend.shared.error.ApiException;
+import com.febrie.backend.article.tag.application.TagCatalog;
 import com.febrie.backend.user.application.dto.UserActor;
 import java.sql.SQLException;
 import java.util.function.LongSupplier;
@@ -21,14 +22,17 @@ public class ArticleService {
     private final ArticleContentRenderer renderer;
     private final ArticleCommitService commits;
     private final ArticleCacheMaintenance cache;
+    private final TagCatalog tags;
 
-    public ArticleService(ArticleContentRenderer renderer, ArticleCommitService commits, ArticleCacheMaintenance cache) {
-        this.renderer = renderer; this.commits = commits; this.cache = cache;
+    public ArticleService(ArticleContentRenderer renderer, ArticleCommitService commits, ArticleCacheMaintenance cache, TagCatalog tags) {
+        this.renderer = renderer; this.commits = commits; this.cache = cache; this.tags = tags;
     }
 
     public long save(UserActor actor, SaveArticleCommand command) {
         long started = System.nanoTime();
         var content = renderer.prepare(command.title(), command.content(), command.coverMediaId(), command.tagIds());
+        // 标签不会失效，事务前确认一次即可，不持文章锁等待目录刷新。
+        tags.requireAllExist(content.tagIds());
         long prepared = System.nanoTime();
         var attempt = new ArticleCommitService.Attempt();
         long id = execute(attempt, () -> command.articleId() == null ? commits.create(actor, content, attempt)

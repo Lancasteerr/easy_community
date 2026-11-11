@@ -13,7 +13,7 @@ import static org.mockito.Mockito.*;
 /** 目录校验覆盖权限、规范化及唯一约束冲突，不复制数据库实现。 */
 class TagServiceTests {
     private final TagRepository tags = mock(TagRepository.class);
-    private final TagService service = new TagService(tags);
+    private final TagCreationService service = new TagCreationService(tags);
     @Test void normalizesAndKeepsCase() {
         when(tags.insert("Java")).thenReturn(4L);
         assertEquals("4", service.create(new UserActor(1, Role.ADMIN, 1), " Java ").tagId());
@@ -25,13 +25,5 @@ class TagServiceTests {
         when(tags.insert("x")).thenThrow(new DuplicateKeyException("private SQL"));
         assertEquals("TAG_EXISTS", assertThrows(ApiException.class,
                 () -> service.create(new UserActor(1, Role.ADMIN, 1), "x")).code());
-    }
-    @Test void validatesReferencesWithoutChangingArticleErrors() {
-        when(tags.allExist(List.of())).thenReturn(true);
-        when(tags.allExist(List.of(4L))).thenReturn(true);
-        assertDoesNotThrow(() -> service.requireAllExist(List.of()));
-        assertDoesNotThrow(() -> service.requireAllExist(List.of(4L)));
-        assertEquals("INVALID_ARTICLE", assertThrows(ApiException.class,
-                () -> service.requireAllExist(List.of(99L))).code());
     }
 }

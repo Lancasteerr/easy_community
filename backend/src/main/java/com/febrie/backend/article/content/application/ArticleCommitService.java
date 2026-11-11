@@ -3,7 +3,6 @@ package com.febrie.backend.article.content.application;
 import com.febrie.backend.article.common.ArticleErrors;
 import com.febrie.backend.article.content.application.dto.PreparedArticle;
 import com.febrie.backend.article.content.infrastructure.persistence.ArticleRepository;
-import com.febrie.backend.article.tag.application.TagService;
 
 import com.febrie.backend.media.application.reference.MediaReferenceService;
 import com.febrie.backend.user.application.dto.UserActor;
@@ -14,16 +13,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
 import org.springframework.transaction.support.*;
 
-/** 必须由无外层事务的编排服务经Spring代理调用；文章行先于文件行加锁。 */
+/** 由ArticleService完成标签校验后经Spring代理调用；文章行先于文件行加锁。 */
 @Service
 public class ArticleCommitService {
     private final ArticleRepository articles;
-    private final TagService tags;
     private final MediaReferenceService references;
     private final Clock clock;
 
-    public ArticleCommitService(ArticleRepository articles, TagService tags, MediaReferenceService references, Clock clock) {
-        this.articles = articles; this.tags = tags; this.references = references; this.clock = clock;
+    public ArticleCommitService(ArticleRepository articles, MediaReferenceService references, Clock clock) {
+        this.articles = articles; this.references = references; this.clock = clock;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -68,7 +66,6 @@ public class ArticleCommitService {
     }
 
     private void replace(long id, long author, PreparedArticle content, java.time.Instant now) {
-        tags.requireAllExist(content.tagIds());
         references.syncArticle(id, author, content.bodyMediaIds(), content.coverMediaId());
         articles.replace(id, content, now);
         articles.replaceTags(id, content.tagIds());

@@ -16,8 +16,17 @@ class ArticleServiceTests {
     private final ArticleContentRenderer renderer = mock(ArticleContentRenderer.class);
     private final ArticleCommitService commits = mock(ArticleCommitService.class);
     private final ArticleCacheMaintenance cache = mock(ArticleCacheMaintenance.class);
-    private final ArticleService service = new ArticleService(renderer, commits, cache);
+    private final com.febrie.backend.article.tag.application.TagCatalog tags = mock(com.febrie.backend.article.tag.application.TagCatalog.class);
+    private final ArticleService service = new ArticleService(renderer, commits, cache, tags);
     private final UserActor actor = new UserActor(1, Role.USER, 1);
+    @Test void invalidTagsNeverEnterArticleTransaction() {
+        var command = new com.febrie.backend.article.content.application.dto.SaveArticleCommand(null, "x", null, null, List.of(9L));
+        var prepared = new com.febrie.backend.article.content.application.dto.PreparedArticle("x", "x", "{}", "x", null, Set.of(), List.of(9L));
+        when(renderer.prepare("x", null, null, List.of(9L))).thenReturn(prepared);
+        doThrow(com.febrie.backend.article.common.ArticleErrors.invalid()).when(tags).requireAllExist(List.of(9L));
+        assertEquals("INVALID_ARTICLE", assertThrows(ApiException.class, () -> service.save(actor, command)).code());
+        verifyNoInteractions(commits, cache);
+    }
     @Test void distinguishesBodyFailureFromUnconfirmedCommit() {
         doAnswer(call -> { throw new CannotAcquireLockException("deadlock"); }).when(commits).hide(eq(actor), eq(1L), any());
         assertEquals("DEPENDENCY_UNAVAILABLE", assertThrows(ApiException.class, () -> service.hide(actor, 1)).code());

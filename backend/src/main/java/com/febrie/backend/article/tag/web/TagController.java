@@ -19,7 +19,9 @@ public class TagController {
     private final TagService tags;
     public TagController(TagService tags) { this.tags = tags; }
     @GetMapping("/api/tags")
-    public List<TagView> all() { return tags.all(); }
+    public List<TagView> search(@RequestParam(required = false) String q, @RequestParam(defaultValue = "10") int limit) {
+        return tags.search(q, limit);
+    }
     @PostMapping("/api/admin/tags")
     @ResponseStatus(HttpStatus.CREATED)
     public TagView create(@AuthenticationPrincipal SessionPrincipal principal, @Valid @RequestBody TagRequest request) {
