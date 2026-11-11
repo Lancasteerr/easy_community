@@ -118,6 +118,12 @@ class ArticleHttpIntegrationTests {
         var tagResponse = admin.call("POST", "/api/admin/tags", Map.of("name", " Tag_" + UUID.randomUUID().toString().substring(0, 20)), true);
         assertEquals(201, tagResponse.statusCode(), tagResponse.body());
         String tag = mapper.readTree(tagResponse.body()).path("tagId").asString(); tags.add(Long.parseLong(tag));
+        assertEquals(403, owner.call("POST", "/api/admin/tags", Map.of("name", "forbidden"), true).statusCode());
+        assertEquals("[]", owner.call("GET", "/api/tags", null, false).body());
+        var suggestions = owner.call("GET", "/api/tags?q=tag_&limit=20", null, false);
+        assertEquals(200, suggestions.statusCode(), suggestions.body());
+        assertTrue(mapper.readTree(suggestions.body()).valueStream().anyMatch(t -> t.path("tagId").asString().equals(tag)));
+        assertEquals(400, owner.call("GET", "/api/tags?q=x&limit=21", null, false).statusCode());
         var command = save(null, "tagged"); command.put("tagIds", List.of(tag));
         String id = mapper.readTree(owner.call("POST", "/api/articles", command, true).body()).path("articleId").asString();
         assertEquals(200, visitor.call("GET", "/api/articles/" + id, null, false).statusCode());
@@ -125,6 +131,11 @@ class ArticleHttpIntegrationTests {
         var warm = visitor.call("GET", "/api/articles/" + id, null, false);
         assertEquals(tag, mapper.readTree(warm.body()).path("tags").get(0).path("tagId").asString());
         verifyNoInteractions(reader);
+        var edit = owner.call("GET", "/api/articles/" + id + "/edit", null, false);
+        assertEquals(200, edit.statusCode(), edit.body());
+        assertEquals(tag, mapper.readTree(edit.body()).path("tags").get(0).path("tagId").asString());
+        var invalid = save(null, "invalid tag"); invalid.put("tagIds", List.of("9223372036854775807"));
+        assertEquals(400, owner.call("POST", "/api/articles", invalid, true).statusCode());
     }
     @Test void postCommitRedisFailureKeepsSqlSuccess() throws Exception {
         Browser owner = login(Role.USER);

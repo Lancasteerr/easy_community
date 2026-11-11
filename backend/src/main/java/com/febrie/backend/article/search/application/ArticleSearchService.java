@@ -49,6 +49,11 @@ public class ArticleSearchService {
                         metrics.counter("article.search.candidate.rejected", "reason", "author_mismatch").increment();
                         card = null;
                     }
+                    // 标签已经移除的旧ES候选用当前投影过滤，不增加主库校验。
+                    if (card != null && query.tagId() != null && !card.tagIds().contains(query.tagId())) {
+                        metrics.counter("article.search.candidate.rejected", "reason", "tag_mismatch").increment();
+                        card = null;
+                    }
                     if (card != null) { items.add(card); }
                     if (items.size() == query.size()) { break; }
                 }

@@ -3,7 +3,6 @@ package com.febrie.backend.article.content.infrastructure.cache;
 import com.febrie.backend.shared.cache.CacheValue;
 import com.febrie.backend.article.content.application.dto.ArticleDetailData;
 import com.febrie.backend.article.content.application.dto.ArticleBriefData;
-import com.febrie.backend.article.tag.application.dto.TagView;
 
 import com.febrie.backend.article.content.infrastructure.config.ArticleCacheProperties;
 import com.febrie.backend.article.content.infrastructure.persistence.ArticleRepository;
@@ -22,7 +21,7 @@ import static org.mockito.Mockito.*;
 /** 真Redis验证Lua与租期协议；每次随机前缀，不执行FLUSHDB或SCRIPT FLUSH。 */
 @EnabledIfEnvironmentVariable(named = "IT_REDIS", matches = "true")
 class ArticleCacheIntegrationTests {
-    private final String namespace = "ec:test:" + UUID.randomUUID() + ":article:v2";
+    private final String namespace = "ec:test:" + UUID.randomUUID() + ":article:v4";
     private LettuceConnectionFactory connections;
     private StringRedisTemplate redis;
     private ArticleCache cache;
@@ -59,6 +58,20 @@ class ArticleCacheIntegrationTests {
         assertEquals("2", lists.get(List.of(1L)).get(1L).data().authorId());
         assertTrue(redis.getExpire(cache.key(1, "detail")) <= 30);
         assertTrue(cache.unlock(1, token));
+    }
+    @Test void oldTagViewPayloadLivesInADifferentNamespaceAndNewCacheStoresOnlyIds() {
+        String oldKey = namespace.replace(":article:v4", ":article:v3") + ":{1}:detail";
+        redis.opsForValue().set(oldKey, "D{\"tags\":[{\"tagId\":\"3\",\"name\":\"Java\"}]}");
+        try {
+            assertEquals(CacheValue.State.MISS, details.get(1).state());
+            String token = cache.tryLock(1);
+            try { assertTrue(details.publish(1, token, detail())); }
+            finally { cache.release(1, token); }
+            String payload = redis.opsForValue().get(cache.key(1, "detail"));
+            assertTrue(payload.contains("\"tagIds\":[3]"));
+            assertFalse(payload.contains("Java"));
+            assertFalse(payload.contains("\"tags\""));
+        } finally { redis.delete(oldKey); }
     }
     @Test void expiredTokenCannotPublishInvalidateHideMissingOrUnlockNewOwner() {
         String old = cache.tryLock(1);
@@ -111,10 +124,10 @@ class ArticleCacheIntegrationTests {
     }
     private static ArticleBriefData list() {
         return new ArticleBriefData("1", "title", "2", "summary", "cover-id",
-                List.of(new TagView("3", "Java")), Instant.EPOCH, Instant.EPOCH);
+                List.of(3L), Instant.EPOCH, Instant.EPOCH);
     }
     private static ArticleDetailData detail() {
         return new ArticleDetailData("1", "title", "2", "summary", "cover-id",
-                List.of(new TagView("3", "Java")), Instant.EPOCH, Instant.EPOCH, "<p>text</p>");
+                List.of(3L), Instant.EPOCH, Instant.EPOCH, "<p>text</p>");
     }
 }

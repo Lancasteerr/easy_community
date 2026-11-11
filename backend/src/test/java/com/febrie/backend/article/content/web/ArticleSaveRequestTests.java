@@ -27,4 +27,12 @@ class ArticleSaveRequestTests {
         assertThrows(ApiException.class, () -> ArticleSaveRequest.parse("{}".getBytes(StandardCharsets.UTF_8), mapper));
         assertThrows(ApiException.class, () -> ArticleSaveRequest.parse((new String(body(""), StandardCharsets.UTF_8) + " {}").getBytes(StandardCharsets.UTF_8), mapper));
     }
+    @Test void allowsZeroOrFiveTagsButRejectsSixBeforeDeduplication() {
+        String input = new String(body(""), StandardCharsets.UTF_8);
+        assertTrue(ArticleSaveRequest.parse(body(""), mapper).tagIds().isEmpty());
+        String five = input.replace("\"tagIds\":[]", "\"tagIds\":[\"1\",\"2\",\"3\",\"4\",\"5\"]");
+        assertEquals(5, ArticleSaveRequest.parse(five.getBytes(StandardCharsets.UTF_8), mapper).tagIds().size());
+        String six = input.replace("\"tagIds\":[]", "\"tagIds\":[\"1\",\"1\",\"1\",\"1\",\"1\",\"1\"]");
+        assertThrows(ApiException.class, () -> ArticleSaveRequest.parse(six.getBytes(StandardCharsets.UTF_8), mapper));
+    }
 }

@@ -71,6 +71,16 @@ class ArticleSearchServiceTests {
         assertEquals(503, assertThrows(ApiException.class, () -> disabled.page(query, null)).status().value());
         verifyNoInteractions(index, cards);
     }
+    @Test void removedTagCandidateIsConsumedWithoutChangingCursorRules() throws Exception {
+        var taggedQuery = new ArticleSearchQuery("search", null, 3L, null, "latest", 1);
+        when(index.open()).thenReturn("pit");
+        when(index.search(eq(taggedQuery), eq("pit"), anyList())).thenReturn(batch("pit", 1, 11));
+        var tagged = new ArticleBriefData("2", "title", "1", "summary", null, List.of(3L), Instant.EPOCH, Instant.EPOCH);
+        when(cards.publicCandidates(anyList())).thenReturn(List.of(card(1), tagged));
+        var page = service.page(taggedQuery, null);
+        assertEquals(List.of(tagged), page.items());
+        assertEquals("2", cursors.decode(page.nextCursor(), taggedQuery).sort().getFirst().value());
+    }
     private static ArticleSearchIndex.Batch batch(String pit, long from, long to) {
         return new ArticleSearchIndex.Batch(pit, LongStream.rangeClosed(from, to).mapToObj(id -> new ArticleSearchIndex.Hit(id,
                 List.of(new SearchCursor.Value("long", Long.toString(id))))).toList());

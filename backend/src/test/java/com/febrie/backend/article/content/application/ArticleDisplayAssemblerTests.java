@@ -16,7 +16,8 @@ import static org.mockito.Mockito.*;
 class ArticleDisplayAssemblerTests {
     private final UserBasicQueryService users = mock(UserBasicQueryService.class);
     private final MediaUrls urls = mock(MediaUrls.class);
-    private final ArticleDisplayAssembler assembler = new ArticleDisplayAssembler(users, urls);
+    private final com.febrie.backend.article.tag.application.TagCatalog tags = mock(com.febrie.backend.article.tag.application.TagCatalog.class);
+    private final ArticleDisplayAssembler assembler = new ArticleDisplayAssembler(users, urls, tags);
 
     @Test void deduplicatesAuthorsAndRefreshesAvatarWithoutChangingArticle() {
         var articles = List.of(brief("1"), brief("2"));
@@ -47,6 +48,19 @@ class ArticleDisplayAssemblerTests {
         assertFalse(payload.contains("Avatar"));
         assertFalse(payload.contains("coverUrl"));
         assertTrue(payload.contains("\"9007199254740995\""));
+        assertTrue(payload.contains("\"tagIds\""));
+        assertFalse(payload.contains("\"tags\""));
+    }
+
+    @Test void resolvesPageTagsOnceAndDoesNotSilentlyDropMissingNames() {
+        var tagged = new ArticleBriefData("1", "title", "9", "summary", null, List.of(3L), Instant.EPOCH, Instant.EPOCH);
+        when(users.get(List.of(9L))).thenReturn(Map.of(9L, new UserBasicData(9, "author", null)));
+        when(tags.resolve(List.of(3L))).thenReturn(Map.of(3L, new com.febrie.backend.article.tag.application.dto.TagView("3", "Java")));
+        var page = assembler.lists(List.of(tagged, tagged));
+        assertEquals("Java", page.getFirst().tags().getFirst().name());
+        verify(tags).resolve(List.of(3L));
+        when(tags.resolve(List.of(3L))).thenReturn(Map.of());
+        assertEquals("DEPENDENCY_UNAVAILABLE", assertThrows(ApiException.class, () -> assembler.lists(List.of(tagged))).code());
     }
 
     private static ArticleBriefData brief(String id) {
