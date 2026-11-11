@@ -5,7 +5,7 @@
 .manage-sidebar { padding: 25px 16px; border-radius: 12px; background: #242529; }
 /* 用独立圆头线条绘制标题下划线，保留标题尺寸与导航位置。 */
 .manage-heading { position: relative; margin: 0; width: 131px; height: 26px; font-size: 18px; line-height: 24px; font-weight: 700; white-space: nowrap; }
-.manage-heading::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 1px; background: #9bceff; }
+.manage-heading::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: #9bceff; }
 .manage-heading span { margin-left: 3px; color: #989ba5; font-size: 11px; font-weight: 400; }
 .manage-nav { display: flex; flex-direction: column; gap: 0; margin-top: 23px; }
 .manage-nav button { position: relative; width: 190px; height: 45px; border: 0; border-radius: 10px; padding: 0 13px; background: none; color: #989ba5; text-align: left; font-size: 14px; }
