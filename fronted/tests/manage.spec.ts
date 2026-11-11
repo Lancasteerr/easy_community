@@ -36,8 +36,8 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1024 }, { name: 
     expect(await list.boundingBox()).toMatchObject({ x: x + 242, y: 231, height: viewport.height - 253 });
     expect((await page.locator('.manage-row').first().locator('.manage-cover').boundingBox())?.width).toBe(160);
     expect((await page.locator('.manage-row').nth(1).locator('h2').boundingBox())!.height).toBeLessThanOrEqual(48);
-    await expect(page.getByText('暂无封面', { exact: true })).toHaveCount(1);
-    await expect(page.getByText('封面加载失败')).toHaveCount(1);
+    await expect(page.getByText('暂无封面', { exact: true })).toHaveCount(2);
+    await expect(page.getByText('封面加载失败')).toHaveCount(0);
     expect(await page.locator('.manage-cover-placeholder img').first().boundingBox()).toMatchObject({ width: 36, height: 36 });
     const fixed = page.locator('.home-header, .manage-sidebar, .manage-toolbar');
     const before = await Promise.all((await fixed.all()).map((element) => element.boundingBox()));
@@ -51,7 +51,7 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1024 }, { name: 
   });
 }
 
-test('刷新保留原列表与位置，失败可见，成功替换后仅列表回顶', async ({ page }) => {
+test('刷新失败复用设计稿失败态，重试成功后仅列表回顶', async ({ page }, info) => {
   await signedIn(page);
   await page.setViewportSize({ width: 1280, height: 768 });
   let reads = 0;
@@ -62,15 +62,19 @@ test('刷新保留原列表与位置，失败可见，成功替换后仅列表�
   });
   await page.goto('/manage/articles');
   await expect(page.locator('.manage-row')).toHaveCount(12);
-  const list = page.getByRole('region', { name: '已发布文章列表' });
+  const list = page.locator('.manage-load-content .manage-list');
   await list.evaluate((element) => { element.scrollTop = 500; });
   await page.evaluate(() => window.scrollTo(100, 0));
   const horizontal = await page.evaluate(() => scrollX);
   await page.getByRole('button', { name: '刷新', exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText('刷新失败，原内容已保留，请重试');
+  await expect(page.getByRole('heading', { name: '内容加载失败' })).toBeVisible();
+  await expect(page.getByText('请检查网络连接后重试')).toBeVisible();
+  await expect(page.locator('.manage-toolbar-feedback')).toHaveCount(0);
+  await expect(page.locator('.manage-row').first()).not.toBeVisible();
   await expect(page.locator('.manage-row')).toHaveCount(12);
   expect(await list.evaluate((element) => element.scrollTop)).toBe(500);
-  await page.getByRole('button', { name: '刷新', exact: true }).click();
+  await page.screenshot({ path: info.outputPath('manage-refresh-failure.png') });
+  await page.getByRole('button', { name: '重新加载', exact: true }).click();
   await expect(page.locator('.manage-row')).toHaveCount(1);
   expect(await list.evaluate((element) => element.scrollTop)).toBe(0);
   expect(await page.evaluate(() => scrollX)).toBe(horizontal);
@@ -107,7 +111,7 @@ test('原生删除弹窗、Esc、焦点恢复与最后一项删除', async ({ pa
   await expect(page.getByRole('button', { name: '删除 文章 2', exact: true })).toBeFocused();
   await page.getByRole('button', { name: '删除 文章 2', exact: true }).click();
   await dialog.getByRole('button', { name: '删除', exact: true }).click();
-  await expect(page.getByText('当前暂无可显示的已发布内容')).toBeVisible();
+  await expect(page.getByText('暂无已发布内容')).toBeVisible();
   expect(writes).toBe(2);
   // 新查询返回短暂旧卡片也不能恢复本页已经删除的文章。
   await page.getByRole('button', { name: '刷新', exact: true }).click();
@@ -128,7 +132,8 @@ test('删除结果未知，关闭重开保持核对态，作者接口核对不�
   await page.getByRole('button', { name: '删除 文章 1', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: '删除', exact: true }).click();
-  await expect(dialog.getByRole('heading')).toHaveText('删除结果待确认');
+  await expect(dialog.getByRole('heading')).toHaveText('删除这篇内容？');
+  await expect(dialog.getByRole('status')).toContainText('删除结果尚未确认');
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '核对删除结果 文章 1', exact: true }).click();
   await dialog.getByRole('button', { name: '核对结果' }).click();
@@ -183,7 +188,7 @@ test('首次骨架、失败、重试及窄屏空状态', async ({ page }, info) 
   await expect(page.getByRole('heading', { name: '内容加载失败' })).toBeVisible();
   await page.screenshot({ path: info.outputPath('manage-initial-failure.png') });
   await page.getByRole('button', { name: '重新加载', exact: true }).click();
-  await expect(page.getByText('当前暂无可显示的已发布内容')).toBeVisible();
+  await expect(page.getByText('暂无已发布内容')).toBeVisible();
   await page.screenshot({ path: info.outputPath('manage-empty.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1440);
@@ -191,26 +196,47 @@ test('首次骨架、失败、重试及窄屏空状态', async ({ page }, info) 
   expect(await page.evaluate(() => scrollX)).toBeGreaterThan(0);
 });
 
-test('身份复核保留列表位置，失败暂停操作，401清理并进入登录', async ({ page }) => {
+test('身份复核静默，失败复用原稿加载失败且恢复原位置，401清理', async ({ page }, info) => {
   await signedIn(page);
   let mode = 'ok';
   let reads = 0;
+  let release: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => { release = resolve; });
   await page.unroute('**/api/users/me');
-  await page.route('**/api/users/me', (route) => route.fulfill(mode === 'ok' ? { json: profile }
-    : { status: mode === 'expired' ? 401 : 503, json: { code: mode === 'expired' ? 'AUTHENTICATION_REQUIRED' : 'DEPENDENCY_UNAVAILABLE' } }));
+  await page.route('**/api/users/me', async (route) => {
+    if (mode === 'checking') await held;
+    return route.fulfill(mode === 'ok' ? { json: profile }
+      : { status: mode === 'expired' ? 401 : 503, json: { code: mode === 'expired' ? 'AUTHENTICATION_REQUIRED' : 'DEPENDENCY_UNAVAILABLE' } });
+  });
   await page.route('**/api/users/me/articles?**', (route) => { reads++; return route.fulfill({ json: { items: rows, nextCursor: null } }); });
   await page.goto('/manage/articles');
   await expect(page.locator('.manage-row')).toHaveCount(12);
-  const list = page.getByRole('region', { name: '已发布文章列表' });
+  const list = page.locator('.manage-load-content .manage-list');
   await list.evaluate((element) => { element.scrollTop = 400; });
-  mode = 'failed';
+  const originalBounds = await list.boundingBox();
+  mode = 'checking';
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByText('登录状态暂时无法确认，操作已暂停')).toBeVisible();
-  expect(await list.evaluate((element) => element.scrollTop)).toBe(400);
   await expect(page.getByRole('button', { name: '刷新', exact: true })).toBeDisabled();
+  await expect(list).toBeVisible();
+  expect(await list.boundingBox()).toEqual(originalBounds);
+  await expect(page.locator('.manage-notice')).toHaveCount(0);
+  mode = 'failed';
+  release!();
+  await expect(page.getByRole('heading', { name: '内容加载失败' })).toBeVisible();
+  await expect(page.getByText('请检查网络连接后重试')).toBeVisible();
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(400);
+  await expect(list).not.toBeVisible();
+  await expect(page.getByRole('button', { name: '刷新', exact: true })).toBeDisabled();
+  const state = page.locator('.manage-load-overlay .manage-centered-state');
+  expect(await state.locator('img').boundingBox()).toMatchObject({ y: 461, width: 64, height: 64 });
+  expect(await state.getByRole('heading').boundingBox()).toMatchObject({ y: 547, height: 28 });
+  expect(await state.getByRole('button', { name: '重新加载' }).boundingBox()).toMatchObject({ y: 633, width: 104, height: 36 });
+  await page.screenshot({ path: info.outputPath('manage-identity-failure.png') });
   mode = 'ok';
-  await page.getByRole('button', { name: '重新检查登录状态', exact: true }).click();
+  await page.getByRole('button', { name: '重新加载', exact: true }).click();
   await expect(page.getByRole('button', { name: '刷新', exact: true })).toBeEnabled();
+  await expect(list).toBeVisible();
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(400);
   expect(reads).toBe(1);
   mode = 'expired';
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -237,6 +263,7 @@ test('追加加载、失败保留、手动重试和完成状态', async ({ page 
   await page.screenshot({ path: info.outputPath('manage-append-loading.png') });
   release!();
   await expect(page.getByRole('button', { name: '加载失败，点击重试' })).toBeVisible();
+  await expect(page.locator('.manage-tail p')).toHaveCount(0);
   await expect(page.locator('.manage-row')).toHaveCount(12);
   await page.screenshot({ path: info.outputPath('manage-append-failure.png') });
   await page.getByRole('button', { name: '加载失败，点击重试' }).click();
@@ -259,7 +286,7 @@ for (const failure of [{ status: 400, code: 'ARTICLE_SEARCH_INVALID' }, { status
     await expect(page.locator('.manage-row')).toHaveCount(12);
     const list = page.getByRole('region', { name: '已发布文章列表' });
     await list.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-    await page.getByRole('button', { name: '重新加载', exact: true }).click();
+    await page.getByRole('button', { name: '加载失败，点击重试', exact: true }).click();
     await expect(page.getByRole('heading', { name: '文章 fresh' })).toBeVisible();
     expect(await list.evaluate((element) => element.scrollTop)).toBe(0);
     expect(starts).toBe(2);
@@ -313,7 +340,7 @@ test('无观察器时空页仍可手动续读，空页不等于结束', async ({
   });
   await page.goto('/manage/articles');
   await expect(page.getByRole('button', { name: '继续加载' })).toBeVisible();
-  await expect(page.getByText('当前暂无可显示的已发布内容')).toHaveCount(0);
+  await expect(page.getByText('暂无已发布内容')).toHaveCount(0);
   expect(reads).toBe(1);
   await page.getByRole('button', { name: '继续加载' }).click();
   await expect(page.locator('.manage-row')).toHaveCount(1);

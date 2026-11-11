@@ -15,7 +15,6 @@
 .manage-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-radius: 12px; background: #25262b; }
 .manage-toolbar { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; height: 64px; margin: 0 24px; border-bottom: 1px solid #36373e; }
 .manage-toolbar h1 { margin: 0; font-size: 16px; font-weight: 500; }
-.manage-toolbar-feedback { color: #d9b58e; font-size: 13px; }
 .manage-text-action { border: 0; padding: 6px 10px; border-radius: 6px; color: #9bceff; background: none; font-size: 14px; }
 .manage-text-action:hover:not(:disabled) { background: #334352; }
 .manage-panel button:disabled { opacity: .5; cursor: not-allowed; }
@@ -40,17 +39,22 @@
 .manage-edit:hover { background: #334352; }
 .manage-delete:hover:not(:disabled) { color: #ff858b; background: #463136; }
 .manage-row-actions button:focus-visible { outline-offset: 1px; }
-/* 首次状态居中，尾部反馈留在列表流中；刷新反馈不替换现有卡片。 */
+/* 统一失败态覆盖展示区域，保留原列表布局及滚动位置，且不新增提示横条。 */
+.manage-load-boundary, .manage-load-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.manage-load-boundary { position: relative; }
+.manage-load-content.is-concealed { visibility: hidden; }
+.manage-load-overlay { position: absolute; inset: 0; overflow: auto; background: #25262b; }
+/* 在771px基准视口中，图标、标题、说明、按钮分别落在230/316/356/402px。 */
 .manage-centered-state { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; color: #989ba5; text-align: center; }
-.manage-centered-state > .icon, .manage-centered-state > .document-icon { color: #6f8699; margin-bottom: 22px; }
-.manage-centered-state h2 { margin: 0; color: #f0f1f4; font-size: 20px; line-height: 28px; font-weight: 500; }
+.manage-state-content { display: flex; flex-direction: column; align-items: center; max-width: 100%; transform: translateY(-51.5px); }
+.manage-state-content > img { flex-shrink: 0; margin-bottom: 22px; }
+.manage-centered-state h2 { height: 28px; margin: 0; color: #f0f1f4; font-size: 18px; line-height: 20px; font-weight: 500; }
 .manage-centered-state p { margin: 12px 0 26px; font-size: 14px; line-height: 20px; }
-.manage-state-actions { display: flex; align-items: center; gap: 12px; }
-.manage-primary { padding: 8px 22px; border: 0; border-radius: 6px; background: #334352; color: #9bceff; font-size: 14px; }
-.manage-tail { min-height: 72px; padding: 24px; text-align: center; color: #989ba5; font-size: 14px; }
+.manage-primary { width: 104px; min-height: 36px; padding: 8px 0; border: 0; border-radius: 6px; background: #99ccff; color: #172434; font-size: 14px; line-height: 20px; font-weight: 500; }
+.manage-tail { min-height: 72px; padding: 26px 24px; text-align: center; color: #989ba5; font-size: 13px; line-height: 20px; }
+.manage-tail-action { border: 0; padding: 0; background: none; color: #99ccff; font-size: 13px; line-height: 20px; }
 .manage-tail p { margin: 0 0 12px; }
 .manage-tail p:last-child { margin: 0; }
-.manage-notice { display: flex; flex-shrink: 0; justify-content: center; align-items: center; gap: 12px; padding: 8px 24px; color: #d9b58e; font-size: 13px; background: #303138; }
 .manage-skeleton { padding: 0 24px; }
 .manage-skeleton-row { height: 133px; padding: 16px 0; display: flex; gap: 20px; border-bottom: 1px solid #36373e; }
 .manage-skeleton-row i, .manage-skeleton-row b, .manage-skeleton-row span, .manage-skeleton-row em, .manage-skeleton-row small { display: block; border-radius: 6px; background: #303138; animation: shimmer 1.8s infinite; }

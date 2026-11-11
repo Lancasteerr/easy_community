@@ -41,7 +41,7 @@ export function DeleteArticleDialog({ state, seconds = 0, blocked = false, onClo
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }}
     onCancel={(event) => { event.preventDefault(); if (!state.busy) onClose(); }}>
-    <h2 id="delete-heading">{state.unknown ? '删除结果待确认' : '删除这篇内容？'}</h2>
+    <h2 id="delete-heading">删除这篇内容？</h2>
     <p className="manage-dialog-title">「{state.article?.title}」</p>
     <p id="delete-description">删除后将无法恢复，请确认是否继续。</p>
     <p className="manage-dialog-feedback" role="status">{state.message}</p>

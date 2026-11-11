@@ -27,7 +27,7 @@ export function ManageArticleRow({ article, disabled = false, uncertain = false,
     <button className="manage-cover" onClick={unavailable} aria-label={`查看文章 ${article.title}`}>
       {article.coverUrl && !coverFailed
         ? <img src={article.coverUrl} alt="" loading="lazy" onError={() => setBrokenCover(article.coverUrl!)} />
-        : <span className="manage-cover-placeholder"><Icon name="document" size={36} /><span>{coverFailed ? '封面加载失败' : '暂无封面'}</span></span>}
+        : <span className="manage-cover-placeholder"><Icon name="document" size={36} /><span>暂无封面</span></span>}
     </button>
     <div className="manage-copy">
       <h2 id={`manage-title-${article.articleId}`}><button title={article.title} onClick={unavailable}>{article.title}</button></h2>

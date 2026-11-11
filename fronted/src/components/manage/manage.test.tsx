@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { article } from '../../test/fixtures';
 import { ManageArticleRow, compactCount } from './ManageArticleRow';
 import { DeleteArticleDialog, type DeleteDialogState } from './DeleteArticleDialog';
-import { ManageSkeleton } from './ManageStates';
+import { ManageEmpty, ManageError, ManageSkeleton } from './ManageStates';
 
 // jsdom 不实现原生模态层；焦点约束、遮罩和真实布局交由浏览器验收。
 beforeEach(() => {
@@ -12,7 +12,19 @@ beforeEach(() => {
 });
 
 describe('管理页展示边界', () => {
-  it('真实零值、未开放指标及坏图分别展示，完整标题保留', () => {
+  it('空状态和加载失败使用原稿文案与单一操作入口', () => {
+    const retry = vi.fn();
+    const { rerender } = render(<ManageError onRetry={retry} />);
+    expect(screen.getByRole('heading')).toHaveTextContent('内容加载失败');
+    expect(screen.getByText('请检查网络连接后重试')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    rerender(<ManageEmpty />);
+    expect(screen.getByRole('heading')).toHaveTextContent('暂无已发布内容');
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('button')).toHaveTextContent('去发布');
+  });
+  it('真实零值、未开放指标及坏图复用无封面占位，完整标题保留', () => {
     const data = { ...article(), coverUrl: '/broken.png', viewCount: 0 };
     const remove = vi.fn();
     render(<ManageArticleRow article={data} onDelete={remove} />);
@@ -20,7 +32,8 @@ describe('管理页展示边界', () => {
     expect(screen.getByLabelText('评论暂未开放')).toHaveTextContent('—');
     expect(screen.getByTitle(data.title)).toHaveTextContent(data.title);
     fireEvent.error(screen.getByRole('presentation'));
-    expect(screen.getByText('封面加载失败')).toBeVisible();
+    expect(screen.getByText('暂无封面')).toBeVisible();
+    expect(screen.queryByText('封面加载失败')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: `删除 ${data.title}` }));
     expect(remove).toHaveBeenCalledWith(data);
     expect(compactCount(128000)).toBe('12.8万');

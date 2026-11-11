@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { ApiError, errorMessage } from '../../api/client';
 import { useCooldown } from '../../hooks/useCooldown';
 import type { useMyArticles } from '../../hooks/useMyArticles';
 import type { ArticleCardData } from '../../api/types';
@@ -26,24 +25,21 @@ export function ManageArticleList({ list, enabled, paused = false, uncertainIds,
   }, [enabled, paused, list.status, list.paused, list.nextCursor, list.items.length, list.loadMore]);
 
   const failed = ['appendError', 'resetRequired'].includes(list.status);
-  const message = list.status === 'resetRequired' ? list.error instanceof ApiError && list.error.code === 'ARTICLE_CURSOR_EXPIRED'
-    ? '列表已过期，请重新加载' : '列表无法继续，请重新加载' : errorMessage(list.error);
   const restart = () => { void list.refresh(); };
   return <div className="manage-list" ref={root} role="region" tabIndex={0} aria-label="已发布文章列表"
     aria-busy={['initialLoading', 'loadingMore', 'refreshing'].includes(list.status)}>
     {list.items.map((item) => <ManageArticleRow key={item.articleId} article={item} disabled={!enabled || paused || list.status === 'refreshing'}
       uncertain={uncertainIds?.has(item.articleId)} onDelete={onDelete} />)}
     {list.status === 'initialLoading' && <ManageSkeleton />}
-    {list.status === 'initialError' && <ManageError message={errorMessage(list.error)} seconds={seconds} onRetry={() => { void list.retry(); }} />}
-    {list.status === 'ready' && !list.items.length && list.nextCursor === null && <ManageEmpty onRefresh={restart} disabled={!enabled} />}
+    {list.status === 'initialError' && <ManageError seconds={seconds} onRetry={() => { void list.retry(); }} />}
+    {list.status === 'ready' && !list.items.length && list.nextCursor === null && <ManageEmpty />}
     {!['initialLoading', 'initialError'].includes(list.status) && !(list.status === 'ready' && !list.items.length && list.nextCursor === null) && <div ref={sentinel} className="manage-tail" aria-live="polite">
       {list.status === 'loadingMore' && <span className="loading-label"><i className="spinner" />正在加载更多内容</span>}
-      {list.status === 'refreshing' && <span className="loading-label"><i className="spinner" />正在刷新内容</span>}
-      {failed && <><p>{message}</p><button className="manage-text-action" disabled={!enabled || seconds > 0}
-        onClick={list.status === 'appendError' ? () => { void list.retry(); } : restart}>{seconds > 0 ? `${seconds}秒后重试` : list.status === 'appendError' ? '加载失败，点击重试' : '重新加载'}</button></>}
+      {failed && <button className="manage-tail-action" disabled={!enabled || seconds > 0}
+        onClick={list.status === 'appendError' ? () => { void list.retry(); } : restart}>{seconds > 0 ? `${seconds}秒后重试` : '加载失败，点击重试'}</button>}
       {list.status === 'ready' && list.nextCursor === null && list.items.length > 0 && <p>没有更多内容了</p>}
       {list.status === 'ready' && list.nextCursor !== null && (list.paused || !window.IntersectionObserver) && <>
-        {list.paused && <p>暂未发现更多内容，可继续加载</p>}<button className="manage-text-action" disabled={!enabled || paused} onClick={() => { void list.loadMore(true); }}>继续加载</button></>}
+        <button className="manage-tail-action" disabled={!enabled || paused} onClick={() => { void list.loadMore(true); }}>继续加载</button></>}
     </div>}
   </div>;
 }

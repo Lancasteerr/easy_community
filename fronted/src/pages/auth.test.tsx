@@ -42,7 +42,7 @@ describe('登录页', () => {
     await screen.findByRole('heading', { name: '账号密码登录' });
     await fill(user);
     await user.click(screen.getByRole('button', { name: /^登录$/ }));
-    await screen.findByText('当前暂无可显示的已发布内容');
+    await screen.findByText('暂无已发布内容');
     expect(screen.getByLabelText('当前路由')).toHaveTextContent('/manage/articles');
     expect(getMyArticles).toHaveBeenCalledWith(null, expect.any(AbortSignal));
   });
@@ -52,6 +52,19 @@ describe('登录页', () => {
     mount({ pathname: '/login', state: { returnTo: 'https://example.com' } });
     await waitFor(() => expect(screen.getByLabelText('当前路由')).toHaveTextContent(/^\/$/));
     expect(getMyArticles).not.toHaveBeenCalled();
+  });
+  it('管理页身份读取失败复用设计稿加载失败，重试时复用骨架', async () => {
+    const pending = deferred<typeof profile>();
+    readProfile.mockRejectedValueOnce(new ApiError(503, 'DEPENDENCY_UNAVAILABLE', '失败')).mockReturnValueOnce(pending.promise);
+    const user = mount('/manage/articles');
+    await screen.findByRole('heading', { name: '内容加载失败' });
+    expect(screen.getByText('请检查网络连接后重试')).toBeVisible();
+    expect(screen.queryByText(/登录状态暂时无法确认/)).toBeNull();
+    expect(getMyArticles).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: '重新加载' }));
+    expect(screen.getByRole('status', { name: '正在加载已发布文章' })).toBeVisible();
+    await act(async () => pending.resolve(profile));
+    await screen.findByText('暂无已发布内容');
   });
   it('空表单按账号、密码顺序校验并聚焦，不请求 CSRF 或认证接口', async () => {
     const user = mount();
