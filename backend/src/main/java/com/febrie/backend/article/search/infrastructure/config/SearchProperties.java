@@ -11,7 +11,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record SearchProperties(
         @DefaultValue("http://127.0.0.1:9200") URI uri,
         @DefaultValue("") String username, @DefaultValue("") String password,
-        @DefaultValue("article_v1") String indexName,
+        @DefaultValue("article_v2") String indexName,
         @DefaultValue("article_read") String readAlias, @DefaultValue("article_write") String writeAlias,
         @DefaultValue("0") int replicas, @DefaultValue("false") boolean queryEnabled,
         @DefaultValue("") String cursorSecret, @DefaultValue("true") boolean rankSchedulingEnabled,

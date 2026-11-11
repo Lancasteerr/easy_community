@@ -26,7 +26,7 @@ class IndexConsumerTests {
         consumer.consume(message, channel);
         verifyNoInteractions(reader); verify(channel).basicAck(7, false);
         reset(channel); clearInvocations(store); when(store.metaVersion(2)).thenReturn(8L);
-        var snapshot = new ArticleIndexMetadata(2, "标题", Instant.now(), true, 11, List.of());
+        var snapshot = new ArticleIndexMetadata(2, 9L, "标题", Instant.now(), true, 11, List.of());
         when(reader.load(2)).thenReturn(snapshot);
         consumer.consume(message, channel);
         var order = inOrder(store, channel);

@@ -65,6 +65,8 @@ public class ArticleIndexAdmin {
     private static TypeMapping mapping() {
         return TypeMapping.of(m -> m.dynamic(DynamicMapping.Strict)
                 .properties("articleId", f -> f.long_(l -> l))
+                // 作者用于公开筛选，实际展示仍由主库或文章缓存确认。
+                .properties("authorId", f -> f.long_(l -> l))
                 .properties("title", f -> f.text(t -> t.analyzer("cjk")))
                 .properties("tagIds", f -> f.keyword(k -> k))
                 .properties("publishedAt", f -> f.date(d -> d))

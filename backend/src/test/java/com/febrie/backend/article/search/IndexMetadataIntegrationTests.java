@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfEnvironmentVariable(named = "IT_SEARCH", matches = "true")
 class IndexMetadataIntegrationTests {
     private static ArticleIndexMetadata meta(long version, boolean visible) {
-        return new ArticleIndexMetadata(1, "缓存优化v" + version, Instant.parse("2026-11-01T00:00:00Z"), visible, version, List.of("2"));
+        return new ArticleIndexMetadata(1, 9L, "缓存优化v" + version, Instant.parse("2026-11-01T00:00:00Z"), visible, version, List.of("2"));
     }
     @Test void createsCompleteDocumentAndNeverResurrectsHiddenArticle() throws Exception {
         try (var f = new SearchEsFixture()) {
@@ -23,12 +23,14 @@ class IndexMetadataIntegrationTests {
             var initial = f.es.get(g -> g.index(f.index).id("1"), Map.class).source();
             assertEquals(RankFormula.score(0, meta(4, true).publishedAt()), ((Number) initial.get("rankScore")).doubleValue());
             assertEquals(0, ((Number) initial.get("scoreVersion")).longValue());
+            assertEquals(9L, ((Number) initial.get("authorId")).longValue());
             f.es.update(u -> u.index(f.p.writeAlias()).id("1").doc(Map.of("rankScore", 123.5, "scoreVersion", 99)), Map.class);
             store.upsert(meta(6, false));
             store.upsert(meta(4, true));
             var current = f.es.get(g -> g.index(f.index).id("1"), Map.class).source();
             assertEquals(6, store.metaVersion(1));
             assertEquals(false, current.get("visible"));
+            assertEquals(9L, ((Number) current.get("authorId")).longValue());
             assertEquals(123.5, ((Number) current.get("rankScore")).doubleValue());
             assertEquals(99, ((Number) current.get("scoreVersion")).longValue());
         }

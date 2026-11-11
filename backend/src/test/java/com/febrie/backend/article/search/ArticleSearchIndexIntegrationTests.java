@@ -15,7 +15,7 @@ class ArticleSearchIndexIntegrationTests {
         try (var f = new SearchEsFixture()) {
             var store = new ArticleIndexStore(f.es, f.p);
             for (long id = 1; id <= 15; id++) {
-                store.upsert(new ArticleIndexMetadata(id, "Java 缓存优化", Instant.ofEpochSecond(id), true, 1, List.of("2")));
+                store.upsert(new ArticleIndexMetadata(id, 9L, "Java 缓存优化", Instant.ofEpochSecond(id), true, 1, List.of("2")));
             }
             f.es.indices().refresh(r -> r.index(f.index));
             var index = new ArticleSearchIndex(f.es, f.p);
@@ -24,7 +24,7 @@ class ArticleSearchIndexIntegrationTests {
                 var query = new ArticleSearchQuery("search", "缓存", 2L, "latest", 1);
                 var first = index.search(query, pit, List.of()); pit = first.pit();
                 assertEquals(15, first.hits().getFirst().articleId());
-                store.upsert(new ArticleIndexMetadata(14, "已修改", Instant.ofEpochSecond(14), false, 2, List.of()));
+                store.upsert(new ArticleIndexMetadata(14, 9L, "已修改", Instant.ofEpochSecond(14), false, 2, List.of()));
                 f.es.indices().refresh(r -> r.index(f.index));
                 var second = index.search(query, pit, first.hits().getFirst().sort()); pit = second.pit();
                 assertEquals(14, second.hits().getFirst().articleId());

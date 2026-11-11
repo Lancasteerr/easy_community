@@ -23,7 +23,7 @@
     </select>
     <!-- 不读正文，调用方在短RR事务内一起读取Tag。 -->
     <select id="metadata" resultType="com.febrie.backend.article.search.infrastructure.persistence.mapper.ArticleIndexMapper$MetaRow">
-        SELECT id AS article_id,title,published_at,hidden,meta_version FROM article WHERE id IN
+        SELECT id AS article_id,author_id,title,published_at,hidden,meta_version FROM article WHERE id IN
         <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
     </select>
     <select id="tags" resultType="com.febrie.backend.article.search.infrastructure.persistence.mapper.ArticleIndexMapper$TagRow">

@@ -44,6 +44,6 @@ class ArticleRankIntegrationTests {
         }
     }
     private static ArticleIndexMetadata metadata(long version, boolean visible) {
-        return new ArticleIndexMetadata(1, "文章", Instant.parse("2026-11-01T00:00:00Z"), visible, version, List.of());
+        return new ArticleIndexMetadata(1, 9L, "文章", Instant.parse("2026-11-01T00:00:00Z"), visible, version, List.of());
     }
 }

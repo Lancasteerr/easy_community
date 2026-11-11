@@ -49,6 +49,8 @@ public class ArticleIndexMaintenance {
                 var expected = sql.get(Long.parseLong(value.id()));
                 if (expected == null) { continue; }
                 if (!value.found() || ((Number) value.source().get("metaVersion")).longValue() != expected.metaVersion()
+                        // 等版本的作者缺失或损坏也必须报告，不能误判新字段已完整导入。
+                        || !(value.source().get("authorId") instanceof Number author) || author.longValue() != expected.authorId()
                         || !Boolean.valueOf(expected.visible()).equals(value.source().get("visible"))) {
                     differences++;
                     if (examples.size() < 20) { examples.add(expected.articleId()); }

@@ -200,6 +200,10 @@ class SearchFlowIntegrationTests {
         indexAdmin.initialize(target, false);
         assertTrue(maintenance.importAll(target) > 0);
         assertEquals(0, maintenance.audit(target, false).differences());
+        // 同版本作者损坏必须被发现，普通修复不能越过版本保护覆盖它。
+        fixture.es.update(u -> u.index(target).id(Long.toString(id)).doc(Map.of("authorId", actor.userId() + 1)), Map.class);
+        assertTrue(maintenance.audit(target, false).differences() > 0);
+        assertTrue(maintenance.audit(target, true).differences() > 0);
         fixture.es.delete(d -> d.index(target).id(Long.toString(id)));
         assertTrue(maintenance.audit(target, false).differences() > 0);
         assertEquals(0, maintenance.audit(target, true).differences());

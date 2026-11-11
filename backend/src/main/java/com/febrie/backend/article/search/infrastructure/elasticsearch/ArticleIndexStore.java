@@ -52,7 +52,7 @@ public class ArticleIndexStore {
         if (result.errors() || result.items().size() != metadata.size()) { throw new IOException("元数据Bulk存在失败项，请修复后重跑"); }
     }
     private static Script script(ArticleIndexMetadata m) {
-        var metadata = Map.of("articleId", m.articleId(), "title", m.title(), "tagIds", m.tagIds(),
+        var metadata = Map.of("articleId", m.articleId(), "authorId", m.authorId(), "title", m.title(), "tagIds", m.tagIds(),
                 "publishedAt", m.publishedAt().toString(), "visible", m.visible(), "metaVersion", m.metaVersion());
         return Script.of(s -> s.lang("painless").source(source -> source.scriptString(META_SCRIPT))
                 .params("m", JsonData.of(metadata)).params("initialScore", JsonData.of(RankFormula.score(0, m.publishedAt()))));

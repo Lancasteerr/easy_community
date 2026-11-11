@@ -18,7 +18,7 @@ public class ArticleIndexReader {
         Map<Long, List<String>> tags = new HashMap<>();
         mapper.tags(ids).forEach(t -> tags.computeIfAbsent(t.articleId(), ignored -> new ArrayList<>()).add(Long.toString(t.tagId())));
         Map<Long, ArticleIndexMetadata> result = new LinkedHashMap<>();
-        rows.forEach(r -> result.put(r.articleId(), new ArticleIndexMetadata(r.articleId(), r.title(), r.publishedAt(),
+        rows.forEach(r -> result.put(r.articleId(), new ArticleIndexMetadata(r.articleId(), r.authorId(), r.title(), r.publishedAt(),
                 !r.hidden(), r.metaVersion(), tags.getOrDefault(r.articleId(), List.of()))));
         return result;
     }

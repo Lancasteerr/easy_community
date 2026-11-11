@@ -12,7 +12,7 @@ public interface ArticleIndexMapper {
     List<Long> scanIds(@Param("after") long after, @Param("upper") long upper, @Param("publicOnly") boolean publicOnly);
     List<Long> candidates(@Param("date") java.time.LocalDate date, @Param("after") long after, @Param("upper") long upper);
     List<RankRow> ranking(@Param("ids") Collection<Long> ids, @Param("from") java.time.LocalDate from, @Param("to") java.time.LocalDate to);
-    record MetaRow(long articleId, String title, Instant publishedAt, boolean hidden, long metaVersion) { }
+    record MetaRow(long articleId, long authorId, String title, Instant publishedAt, boolean hidden, long metaVersion) { }
     record TagRow(long articleId, long tagId) { }
     record RankRow(long articleId, Instant publishedAt, long views) { }
 }

@@ -20,7 +20,7 @@ class ArticleIndexIntegrationTests {
                 admin.initialize(index, true);
                 admin.initialize(index, true);
                 es.index(i -> i.index(p.writeAlias()).requireAlias(true).id("1").document(Map.of(
-                        "articleId", 1L, "title", "Java 与 Redis 缓存优化实践", "tagIds", List.of("2"),
+                        "articleId", 1L, "authorId", 9L, "title", "Java 与 Redis 缓存优化实践", "tagIds", List.of("2"),
                         "publishedAt", "2026-11-08T00:00:00Z", "visible", true,
                         "metaVersion", 1L, "rankScore", 1.0, "scoreVersion", 0L)));
                 es.indices().refresh(r -> r.index(index));
