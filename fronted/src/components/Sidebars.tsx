@@ -1,5 +1,6 @@
 import { Icon } from './Icon';
 import { useUnavailable } from './Toast';
+import { Link } from 'react-router-dom';
 
 /** 已选推荐入口保持当前位置，其余入口仅提供未开放反馈。 */
 export function Sidebar() {
@@ -20,7 +21,7 @@ export function PublishPanel() {
     <h2 className="panel-heading">作品发布<span>POST</span></h2>
     <div className="publish-options">
       <button onClick={unavailable}><Icon name="publish" size={48} /><span>发图文</span></button>
-      <button onClick={unavailable}><Icon name="inbox" size={48} /><span>管理作品</span></button>
+      <Link to="/manage/articles"><Icon name="inbox" size={48} /><span>管理作品</span></Link>
     </div>
   </aside>;
 }

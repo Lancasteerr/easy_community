@@ -1,9 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getFeed, postLogin, request } from './client';
+import { ApiError, getFeed, getMyArticles, postLogin, request } from './client';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('同源请求边界', () => {
+  it('本人列表固定20条，原样编码游标，401不重复查询', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response('{"items":[],"nextCursor":null}'));
+    vi.stubGlobal('fetch', fetcher);
+    await getMyArticles('a+/=');
+    expect(fetcher).toHaveBeenLastCalledWith('/api/users/me/articles?size=20&cursor=a%2B%2F%3D', expect.objectContaining({ credentials: 'same-origin' }));
+    fetcher.mockResolvedValue(new Response('{}', { status: 401 }));
+    await expect(getMyArticles(null)).rejects.toMatchObject({ status: 401 });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it('原样编码不透明游标，携带同源 Cookie 且不缓存个性化读取', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], nextCursor: null })));
     vi.stubGlobal('fetch', fetcher);

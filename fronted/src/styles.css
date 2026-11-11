@@ -55,9 +55,9 @@ img { display: block; max-width: 100%; }
 .nav-item:not(.nav-selected):hover { background: rgb(60 60 67 / 60%); }
 .publish-panel { height: 182px; padding: 17px 16px; }
 .publish-options { display: flex; gap: 33px; margin: 27px 0 0 17px; }
-.publish-options button { display: flex; align-items: center; flex-direction: column; border: 0; padding: 0; background: transparent; }
-.publish-options button span:last-child { font-size: 14px; color: #757575; }
-.publish-options button:hover { color: #9bceff; }
+.publish-options button, .publish-options a { display: flex; align-items: center; flex-direction: column; border: 0; padding: 0; background: transparent; text-decoration: none; }
+.publish-options button span:last-child, .publish-options a span:last-child { font-size: 14px; color: #757575; }
+.publish-options button:hover, .publish-options a:hover { color: #9bceff; }
 /* 中间栏逐层允许收缩，只有文章区域滚动，横幅不会被内容挤压或覆盖。 */
 .home-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; }
 .home-banner { flex-shrink: 0; display: block; width: 681px; height: 229px; border: 0; padding: 0; border-radius: 12px; overflow: hidden; background: #25252a; margin-bottom: 15px; }

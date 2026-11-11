@@ -2,13 +2,13 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getCsrf, getProfile, postLogin } from '../api/client';
+import { ApiError, getCsrf, getMyArticles, getProfile, postLogin } from '../api/client';
 import { App } from '../App';
 import { deferred, profile } from '../test/fixtures';
 import type { UserIdentity } from '../api/types';
 
 vi.mock('../api/client', async (original) => ({
-  ...await original<typeof import('../api/client')>(), getProfile: vi.fn(), getCsrf: vi.fn(), postLogin: vi.fn(),
+  ...await original<typeof import('../api/client')>(), getProfile: vi.fn(), getCsrf: vi.fn(), postLogin: vi.fn(), getMyArticles: vi.fn(),
 }));
 // 分页逻辑已单独测试，此处只关注真实路由、登录态与表单的协作。
 vi.mock('../components/Feed', () => ({ Feed: () => <section aria-label="推荐文章" /> }));
@@ -19,7 +19,7 @@ const login = vi.mocked(postLogin);
 const token = { token: 'masked-token', headerName: 'X-CSRF-TOKEN' };
 
 function LocationProbe() { return <output aria-label="当前路由">{useLocation().pathname}</output>; }
-function mount(path = '/login') {
+function mount(path: string | { pathname: string; state: unknown } = '/login') {
   render(<MemoryRouter initialEntries={[path]}><App /><LocationProbe /></MemoryRouter>);
   return userEvent.setup();
 }
@@ -32,9 +32,27 @@ beforeEach(() => {
   readProfile.mockReset().mockRejectedValue(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客'));
   readCsrf.mockReset().mockResolvedValue(token);
   login.mockReset().mockResolvedValue(profile);
+  vi.mocked(getMyArticles).mockReset().mockResolvedValue({ items: [], nextCursor: null });
 });
 
 describe('登录页', () => {
+  it('管理页游客跳登录，成功后回到管理页并读取本人文章', async () => {
+    readProfile.mockRejectedValueOnce(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客')).mockResolvedValue(profile);
+    const user = mount('/manage/articles');
+    await screen.findByRole('heading', { name: '账号密码登录' });
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: '登录', exact: true }));
+    await screen.findByText('当前暂无可显示的已发布内容');
+    expect(screen.getByLabelText('当前路由')).toHaveTextContent('/manage/articles');
+    expect(getMyArticles).toHaveBeenCalledWith(null, expect.any(AbortSignal));
+  });
+
+  it('外部地址及不支持的回跳目标均返回首页', async () => {
+    readProfile.mockResolvedValue(profile);
+    mount({ pathname: '/login', state: { returnTo: 'https://example.com' } });
+    await waitFor(() => expect(screen.getByLabelText('当前路由')).toHaveTextContent(/^\/$/));
+    expect(getMyArticles).not.toHaveBeenCalled();
+  });
   it('空表单按账号、密码顺序校验并聚焦，不请求 CSRF 或认证接口', async () => {
     const user = mount();
     await user.click(screen.getByRole('button', { name: '登录' }));

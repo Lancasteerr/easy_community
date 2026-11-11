@@ -54,6 +54,13 @@ export function getCsrf(signal?: AbortSignal) {
   return request<CsrfToken>('/api/auth/csrf', { signal });
 }
 
+/** 本人入口不降为游客重读，作者条件只由服务端Session确定。 */
+export function getMyArticles(cursor: string | null, signal?: AbortSignal) {
+  const query = new URLSearchParams({ size: '20' });
+  if (cursor !== null) query.set('cursor', cursor);
+  return request<FeedPage>(`/api/users/me/articles?${query}`, { signal });
+}
+
 export function postLogin(username: string, password: string, csrf: CsrfToken, signal?: AbortSignal) {
   return request<UserIdentity>('/api/auth/login', {
     method: 'POST', signal,

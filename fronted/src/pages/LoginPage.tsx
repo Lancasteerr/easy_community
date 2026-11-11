@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError, errorMessage, getCsrf, postLogin } from '../api/client';
 import type { CsrfToken } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
@@ -11,6 +11,9 @@ import { useCooldown } from '../hooks/useCooldown';
 export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  // 回跳仅接受本轮受保护路由，外部地址或任意路由状态均回到首页。
+  const destination = location.state?.returnTo === '/manage/articles' ? '/manage/articles' : '/';
   const notify = useToast();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -60,7 +63,7 @@ export function LoginPage() {
       if (results.some((result) => result.status === 'rejected') || (results[1].status === 'fulfilled' && results[1].value?.error)) {
         notify('登录成功，部分资料暂时无法刷新');
       }
-      navigate('/', { replace: true });
+      navigate(destination, { replace: true });
     } catch (error) {
       if (signal.aborted) return;
       if (error instanceof ApiError && error.status === 403) {
@@ -87,7 +90,7 @@ export function LoginPage() {
   }
 
   // 登录过程先更新全局身份，等待后续读取完成后再统一导航。
-  if (auth.status === 'authenticated' && !busy) return <Navigate to="/" replace />;
+  if (auth.status === 'authenticated' && !busy) return <Navigate to={destination} replace />;
   const editField = () => { setInvalid(null); setMessage(''); };
   return <main className="login-page">
     <div className="login-decoration" aria-hidden="true" />
