@@ -41,7 +41,7 @@ describe('登录页', () => {
     const user = mount('/manage/articles');
     await screen.findByRole('heading', { name: '账号密码登录' });
     await fill(user);
-    await user.click(screen.getByRole('button', { name: '登录', exact: true }));
+    await user.click(screen.getByRole('button', { name: /^登录$/ }));
     await screen.findByText('当前暂无可显示的已发布内容');
     expect(screen.getByLabelText('当前路由')).toHaveTextContent('/manage/articles');
     expect(getMyArticles).toHaveBeenCalledWith(null, expect.any(AbortSignal));

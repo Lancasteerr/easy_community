@@ -36,7 +36,7 @@ export function ManageArticleList({ list, enabled, paused = false, uncertainIds,
     {list.status === 'initialLoading' && <ManageSkeleton />}
     {list.status === 'initialError' && <ManageError message={errorMessage(list.error)} seconds={seconds} onRetry={() => { void list.retry(); }} />}
     {list.status === 'ready' && !list.items.length && list.nextCursor === null && <ManageEmpty onRefresh={restart} disabled={!enabled} />}
-    <div ref={sentinel} className="manage-tail" aria-live="polite">
+    {!['initialLoading', 'initialError'].includes(list.status) && !(list.status === 'ready' && !list.items.length && list.nextCursor === null) && <div ref={sentinel} className="manage-tail" aria-live="polite">
       {list.status === 'loadingMore' && <span className="loading-label"><i className="spinner" />正在加载更多内容</span>}
       {list.status === 'refreshing' && <span className="loading-label"><i className="spinner" />正在刷新内容</span>}
       {failed && <><p>{list.status === 'refreshError' ? `刷新失败：${message}` : message}</p><button className="manage-text-action" disabled={!enabled || seconds > 0}
@@ -44,6 +44,6 @@ export function ManageArticleList({ list, enabled, paused = false, uncertainIds,
       {list.status === 'ready' && list.nextCursor === null && list.items.length > 0 && <p>没有更多内容了</p>}
       {list.status === 'ready' && list.nextCursor !== null && (list.paused || !window.IntersectionObserver) && <>
         {list.paused && <p>暂未发现更多内容，可继续加载</p>}<button className="manage-text-action" disabled={!enabled || paused} onClick={() => { void list.loadMore(true); }}>继续加载</button></>}
-    </div>
+    </div>}
   </div>;
 }

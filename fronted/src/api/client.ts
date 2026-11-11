@@ -24,6 +24,8 @@ export async function request<T>(url: string, options: RequestInit = {}): Promis
       const problem: ProblemDetail = await response.json().catch(() => ({}));
       throw new ApiError(response.status, problem.code ?? 'HTTP_ERROR', '请求失败', retryTime(response.headers.get('Retry-After'), response.status));
     }
+    // DELETE成功不带响应体；不能将204误判成JSON读取失败或写入结果未知。
+    if (response.status === 204) return undefined as T;
     return await response.json() as T;
   } catch (error) {
     // 页面主动取消与读取超时语义不同：前者静默清理，后者允许用户重试。
@@ -59,6 +61,24 @@ export function getMyArticles(cursor: string | null, signal?: AbortSignal) {
   const query = new URLSearchParams({ size: '20' });
   if (cursor !== null) query.set('cursor', cursor);
   return request<FeedPage>(`/api/users/me/articles?${query}`, { signal });
+}
+
+export function deleteArticle(id: string, csrf: CsrfToken, signal?: AbortSignal) {
+  return request<void>(`/api/articles/${encodeURIComponent(id)}`, {
+    method: 'DELETE', headers: { [csrf.headerName]: csrf.token }, signal,
+  });
+}
+
+/** 仅用户主动核对时直读作者接口；不保存正文，也不通过公开详情增加PV。 */
+export async function checkDeletion(id: string, signal?: AbortSignal): Promise<'visible' | 'hidden' | 'missing'> {
+  try {
+    await request<unknown>(`/api/articles/${encodeURIComponent(id)}/edit`, { signal });
+    return 'visible';
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409 && error.code === 'ARTICLE_HIDDEN') return 'hidden';
+    if (error instanceof ApiError && error.status === 404 && error.code === 'ARTICLE_NOT_FOUND') return 'missing';
+    throw error;
+  }
 }
 
 export function postLogin(username: string, password: string, csrf: CsrfToken, signal?: AbortSignal) {

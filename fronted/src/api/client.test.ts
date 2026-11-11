@@ -1,9 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getFeed, getMyArticles, postLogin, request } from './client';
+import { ApiError, checkDeletion, deleteArticle, getFeed, getMyArticles, postLogin, request } from './client';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('同源请求边界', () => {
+  it('删除携带动态CSRF并接受204，核对只调用作者接口且不保留正文', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response('{"contentJson":{"large":"body"}}'))
+      .mockResolvedValueOnce(new Response('{"code":"ARTICLE_HIDDEN"}', { status: 409 }))
+      .mockResolvedValueOnce(new Response('{"code":"ARTICLE_NOT_FOUND"}', { status: 404 }));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(deleteArticle('9007199254740993', { token: 'masked', headerName: 'X-CSRF-TOKEN' })).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenLastCalledWith('/api/articles/9007199254740993', expect.objectContaining({ method: 'DELETE', headers: { 'X-CSRF-TOKEN': 'masked' } }));
+    await expect(checkDeletion('1')).resolves.toBe('visible');
+    await expect(checkDeletion('1')).resolves.toBe('hidden');
+    await expect(checkDeletion('1')).resolves.toBe('missing');
+    expect(fetcher.mock.calls.slice(1).map((call) => call[0])).toEqual(Array(3).fill('/api/articles/1/edit'));
+  });
   it('本人列表固定20条，原样编码游标，401不重复查询', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response('{"items":[],"nextCursor":null}'));
     vi.stubGlobal('fetch', fetcher);

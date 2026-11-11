@@ -8,24 +8,42 @@ import { ManageArticleList } from '../components/manage/ManageArticleList';
 import { useMyArticles } from '../hooks/useMyArticles';
 import { errorMessage } from '../api/client';
 import { useCooldown } from '../hooks/useCooldown';
+import { useArticleDeletion } from '../hooks/useArticleDeletion';
+import { DeleteArticleDialog } from '../components/manage/DeleteArticleDialog';
 import { ApiError } from '../api/client';
 import './manage.css';
 
 /** 以账号为键挂载本人会话，后台资料复核不会卸载列表或重置位置。 */
 function MyArticles({ userId }: { userId: string }) {
   const auth = useAuth();
-  const unavailable = useUnavailable();
+  const notify = useToast();
   const enabled = !auth.refreshing && !auth.error;
   const list = useMyArticles(userId, enabled, auth.expireSession);
+  const deletion = useArticleDeletion(enabled, auth.expireSession, (id, message) => {
+    const controls = Array.from(document.querySelectorAll<HTMLButtonElement>('.manage-row [data-delete-id]'));
+    const index = controls.findIndex((element) => element.dataset.deleteId === id);
+    list.remove(id);
+    notify(message);
+    // 成功后原触发按钮已移除，等待React提交再聚焦相邻操作；保留列表位置。
+    requestAnimationFrame(() => {
+      const remaining = document.querySelectorAll<HTMLButtonElement>('.manage-row [data-delete-id]');
+      const target = remaining[Math.min(Math.max(index, 0), remaining.length - 1)]
+        ?? document.querySelector<HTMLButtonElement>('.manage-centered-state button, .manage-toolbar button');
+      target?.focus({ preventScroll: true });
+    });
+  });
+  const deleteSeconds = useCooldown(deletion.state.retryAt);
   const seconds = useCooldown(list.retryAt);
   const identitySeconds = useCooldown(auth.error instanceof ApiError ? auth.error.retryAt : 0);
   return <>
-    <div className="manage-toolbar"><h1>已发布</h1><button className="manage-text-action" disabled={!enabled || seconds > 0 || list.status === 'refreshing'}
+    <div className="manage-toolbar"><h1>已发布</h1><button className="manage-text-action" disabled={!enabled || !!deletion.state.article || seconds > 0 || list.status === 'refreshing'}
       onClick={() => { void list.refresh(); }}>{list.status === 'refreshing' ? '刷新中…' : seconds > 0 ? `${seconds}秒后重试` : '刷新'}</button></div>
     {auth.refreshing && <div className="manage-notice" role="status">正在确认登录状态…</div>}
     {!!auth.error && <div className="manage-notice" role="status">登录状态暂时无法确认，操作已暂停<button className="manage-text-action" disabled={identitySeconds > 0}
       onClick={() => { void auth.refresh(); }}>{identitySeconds ? `${identitySeconds}秒后重试` : '重新检查登录状态'}</button></div>}
-    <ManageArticleList list={list} enabled={enabled} onDelete={unavailable} />
+    <ManageArticleList list={list} enabled={enabled} paused={!!deletion.state.article} uncertainIds={deletion.uncertainIds} onDelete={deletion.open} />
+    <DeleteArticleDialog state={deletion.state} seconds={deleteSeconds} blocked={!enabled} onClose={deletion.close}
+      onConfirm={() => { void deletion.confirm(); }} onCheck={() => { void deletion.check(); }} />
   </>;
 }
 

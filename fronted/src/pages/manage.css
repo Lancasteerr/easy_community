@@ -60,11 +60,12 @@
 /* dialog 位于浏览器顶层，按实际视口居中，避免窄屏横滚影响模态层。 */
 .manage-dialog { width: 480px; min-height: 270px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); padding: 26px 28px 28px; border: 0; border-radius: 12px; background: #2b2d33; color: #f0f1f4; }
 .manage-dialog::backdrop { background: rgb(0 0 0 / 60%); }
+.manage-dialog[open] { display: flex; flex-direction: column; }
 .manage-dialog h2 { margin: 0 0 24px; font-size: 20px; line-height: 28px; font-weight: 500; }
 .manage-dialog-title { margin: 0 0 16px; overflow-wrap: anywhere; font-size: 16px; line-height: 24px; }
 .manage-dialog #delete-description { margin: 0; color: #989ba5; font-size: 14px; line-height: 20px; }
 .manage-dialog-feedback { min-height: 20px; margin: 8px 0 16px; color: #ffb3b7; font-size: 13px; line-height: 20px; }
-.manage-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 16px; }
+.manage-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 16px; margin-top: auto; }
 .manage-dialog-actions button { min-width: 72px; height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: #303138; color: #989ba5; font-size: 13px; }
 .manage-dialog-actions .manage-danger { min-width: 80px; background: #ff858b; color: #27282d; }
 .manage-dialog-actions button:disabled { opacity: .5; cursor: not-allowed; }
