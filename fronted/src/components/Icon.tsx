@@ -10,8 +10,13 @@ import publish from '../assets/publish.svg';
 import inbox from '../assets/inbox.svg';
 import eye from '../assets/eye.svg';
 import eyeOff from '../assets/eye-off.svg';
+import manageView from '../assets/manage-view.svg';
+import favorite from '../assets/manage-favorite.svg';
+import document from '../assets/manage-document.svg';
+import manageLike from '../assets/manage-like.svg';
+import manageComment from '../assets/manage-comment.svg';
 
-const sources = { search, edit, like, comment, terminal, trending, compass, publish, inbox, eye, eyeOff };
+const sources = { search, edit, like, comment, terminal, trending, compass, publish, inbox, eye, eyeOff, manageView, favorite, document, manageLike, manageComment };
 
 /** 用原稿 SVG 轮廓作遮罩，使悬停、点赞和聚焦颜色随组件状态继承。 */
 export function Icon({ name, size = 20 }: { name: keyof typeof sources; size?: number }) {

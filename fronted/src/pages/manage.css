@@ -1,0 +1,71 @@
+/* 管理页固定外壳与独立列表滚动；桌面尺寸来自内容管理交付稿。 */
+.manage-page { position: relative; isolation: isolate; display: flex; flex-direction: column; min-width: 1440px; height: 100dvh; padding: 34px 0 22px; }
+.manage-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: #171719 url('../assets/home-background.png') center / cover no-repeat; }
+.manage-columns { flex: 1; min-height: 0; display: grid; grid-template-columns: 225px 985px; gap: 17px; width: 1227px; margin: 43px auto 0; }
+.manage-sidebar { padding: 25px 16px; border-radius: 12px; background: #242529; }
+.manage-heading { margin: 0; width: 131px; height: 26px; border-bottom: 2px solid #9bceff; font-size: 18px; line-height: 24px; font-weight: 700; white-space: nowrap; }
+.manage-heading span { margin-left: 3px; color: #989ba5; font-size: 11px; font-weight: 400; }
+.manage-nav { display: flex; flex-direction: column; gap: 0; margin-top: 23px; }
+.manage-nav button { position: relative; width: 190px; height: 45px; border: 0; border-radius: 10px; padding: 0 13px; background: none; color: #989ba5; text-align: left; font-size: 14px; }
+.manage-nav button[aria-current] { background: #334352; color: #9bceff; }
+.manage-nav button[aria-current]::before { content: ''; position: absolute; left: 0; top: 12px; width: 2px; height: 21px; background: #9bceff; }
+.manage-nav button:not([aria-current]):hover { background: #303138; }
+.manage-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-radius: 12px; background: #25262b; }
+.manage-toolbar { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; height: 64px; margin: 0 24px; border-bottom: 1px solid #36373e; }
+.manage-toolbar h1 { margin: 0; font-size: 16px; font-weight: 500; }
+.manage-text-action { border: 0; padding: 6px 10px; border-radius: 6px; color: #9bceff; background: none; font-size: 14px; }
+.manage-text-action:hover:not(:disabled) { background: #334352; }
+.manage-panel button:disabled { opacity: .5; cursor: not-allowed; }
+.manage-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-color: #55555c transparent; }
+.manage-list:focus-visible { outline: 2px solid #9bceff; outline-offset: -2px; }
+.manage-row { display: flex; gap: 20px; height: 133px; margin: 0 24px; padding: 16px 0; border-bottom: 1px solid #36373e; }
+.manage-cover { flex: 0 0 160px; width: 160px; height: 90px; padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: #303138; }
+.manage-cover img { width: 100%; height: 100%; object-fit: cover; }
+.manage-cover-placeholder { display: flex; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #989ba5; font-size: 11px; }
+.manage-cover-placeholder .icon { color: #6f8699; }
+.manage-copy { flex: 1; min-width: 0; color: #f0f1f4; }
+.manage-copy h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; line-height: 24px; }
+.manage-copy h2 button { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; width: 100%; padding: 0; border: 0; background: none; text-align: left; font: inherit; }
+.manage-copy time { display: block; color: #989ba5; font-size: 13px; line-height: 20px; }
+.manage-metrics { display: flex; margin-top: 6px; color: #989ba5; font-size: 13px; line-height: 20px; }
+.manage-metrics > span { display: flex; align-items: center; gap: 8px; width: 94px; }
+.manage-metrics > span:first-child { width: 112px; }
+.manage-row-actions { display: flex; gap: 16px; flex: 0 0 96px; margin-left: 4px; }
+.manage-row-actions button { width: 40px; height: 28px; padding: 2px 0; border: 0; border-radius: 6px; font-size: 14px; background: none; }
+.manage-edit { color: #9bceff; }
+.manage-delete { color: #989ba5; }
+.manage-edit:hover { background: #334352; }
+.manage-delete:hover:not(:disabled) { color: #ff858b; background: #463136; }
+.manage-row-actions button:focus-visible { outline-offset: 1px; }
+/* 首次状态居中，尾部反馈留在列表流中；刷新反馈不替换现有卡片。 */
+.manage-centered-state { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; color: #989ba5; text-align: center; }
+.manage-centered-state > .icon { color: #6f8699; margin-bottom: 22px; }
+.manage-centered-state h2 { margin: 0; color: #f0f1f4; font-size: 20px; line-height: 28px; font-weight: 500; }
+.manage-centered-state p { margin: 12px 0 26px; font-size: 14px; line-height: 20px; }
+.manage-state-actions { display: flex; align-items: center; gap: 12px; }
+.manage-primary { padding: 8px 22px; border: 0; border-radius: 6px; background: #334352; color: #9bceff; font-size: 14px; }
+.manage-tail { min-height: 72px; padding: 24px; text-align: center; color: #989ba5; font-size: 14px; }
+.manage-tail p { margin: 0 0 12px; }
+.manage-tail p:last-child { margin: 0; }
+.manage-notice { display: flex; flex-shrink: 0; justify-content: center; align-items: center; gap: 12px; padding: 8px 24px; color: #d9b58e; font-size: 13px; background: #303138; }
+.manage-skeleton { padding: 0 24px; }
+.manage-skeleton-row { height: 133px; padding: 16px 0; display: flex; gap: 20px; border-bottom: 1px solid #36373e; }
+.manage-skeleton-row i, .manage-skeleton-row b, .manage-skeleton-row span, .manage-skeleton-row em, .manage-skeleton-row small { display: block; border-radius: 6px; background: #303138; animation: shimmer 1.8s infinite; }
+.manage-skeleton-row i { width: 160px; height: 90px; }
+.manage-skeleton-row > div { flex: 1; padding-top: 4px; }
+.manage-skeleton-row b { width: 390px; height: 16px; margin-bottom: 18px; }
+.manage-skeleton-row span { width: 156px; height: 12px; margin-bottom: 18px; }
+.manage-skeleton-row em { width: 260px; height: 12px; }
+.manage-skeleton-row small { width: 96px; height: 14px; margin-top: 4px; }
+/* dialog 位于浏览器顶层，按实际视口居中，避免窄屏横滚影响模态层。 */
+.manage-dialog { width: 480px; min-height: 270px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); padding: 26px 28px 28px; border: 0; border-radius: 12px; background: #2b2d33; color: #f0f1f4; }
+.manage-dialog::backdrop { background: rgb(0 0 0 / 60%); }
+.manage-dialog h2 { margin: 0 0 24px; font-size: 20px; line-height: 28px; font-weight: 500; }
+.manage-dialog-title { margin: 0 0 16px; overflow-wrap: anywhere; font-size: 16px; line-height: 24px; }
+.manage-dialog #delete-description { margin: 0; color: #989ba5; font-size: 14px; line-height: 20px; }
+.manage-dialog-feedback { min-height: 20px; margin: 8px 0 16px; color: #ffb3b7; font-size: 13px; line-height: 20px; }
+.manage-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 16px; }
+.manage-dialog-actions button { min-width: 72px; height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: #303138; color: #989ba5; font-size: 13px; }
+.manage-dialog-actions .manage-danger { min-width: 80px; background: #ff858b; color: #27282d; }
+.manage-dialog-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.manage-dialog-actions button:hover:not(:disabled) { filter: brightness(1.15); }
