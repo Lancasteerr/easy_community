@@ -137,8 +137,6 @@ class LikeHttpIntegrationTests {
         var body=mapper.readTree(mine.body());assertEquals("like-it",body.path("title").asString());
         assertFalse(body.has("article"));assertTrue(body.path("likedByMe").asBoolean());assertEquals(1,body.path("likeCount").asLong());
         assertEquals("no-store",mine.headers().firstValue("Cache-Control").orElseThrow());
-        var page=mapper.readTree(owner.call("GET","/api/users/me/articles",null,false,null).body());
-        assertTrue(page.path("items").get(0).path("likedByMe").asBoolean());
         var visitor=browser();var publicView=mapper.readTree(visitor.call("GET","/api/articles/"+article,null,false,null).body());
         assertFalse(publicView.path("likedByMe").asBoolean());assertEquals(1,publicView.path("likeCount").asLong());
         var cancelled=owner.call("DELETE",path(),null,true,UUID.randomUUID().toString());assertEquals(202,cancelled.statusCode());

@@ -46,6 +46,8 @@ class ArticleMysqlIntegrationTests {
     @Autowired ArticleService service;
     @Autowired ArticleReader reader;
     @Autowired ArticleQueryService queries;
+    @Autowired ArticleListHydrator lists;
+    @Autowired ArticleDisplayAssembler display;
     @Autowired com.febrie.backend.article.content.infrastructure.cache.ArticleCache cache;
     @Autowired org.springframework.data.redis.core.StringRedisTemplate redis;
     @Autowired TagRepository tagRepository;
@@ -132,6 +134,7 @@ class ArticleMysqlIntegrationTests {
                 commits.update(actor, id, new PreparedArticle("new", "new", "{}", "new", null, Set.of(), List.of(tag)), new ArticleCommitService.Attempt());
             } finally { continueTags.countDown(); }
             var snapshot = read.get(10, TimeUnit.SECONDS);
+            assertEquals(actor.userId(), snapshot.authorId());
             assertEquals(1, snapshot.metaVersion()); assertEquals("old", snapshot.title()); assertTrue(snapshot.tagIds().isEmpty());
         } finally { continueTags.countDown(); }
         assertEquals(2, indexReader.load(id).metaVersion());
@@ -170,7 +173,7 @@ class ArticleMysqlIntegrationTests {
         commits.hide(actor, id, new ArticleCommitService.Attempt());
         assertTrue(articles.find(id).orElseThrow().hidden());
         assertEquals(Set.of(image), files.references(ReferenceType.ARTICLE_IMAGE, id));
-        assertEquals(0, articles.countPublic(actor.userId()));
+        assertEquals(0, articleFixtures.countPublic(actor.userId()));
         assertThrows(ApiException.class, () -> commits.update(actor, id, content("late", null), new ArticleCommitService.Attempt()));
         commits.hide(actor, id, new ArticleCommitService.Attempt());
         assertThrows(ApiException.class, () -> commits.hide(new UserActor(actor.userId() + 100, Role.USER, 1), id, new ArticleCommitService.Attempt()));
@@ -179,7 +182,7 @@ class ArticleMysqlIntegrationTests {
         String image = readyImage();
         doThrow(new IllegalStateException("注入标签写入故障")).when(articles).replaceTags(anyLong(), anyCollection());
         assertThrows(IllegalStateException.class, () -> commits.create(actor, content("x", image), new ArticleCommitService.Attempt()));
-        assertEquals(0, articles.countPublic(actor.userId()));
+        assertEquals(0, articleFixtures.countPublic(actor.userId()));
         assertEquals(0, fixtures.countReferences(MediaIds.bytes(image)));
     }
     @Test void updateClearsCoverAndUnreferencedMediaGetsGracePeriod() {
@@ -248,7 +251,7 @@ class ArticleMysqlIntegrationTests {
 
     @Test void lostCommitReplyIsUnknownWhetherServerCommittedOrNotAndNeverReplays() throws Exception {
         for (boolean serverCommitted : List.of(false, true)) {
-            long before = articles.countPublic(actor.userId());
+            long before = articleFixtures.countPublic(actor.userId());
             AtomicBoolean armed = new AtomicBoolean(true);
             doAnswer(call -> {
                 Connection connection = (Connection) call.callRealMethod();
@@ -266,9 +269,9 @@ class ArticleMysqlIntegrationTests {
             assertEquals("ARTICLE_WRITE_RESULT_UNKNOWN", assertThrows(ApiException.class, () -> service.save(actor, command)).code());
             verify(articles, times(1)).insert(eq(actor.userId()), any(), any());
             verify(articles, never()).find(anyLong());
-            verify(articles, never()).pageIds(anyLong(), anyLong(), anyInt());
+            verify(articles, never()).listRows(anyCollection());
             reset(dataSource);
-            assertEquals(before + (serverCommitted ? 1 : 0), articles.countPublic(actor.userId()));
+            assertEquals(before + (serverCommitted ? 1 : 0), articleFixtures.countPublic(actor.userId()));
         }
     }
 
@@ -276,7 +279,7 @@ class ArticleMysqlIntegrationTests {
         String image = readyImage();
         files.deleting(image, Instant.now());
         assertThrows(ApiException.class, () -> commits.create(actor, content("claimed", image), new ArticleCommitService.Attempt()));
-        assertEquals(0, articles.countPublic(actor.userId()));
+        assertEquals(0, articleFixtures.countPublic(actor.userId()));
         assertEquals(0, fixtures.countReferences(MediaIds.bytes(image)));
     }
 
@@ -385,7 +388,7 @@ class ArticleMysqlIntegrationTests {
     @Test void processExitAfterCommitLeavesOldCacheUntilFixedTtlExpires() throws Exception {
         long id = commits.create(actor, content("before", null), new ArticleCommitService.Attempt());
         assertEquals("before", queries.detail(id).title());
-        assertEquals("before", queries.page(actor, 1, 20).items().getFirst().title());
+        assertEquals("before", display.lists(lists.publicCandidates(List.of(id))).getFirst().title());
         String javaExecutable = java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java.exe").toString();
         if (!java.nio.file.Files.exists(java.nio.file.Path.of(javaExecutable))) {
             javaExecutable = java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString();
@@ -406,21 +409,21 @@ class ArticleMysqlIntegrationTests {
         } finally { if (process.isAlive()) { process.destroyForcibly(); process.waitFor(5, TimeUnit.SECONDS); } }
         assertEquals("after-crash", reader.edit(actor, id).title());
         assertEquals("before", queries.detail(id).title());
-        assertEquals("before", queries.page(actor, 1, 20).items().getFirst().title());
+        assertEquals("before", display.lists(lists.publicCandidates(List.of(id))).getFirst().title());
         // 缩短本次测试Key的剩余TTL，再等待实际过期；生产固定TTL范围由Redis测试单独断言。
         redis.expire(cache.key(id, "detail"), java.time.Duration.ofMillis(50));
         redis.expire(cache.key(id, "list"), java.time.Duration.ofMillis(50));
         org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(3)).until(() ->
                 !Boolean.TRUE.equals(redis.hasKey(cache.key(id, "detail"))) && !Boolean.TRUE.equals(redis.hasKey(cache.key(id, "list"))));
         assertEquals("after-crash", queries.detail(id).title());
-        assertEquals("after-crash", queries.page(actor, 1, 20).items().getFirst().title());
+        assertEquals("after-crash", display.lists(lists.publicCandidates(List.of(id))).getFirst().title());
         for (String suffix : List.of("detail", "list", "cache-lock", "hidden")) { redis.delete(cache.key(id, suffix)); }
     }
 
     @Test void avatarUpdateAndClearRefreshAuthorWithoutChangingArticleCaches() {
         long id = commits.create(actor, content("cached", null), new ArticleCommitService.Attempt());
         assertNull(queries.detail(id).authorAvatarUrl());
-        queries.page(actor, 1, 20);
+        display.lists(lists.publicCandidates(List.of(id)));
         String detailBefore = cache.value(id, "detail"), briefBefore = cache.value(id, "list");
         assertFalse(detailBefore.contains("authorName"));
         assertFalse(briefBefore.contains("Avatar"));
@@ -429,7 +432,7 @@ class ArticleMysqlIntegrationTests {
         assertEquals(detailBefore, cache.value(id, "detail"));
         assertEquals(briefBefore, cache.value(id, "list"));
         assertNotNull(queries.detail(id).authorAvatarUrl());
-        assertEquals(queries.detail(id).authorAvatarUrl(), queries.page(actor, 1, 20).items().getFirst().authorAvatarUrl());
+        assertEquals(queries.detail(id).authorAvatarUrl(), display.lists(lists.publicCandidates(List.of(id))).getFirst().authorAvatarUrl());
         assertEquals(1, fixtures.authVersion(actor.userId()));
         profiles.clearAvatar(actor);
         assertNull(queries.detail(id).authorAvatarUrl());

@@ -78,6 +78,7 @@ class SearchFlowIntegrationTests {
     @Autowired IndexDeadLetterReplay replay;
     @Autowired ConnectionFactory connectionFactory;
     @Autowired AccountRepository accounts;
+    @Autowired org.springframework.security.crypto.password.PasswordEncoder encoder;
     @Autowired TransactionTemplate transaction;
     @Autowired DatabaseFixtureMapper fixtures;
     @Autowired ArticleFixtureMapper articleFixtures;
@@ -96,11 +97,15 @@ class SearchFlowIntegrationTests {
     private final List<Long> ids = new ArrayList<>();
     private final List<String> extraIndices = new ArrayList<>();
     private HttpClient http;
+    private SearchHttpSession authenticated;
     private RabbitAdmin admin;
-    @BeforeAll void setup() {
-        long owner = Objects.requireNonNull(transaction.execute(s -> accounts.insert("sf_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20), Role.USER, "{noop}unused")));
+    @BeforeAll void setup() throws Exception {
+        String username = "sf_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+        long owner = Objects.requireNonNull(transaction.execute(s -> accounts.insert(username, Role.USER, encoder.encode("search-flow-password"))));
         actor = new UserActor(owner, Role.USER, 1);
         http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+        authenticated = new SearchHttpSession(port, json);
+        authenticated.login(username, "search-flow-password");
         admin = new RabbitAdmin(connectionFactory);
     }
     @AfterAll void cleanup() throws Exception {
@@ -120,7 +125,7 @@ class SearchFlowIntegrationTests {
         admin.deleteQueue(like.name("command.q")); admin.deleteQueue(like.name("dead.q"));
         admin.deleteExchange(like.name("command.x")); admin.deleteExchange(like.name("dead.x"));
         for (String target : extraIndices) { fixture.es.indices().delete(d -> d.index(target).ignoreUnavailable(true)); }
-        fixture.close(); http.close();
+        fixture.close(); http.close(); authenticated.close();
     }
     @Autowired com.febrie.backend.article.like.infrastructure.config.LikeProperties likeProperties;
     private com.febrie.backend.article.like.infrastructure.config.LikeProperties getLikeProperties() { return likeProperties; }
@@ -187,6 +192,8 @@ class SearchFlowIntegrationTests {
         try {
             id = create("故障恢复文章");
             assertEquals(503, get("/api/articles/feed").statusCode());
+            assertEquals(503, get("/api/articles/search?authorId=" + actor.userId()).statusCode());
+            assertEquals(503, authenticated.get("/api/users/me/articles").statusCode());
             assertEquals("故障恢复文章", jdbc.queryForObject("SELECT title FROM article WHERE id=?", String.class, id));
             await().atMost(Duration.ofSeconds(35)).until(() -> admin.getQueueInfo(p.name("dead.q")).getMessageCount() > 0);
         } finally { docker("start", "easy-community-search-it-es"); }

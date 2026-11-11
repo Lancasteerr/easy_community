@@ -30,4 +30,13 @@ public class ArticleSearchController {
         return assembler.assemble(searches.page(new ArticleSearchQuery("feed", null, null, null, "recommended", size), cursor),
                 principal == null ? null : principal.userId());
     }
+
+    /** 本人入口保留独立路由，不绑定请求中的authorId、关键词或状态。 */
+    @GetMapping("/api/users/me/articles")
+    public ArticleSearchAssembler.Response mine(@RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String cursor, @AuthenticationPrincipal SessionPrincipal principal) {
+        if (principal == null) { throw com.febrie.backend.shared.error.ApiException.unauthorized(); }
+        var query = new ArticleSearchQuery("mine", null, null, principal.userId(), "latest", size);
+        return assembler.assemble(searches.page(query, cursor), principal.userId());
+    }
 }

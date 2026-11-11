@@ -4,6 +4,8 @@ import org.apache.ibatis.annotations.Param;
 
 /** 文章测试清理仅按本次创建的作者执行，不向生产Repository增加物理删除入口。 */
 public interface ArticleFixtureMapper {
+    /** 事务结果断言专用，不为测试保留生产列表的COUNT入口。 */
+    long countPublic(@Param("author") long author);
     int deleteLikeStatesForAuthor(@Param("author") long author);
     int deleteLikeCountsForAuthor(@Param("author") long author);
     int deleteTagsForAuthor(@Param("author") long author);

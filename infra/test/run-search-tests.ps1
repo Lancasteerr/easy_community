@@ -1,5 +1,5 @@
 param(
-    [string]$Tests = '*Search*Tests,*Index*Tests,*Rank*Tests,ArticleMysqlIntegrationTests,ArticleViewMysqlIntegrationTests,ArticleHttpIntegrationTests,ArticleListHydratorTests',
+    [string]$Tests = '*Search*Tests,*Index*Tests,*Rank*Tests,ArticleMysqlIntegrationTests,ArticleViewMysqlIntegrationTests,ArticleHttpIntegrationTests,LikeHttpIntegrationTests,ArticleListHydratorTests,ArticleQueryServiceTests',
     [switch]$Verify,
     [switch]$Faults
 )

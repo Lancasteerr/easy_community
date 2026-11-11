@@ -70,30 +70,10 @@ public class ArticleListHydrator {
         return ids.stream().map(assembly.result::get).filter(Objects::nonNull).toList();
     }
 
-    public List<ArticleBriefData> authorPage(long author, List<Long> ids) {
-        if (ids.isEmpty()) { return List.of(); }
-        var assembly = assemble(ids);
-        // 返回前再查墓碑；与已授权分页SQL矛盾的项由主库批量核对，不绕锁写共享缓存。
-        cache.hidden(assembly.result.keySet()).forEach((id, hidden) -> {
-            if (hidden) { assembly.conflicts.add(id); assembly.result.remove(id); }
-        });
-        if (!assembly.conflicts.isEmpty()) {
-            var checked = reader.lists(assembly.conflicts);
-            for (long id : assembly.conflicts) {
-                var value = Objects.requireNonNull(checked.get(id), "SQL核对项未确认");
-                if (value.state() == LoadedArticle.State.PUBLIC) { assembly.result.put(id, value.data()); }
-            }
-        }
-        for (var value : assembly.result.values()) {
-            if (!Long.toString(author).equals(value.authorId())) { throw ArticleErrors.unavailable(); }
-        }
-        return ids.stream().map(assembly.result::get).filter(Objects::nonNull).toList();
-    }
-
     private boolean acceptCached(long id, boolean hidden, CacheValue<ArticleBriefData> value, Assembly assembly) {
-        if (hidden || value.state() == CacheValue.State.NEGATIVE) { assembly.conflicts.add(id); }
-        else if (value.state() == CacheValue.State.HIT) { assembly.result.put(id, value.data()); }
-        else { return false; }
+        if (!hidden && value.state() == CacheValue.State.MISS) { return false; }
+        if (!hidden && value.state() == CacheValue.State.HIT) { assembly.result.put(id, value.data()); }
+        // 墓碑与负缓存直接过滤，不再依赖SQL选页结果重新核对。
         assembly.pending.remove(id);
         return true;
     }
@@ -136,7 +116,6 @@ public class ArticleListHydrator {
     private static final class Assembly {
         private final Map<Long, ArticleBriefData> result = new HashMap<>();
         private final Set<Long> pending;
-        private final Set<Long> conflicts = new HashSet<>();
         private Assembly(List<Long> ids) {
             pending = new LinkedHashSet<>(ids);
         }

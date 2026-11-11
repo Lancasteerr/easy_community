@@ -1,8 +1,6 @@
 package com.febrie.backend.article.content.web.response;
 
 import com.febrie.backend.article.content.application.dto.ArticleDetailView;
-import com.febrie.backend.article.content.application.dto.ArticleListView;
-import com.febrie.backend.article.content.application.dto.ArticlePage;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.febrie.backend.article.like.application.LikeQueryService;
@@ -19,12 +17,5 @@ public class ArticleLikeAssembler {
         var summary=likes.summaries(user,List.of(articleId)).get(articleId);
         return new Detail(article,summary.likeCount(),summary.likedByMe());
     }
-    public Page page(ArticlePage page,long user){
-        var values=likes.summaries(user,page.items().stream().map(item->Long.parseLong(item.articleId())).toList());
-        var items=page.items().stream().map(item->{var summary=values.get(Long.parseLong(item.articleId()));return new Card(item,summary.likeCount(),summary.likedByMe());}).toList();
-        return new Page(items,page.page(),page.size(),page.total());
-    }
     public record Detail(@JsonUnwrapped ArticleDetailView article,long likeCount,boolean likedByMe) { }
-    public record Card(@JsonUnwrapped ArticleListView article,long likeCount,boolean likedByMe) { }
-    public record Page(List<Card> items,int page,int size,long total) { }
 }

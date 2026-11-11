@@ -61,11 +61,6 @@ public class ArticleController {
     public ArticleEditView edit(@AuthenticationPrincipal SessionPrincipal principal, @PathVariable String id) {
         return queries.edit(actor(principal), ArticleIds.parse(id));
     }
-    @GetMapping("/api/users/me/articles")
-    public Object page(@AuthenticationPrincipal SessionPrincipal principal,
-                           @RequestParam(defaultValue = "1") int page, @RequestParam(defaultValue = "20") int size) {
-        return likes.page(queries.page(actor(principal), page, size),principal.userId());
-    }
     private static UserActor actor(SessionPrincipal principal) {
         return new UserActor(principal.userId(), principal.role(), principal.authVersion());
     }

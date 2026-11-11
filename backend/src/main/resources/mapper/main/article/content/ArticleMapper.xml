@@ -18,13 +18,6 @@
         FROM article WHERE id IN
         <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
     </select>
-    <select id="pageIds" resultType="long">
-        SELECT id FROM article WHERE author_id = #{author} AND hidden = FALSE
-        ORDER BY id DESC LIMIT #{size} OFFSET #{offset}
-    </select>
-    <select id="countPublic" resultType="long">
-        SELECT COUNT(*) FROM article WHERE author_id = #{author} AND hidden = FALSE
-    </select>
     <select id="tags" resultType="com.febrie.backend.article.content.infrastructure.persistence.entity.ArticleTagRow">
         SELECT r.article_id, t.id AS tag_id, t.name FROM article_tag r JOIN tag t ON t.id = r.tag_id
         WHERE r.article_id IN

@@ -28,7 +28,7 @@ class ArticleListHydratorTests {
     }
     @Test void warmBatchKeepsInputOrderWithoutSql() {
         when(lists.get(anyCollection())).thenReturn(Map.of(2L, CacheValue.hit(view(2)), 1L, CacheValue.hit(view(1))));
-        assertEquals(List.of("1", "2"), hydrator.authorPage(9, List.of(1L, 2L)).stream().map(ArticleBriefData::articleId).toList());
+        assertEquals(List.of("1", "2"), hydrator.publicCandidates(List.of(1L, 2L)).stream().map(ArticleBriefData::articleId).toList());
         verifyNoInteractions(reader);
         verify(cache, never()).tryLock(anyLong());
     }
@@ -36,15 +36,15 @@ class ArticleListHydratorTests {
         when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss(), 2L, CacheValue.miss()));
         when(cache.tryLock(1)).thenReturn("a"); when(cache.tryLock(2)).thenReturn("b");
         when(reader.lists(List.of(1L, 2L))).thenReturn(Map.of(2L, LoadedArticle.visible(view(2)), 1L, LoadedArticle.visible(view(1))));
-        assertEquals(2, hydrator.authorPage(9, List.of(1L, 2L)).size());
+        assertEquals(2, hydrator.publicCandidates(List.of(1L, 2L)).size());
         verify(reader, times(1)).lists(List.of(1L, 2L));
         verify(lists).publish(1, "a", view(1)); verify(lists).publish(2, "b", view(2));
         verify(cache).release(1, "a"); verify(cache).release(2, "b");
     }
-    @Test void negativeConflictUsesSqlAndOnlyConfirmedHiddenDisappears() {
+    @Test void knownInvalidCandidatesAreSkippedWithoutSql() {
         when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.negative(), 2L, CacheValue.negative()));
-        when(reader.lists(anyCollection())).thenReturn(Map.of(1L, LoadedArticle.visible(view(1)), 2L, LoadedArticle.hidden()));
-        assertEquals(List.of(view(1)), hydrator.authorPage(9, List.of(1L, 2L)));
+        assertTrue(hydrator.publicCandidates(List.of(1L, 2L)).isEmpty());
+        verifyNoInteractions(reader);
         verify(lists, never()).publish(anyLong(), anyString(), any());
         verify(cache, never()).tryLock(anyLong());
     }
@@ -52,7 +52,7 @@ class ArticleListHydratorTests {
         when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss()));
         when(cache.tryLock(1)).thenReturn("a");
         when(reader.lists(anyCollection())).thenThrow(new IllegalStateException("作者读取失败"));
-        assertThrows(IllegalStateException.class, () -> hydrator.authorPage(9, List.of(1L)));
+        assertThrows(IllegalStateException.class, () -> hydrator.publicCandidates(List.of(1L)));
         verify(cache).release(1, "a");
         verify(cache, never()).missing(anyLong(), anyString());
         verify(lists, never()).publish(anyLong(), anyString(), any());
@@ -69,6 +69,21 @@ class ArticleListHydratorTests {
         when(reader.lists(List.of(2L, 1L))).thenReturn(Map.of(1L, LoadedArticle.visible(view(1)), 2L, LoadedArticle.visible(view(2))));
         assertEquals(List.of("2", "1"), hydrator.publicCandidates(List.of(2L, 1L)).stream().map(ArticleBriefData::articleId).toList());
         verify(reader, times(1)).lists(List.of(2L, 1L));
+    }
+    @Test void finalTombstoneCheckSuppressesWarmCardWithoutSql() {
+        when(cache.hidden(anyCollection())).thenReturn(Map.of(1L, false), Map.of(1L, true));
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.hit(view(1))));
+        assertTrue(hydrator.publicCandidates(List.of(1L)).isEmpty());
+        verifyNoInteractions(reader);
+    }
+    @Test void coldHiddenAndMissingCandidatesAreFilteredAndNegativelyCached() {
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss(), 2L, CacheValue.miss()));
+        when(cache.tryLock(1)).thenReturn("a"); when(cache.tryLock(2)).thenReturn("b");
+        when(reader.lists(List.of(1L, 2L))).thenReturn(Map.of(1L, LoadedArticle.hidden(), 2L, LoadedArticle.missing()));
+        when(cache.hide(1, "a")).thenReturn(true); when(cache.missing(2, "b")).thenReturn(true);
+        assertTrue(hydrator.publicCandidates(List.of(1L, 2L)).isEmpty());
+        verify(cache).hide(1, "a"); verify(cache).missing(2, "b");
+        verify(lists, never()).publish(anyLong(), anyString(), any());
     }
     @Test void releasesSecondCheckHitBeforeSqlAndEachWriteBeforeNextWrite() {
         when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss(), 2L, CacheValue.miss(), 3L, CacheValue.miss()),

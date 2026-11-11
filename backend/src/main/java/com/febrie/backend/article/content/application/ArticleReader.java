@@ -4,7 +4,6 @@ import com.febrie.backend.article.common.ArticleErrors;
 import com.febrie.backend.article.content.application.dto.ArticleDetailData;
 import com.febrie.backend.article.content.application.dto.ArticleEditView;
 import com.febrie.backend.article.content.application.dto.ArticleBriefData;
-import com.febrie.backend.article.content.application.dto.ArticlePageIds;
 import com.febrie.backend.article.content.application.dto.ArticleSnapshot;
 import com.febrie.backend.article.content.application.dto.LoadedArticle;
 
@@ -56,9 +55,6 @@ public class ArticleReader {
         if (row.hidden()) { throw ArticleErrors.hidden(); }
         return new ArticleEditView(Long.toString(id), row.title(), mapper.readTree(row.contentJson()),
                 row.coverMediaId(), url(row), articles.tags(List.of(id)).get(id), row.createdAt(), row.updatedAt(), row.publishedAt());
-    }
-    public ArticlePageIds page(long author, int page, int size) {
-        return new ArticlePageIds(articles.pageIds(author, ((long) page - 1) * size, size), articles.countPublic(author));
     }
     private String url(ArticleSnapshot row) { return row.coverMediaId() == null ? null : urls.publicUrl(row.coverMediaId()); }
 }

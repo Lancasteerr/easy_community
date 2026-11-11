@@ -15,8 +15,7 @@ class ArticleQueryServiceTests {
     private final ArticleCache cache = mock(ArticleCache.class);
     private final ArticleDetailCacheStore details = mock(ArticleDetailCacheStore.class);
     private final ArticleDisplayAssembler display = mock(ArticleDisplayAssembler.class);
-    private final ArticleQueryService service = new ArticleQueryService(reader, cache, details,
-            mock(ArticleListHydrator.class), display);
+    private final ArticleQueryService service = new ArticleQueryService(reader, cache, details, display);
 
     @Test void unlocksBeforeVisibilityCheckAndAuthorAssembly() {
         when(details.get(1)).thenReturn(CacheValue.miss());

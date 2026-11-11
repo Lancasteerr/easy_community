@@ -92,16 +92,11 @@ class ArticleHttpIntegrationTests {
         var edit = mapper.readTree(author.call("GET", "/api/articles/" + id + "/edit", null, false).body());
         assertEquals("second", edit.get("title").asString());
         assertEquals(1, edit.path("content").path("schemaVersion").asInt());
-        var page = mapper.readTree(author.call("GET", "/api/users/me/articles", null, false).body());
-        assertEquals(1, page.path("items").size());
-        assertFalse(page.path("items").get(0).has("hidden"));
-        assertFalse(page.path("items").get(0).has("contentHtml"));
         assertEquals(204, author.call("DELETE", "/api/articles/" + id, null, true).statusCode());
         assertEquals(204, author.call("DELETE", "/api/articles/" + id, null, true).statusCode());
         assertEquals(404, visitor.call("GET", "/api/articles/" + id, null, false).statusCode());
         assertEquals(409, author.call("GET", "/api/articles/" + id + "/edit", null, false).statusCode());
         assertEquals(409, author.call("POST", "/api/articles", save(id, "resurrect"), true).statusCode());
-        assertEquals(0, mapper.readTree(author.call("GET", "/api/users/me/articles", null, false).body()).path("total").asInt());
     }
     @Test void rolesDoNotGrantEditingAndUnknownTargetsNeverCreate() throws Exception {
         Browser owner = login(Role.USER), other = login(Role.USER), admin = login(Role.ADMIN), patrol = login(Role.PATROLLER);

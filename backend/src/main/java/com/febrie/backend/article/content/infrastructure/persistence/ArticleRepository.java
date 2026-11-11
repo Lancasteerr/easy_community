@@ -79,8 +79,6 @@ public class ArticleRepository {
         return result;
     }
 
-    public List<Long> pageIds(long author, long offset, int size) { return articles.pageIds(author, offset, size); }
-    public long countPublic(long author) { return articles.countPublic(author); }
     public List<Long> hiddenIds(long after, int size) { return articles.hiddenIds(after, size); }
 
     private static Optional<ArticleSnapshot> snapshot(ArticleEntity row) {
