@@ -3,12 +3,14 @@
 .manage-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: #171719 url('../assets/home-background.png') center / cover no-repeat; }
 .manage-columns { flex: 1; min-height: 0; display: grid; grid-template-columns: 225px 985px; gap: 17px; width: 1227px; margin: 43px auto 0; }
 .manage-sidebar { padding: 25px 16px; border-radius: 12px; background: #242529; }
-.manage-heading { margin: 0; width: 131px; height: 26px; border-bottom: 2px solid #9bceff; font-size: 18px; line-height: 24px; font-weight: 700; white-space: nowrap; }
+/* 用独立圆头线条绘制标题下划线，保留标题尺寸与导航位置。 */
+.manage-heading { position: relative; margin: 0; width: 131px; height: 26px; font-size: 18px; line-height: 24px; font-weight: 700; white-space: nowrap; }
+.manage-heading::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 1px; background: #9bceff; }
 .manage-heading span { margin-left: 3px; color: #989ba5; font-size: 11px; font-weight: 400; }
 .manage-nav { display: flex; flex-direction: column; gap: 0; margin-top: 23px; }
 .manage-nav button { position: relative; width: 190px; height: 45px; border: 0; border-radius: 10px; padding: 0 13px; background: none; color: #989ba5; text-align: left; font-size: 14px; }
 .manage-nav button[aria-current] { background: #334352; color: #9bceff; }
-.manage-nav button[aria-current]::before { content: ''; position: absolute; left: 0; top: 12px; width: 2px; height: 21px; background: #9bceff; }
+.manage-nav button[aria-current]::before { content: ''; position: absolute; left: 0; top: 12px; width: 2px; height: 21px; border-radius: 1px; background: #9bceff; }
 .manage-nav button:not([aria-current]):hover { background: #303138; }
 .manage-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border-radius: 12px; background: #25262b; }
 .manage-toolbar { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; height: 64px; margin: 0 24px; border-bottom: 1px solid #36373e; }
