@@ -1,6 +1,6 @@
 # 文章标签 JSON 存储与本地目录搜索实施计划
 
-> 2026-11-12｜本期后端实现已落地；验证记录见[专项验收](../../reports/article/article-tags-validation-2026-11-12.md)。开发业务库未执行迁移，旧关系表物理删除属于后续发布。
+> 2026-11-12｜本期后端实现已落地；本机开发库已升级V9并完成v4缓存墓碑重建，结果见[专项验收](../../reports/article/article-tags-validation-2026-11-12.md)。旧关系表物理删除属于后续发布。
 >
 > 依据[分享对话最新一轮](https://chatgpt.com/share/6af48ae2-c740-83ee-b9bf-d94214d27368)及用户后续确认修订。当前契约见[公开标签接入说明](../../../public/guides/article/zh-CN/article-tags.md)。本版取代“Redis共享目录”和“每次保存固定批量存在性SQL”的旧提案。
 
