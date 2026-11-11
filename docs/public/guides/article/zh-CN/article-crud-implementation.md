@@ -4,9 +4,9 @@
 
 ## 范围
 
-同步保存、不可恢复隐藏、详情、作者编辑读取、本人公开文章管理、最小 Tag 目录及文章双投影缓存。不包含前端、公共信息流、计数、搜索、消息队列、修订或请求幂等。隐藏保留文件引用，不物理删除图片。
+同步保存、不可恢复隐藏、详情、作者编辑读取、最小 Tag 目录及文章双投影缓存。本人公开文章列表已统一使用 ES 发现候选，完整查询协议见[文章统一查询与索引运维](../../../operations/search/zh-CN/article-search-operations.md)。本文不展开前端、排名、消息同步、修订或请求幂等。隐藏保留文件引用，不物理删除图片。
 
-代码先按文章能力分包：`article.content` 处理正文读写及缓存，`article.tag` 管理标签目录，`article.view` 管理浏览统计，`article.like` 管理点赞；各能力内部再分 web、application 和 infrastructure。完整结构与共享事务边界见[后端架构约定](../../../architecture/backend/zh-CN/backend-architecture.md)。Controller 不直接访问数据库或 Redis。作者显示资料经用户应用层读取，文件引用复用媒体应用服务；不创建空 domain 包或 Service/ServiceImpl。
+代码先按文章能力分包：`article.content` 处理正文读写及缓存，`article.tag` 管理标签目录，`article.view` 管理浏览统计，`article.like` 管理点赞，`article.search` 管理列表发现与索引；各能力内部再分 web、application 和 infrastructure。完整结构与共享事务边界见[后端架构约定](../../../architecture/backend/zh-CN/backend-architecture.md)。Controller 不直接访问数据库或 Redis。作者显示资料经用户应用层读取，文件引用复用媒体应用服务；不创建空 domain 包或 Service/ServiceImpl。
 
 ## HTTP
 
@@ -16,7 +16,7 @@
 | DELETE /api/articles/{id} | 作者、ADMIN、PATROLLER 可隐藏；204，授权成立的重复删除仍成功 |
 | GET /api/articles/{id} | 游客可读，隐藏/不存在 404 |
 | GET /api/articles/{id}/edit | 仅作者，主库直读，隐藏 409 |
-| GET /api/users/me/articles | 仅本人公开文章，page=1、size=20，最大50，ID倒序 |
+| GET /api/users/me/articles | 登录身份来自Session；仅本人公开文章；size默认20、最大50，cursor续页；发布时间/ID倒序 |
 | GET /api/tags | 登录后读取目录 |
 | POST /api/admin/tags | 管理员新增，201 |
 
@@ -32,13 +32,15 @@
 
 Flyway V3新增 article、tag、article_tag，不重写历史迁移。JSON保存schemaVersion/doc，SQL仅存封面ID。主键AUTO，作者管理索引(author_id,hidden,id)。创建时间和发布时间为同一创建事务时间，编辑只改更新时间。
 
-无外层事务的保存服务先准备内容，再调用独立代理的RC写服务：创建INSERT取得ID；修改/隐藏先锁文章行，再锁内验权限和状态。保存调用现有syncArticle维护文件引用，内容/封面/Tag/引用同事务。隐藏只改状态。无版本、CAS、SQL自动重试或自动核对。
+无外层事务的保存服务先准备内容，再调用独立代理的RC写服务：创建INSERT取得ID；修改/隐藏先锁文章行，再锁内验权限和状态。保存调用现有syncArticle维护文件引用，内容/封面/Tag/引用同事务。隐藏只改状态。不使用客户端版本CAS或SQL自动重试；文章元数据版本与Outbox随内容事务提交，用于ES同步防倒退。
 
 提交已确认后才维护缓存。明确回滚结束请求；提交通信故障不确定时返回503 ARTICLE_WRITE_RESULT_UNKNOWN，提示正常查询核对，不重发。确认SQL成功而Redis失败仍返回成功。无变化修改不依赖影响行数判断冲突。
 
-详情、编辑、列表DTO在短只读RR事务中装配，写事务RC。作者显示信息只批量读ID/username，软删除账号不影响历史署名。列表不读取HTML/JSON，详情和列表均保存coverUrl、作者名和Tag名。
+详情、编辑及列表回源在短只读RR事务中读取，写事务RC。作者显示信息批量读取并在文章缓存解锁后组装，软删除账号不影响历史署名。列表不读取HTML/JSON；共享文章投影保存封面ID与Tag信息，URL、作者资料及个人点赞状态在最终响应中组装。
 
-作者管理列表只选本人且hidden=false；并发隐藏导致缓存冲突时批量核对主库，确认隐藏才省略，不补页。total为分页查询快照数量，允许并发删除造成短页。不存在隐藏条目私有装配或hidden响应字段。
+本人列表由article.search承接，固定按Session作者及公开状态从ES发现候选，再通过共享投影回查；不再执行本人SQL分页或COUNT。返回items/nextCursor及浏览、点赞字段，移除page/size/total响应字段，不保留页码兼容层。无效候选按既有预算补齐，空items且nextCursor非空仍可继续。当前不展示隐藏或私有文章。
+
+缓存命中不额外强查主库状态，允许短暂旧卡片；已知隐藏或不存在则过滤。查询关闭或ES不可用时本人列表也返回503，不回退SQL。发布成功不等待索引同步，文章详情仍可按返回ID读取；列表刷新需开启新查询，旧PIT不会纳入新增文章。
 
 ## 缓存与恢复
 

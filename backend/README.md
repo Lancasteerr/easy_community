@@ -2,11 +2,11 @@
 
 文档导航见[公开文档](../docs/public/README.md)。
 
-文章标题搜索、Tag筛选、全局推荐流及索引恢复见[搜索与推荐流运维说明](../docs/public/operations/search/zh-CN/article-search-operations.md)。查询默认关闭，首次导入和对账后再开启。
+文章标题、Tag及公开作者搜索、本人列表、全局推荐流及索引恢复见[搜索与推荐流运维说明](../docs/public/operations/search/zh-CN/article-search-operations.md)。查询默认关闭，首次导入和对账后再开启。
 
 代码组织与包职责见架构文档：[简体中文](../docs/public/architecture/backend/zh-CN/backend-architecture.md) · [English](../docs/public/architecture/backend/en-US/backend-architecture.md)。
 
-文章CRUD已接入，接口、正文白名单、最终一致缓存及维护命令见[文章接入与恢复](../docs/public/guides/article/zh-CN/article-crud-implementation.md)。删除不可恢复；本人管理列表只展示公开文章，游客仅可读取单篇详情。
+文章CRUD已接入，接口、正文白名单、最终一致缓存及维护命令见[文章接入与恢复](../docs/public/guides/article/zh-CN/article-crud-implementation.md)。删除不可恢复；本人列表从Session取身份，仅展示公开文章，采用size/cursor分页；游客可读取公开详情、搜索和推荐流。
 
 文章与用户公开展示现使用独立的三类缓存，响应新增可空的`authorAvatarUrl`；锁范围、用户提交后失效、指标及文章v3发布步骤见[公开读取缓存说明](docs/public-read-cache.md)。前端展示适配另行实施。
 
