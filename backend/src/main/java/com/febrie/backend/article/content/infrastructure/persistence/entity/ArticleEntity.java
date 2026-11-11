@@ -3,6 +3,7 @@ package com.febrie.backend.article.content.infrastructure.persistence.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import com.febrie.backend.article.content.application.dto.ArticleSnapshot;
 import com.febrie.backend.media.domain.MediaIds;
+import com.febrie.backend.article.common.ArticleTagIds;
 import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,12 +23,13 @@ public class ArticleEntity {
     private byte[] coverMediaId;
     private boolean hidden;
     private Long metaVersion;
+    private String tagIds;
     private Instant createdAt;
     private Instant updatedAt;
     private Instant publishedAt;
 
     public ArticleSnapshot snapshot() {
         return new ArticleSnapshot(id, authorId, title, summary, contentJson, contentHtml,
-                MediaIds.text(coverMediaId), hidden, createdAt, updatedAt, publishedAt);
+                MediaIds.text(coverMediaId), hidden, ArticleTagIds.decode(tagIds), createdAt, updatedAt, publishedAt);
     }
 }

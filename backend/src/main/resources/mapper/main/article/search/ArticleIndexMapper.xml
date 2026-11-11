@@ -21,14 +21,9 @@
         <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
         GROUP BY a.id,a.published_at
     </select>
-    <!-- 不读正文，调用方在短RR事务内一起读取Tag。 -->
+    <!-- 不读正文，同一批元数据直接携带文章JSON标签集合。 -->
     <select id="metadata" resultType="com.febrie.backend.article.search.infrastructure.persistence.mapper.ArticleIndexMapper$MetaRow">
-        SELECT id AS article_id,author_id,title,published_at,hidden,meta_version FROM article WHERE id IN
+        SELECT id AS article_id,author_id,title,published_at,hidden,meta_version,tag_ids AS tag_ids_json FROM article WHERE id IN
         <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
-    </select>
-    <select id="tags" resultType="com.febrie.backend.article.search.infrastructure.persistence.mapper.ArticleIndexMapper$TagRow">
-        SELECT article_id,tag_id FROM article_tag WHERE article_id IN
-        <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
-        ORDER BY article_id,tag_id
     </select>
 </mapper>

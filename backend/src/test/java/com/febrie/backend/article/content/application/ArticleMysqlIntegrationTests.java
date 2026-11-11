@@ -122,11 +122,12 @@ class ArticleMysqlIntegrationTests {
         long id = commits.create(actor, content("old", null), new ArticleCommitService.Attempt());
         CountDownLatch articleRead = new CountDownLatch(1), continueTags = new CountDownLatch(1);
         doAnswer(call -> {
+            // 一条SQL已读到完整元数据；后续更新不能拆开标题和标签版本。
+            var rows = sqlSession.getMapper(com.febrie.backend.article.search.infrastructure.persistence.mapper.ArticleIndexMapper.class).metadata(List.of(id));
             articleRead.countDown();
             if (!continueTags.await(10, TimeUnit.SECONDS)) { throw new IllegalStateException("索引标签屏障超时"); }
-            // MyBatis接口代理不能callRealMethod，直接取得同一事务中的真实Mapper执行SQL。
-            return sqlSession.getMapper(com.febrie.backend.article.search.infrastructure.persistence.mapper.ArticleIndexMapper.class).tags(List.of(id));
-        }).when(indexMapper).tags(List.of(id));
+            return rows;
+        }).when(indexMapper).metadata(List.of(id));
         try (var executor = Executors.newSingleThreadExecutor()) {
             var read = executor.submit(() -> indexReader.load(id));
             try {
@@ -180,7 +181,7 @@ class ArticleMysqlIntegrationTests {
     }
     @Test void failureAfterBindingRollsBackArticleAndReferences() {
         String image = readyImage();
-        doThrow(new IllegalStateException("注入标签写入故障")).when(articles).replaceTags(anyLong(), anyCollection());
+        doThrow(new IllegalStateException("注入索引事件写入故障")).when(articles).recordIndexEvent(anyLong(), eq(false));
         assertThrows(IllegalStateException.class, () -> commits.create(actor, content("x", image), new ArticleCommitService.Attempt()));
         assertEquals(0, articleFixtures.countPublic(actor.userId()));
         assertEquals(0, fixtures.countReferences(MediaIds.bytes(image)));
@@ -232,10 +233,11 @@ class ArticleMysqlIntegrationTests {
         long id = commits.create(actor, oldContent, new ArticleCommitService.Attempt());
         CountDownLatch articleRead = new CountDownLatch(1), continueTags = new CountDownLatch(1);
         doAnswer(call -> {
+            var row = call.callRealMethod();
             articleRead.countDown();
             if (!continueTags.await(10, TimeUnit.SECONDS)) { throw new IllegalStateException("标签读取屏障超时"); }
-            return call.callRealMethod();
-        }).when(articles).tags(List.of(id));
+            return row;
+        }).when(articles).find(id);
         try (var executor = Executors.newSingleThreadExecutor()) {
             var read = executor.submit(() -> reader.detail(id));
             try {
@@ -244,7 +246,7 @@ class ArticleMysqlIntegrationTests {
             } finally { continueTags.countDown(); }
             var dto = read.get(10, TimeUnit.SECONDS).data();
             assertEquals("old", dto.title());
-            assertEquals(Long.toString(oldTag), dto.tags().getFirst().tagId());
+            assertEquals(List.of(oldTag), dto.tagIds());
         } finally { continueTags.countDown(); }
         assertEquals("new", articles.find(id).orElseThrow().title());
     }

@@ -38,7 +38,14 @@ public class ArticleQueryService {
             throw ArticleErrors.unavailable();
         }
     }
-    public ArticleEditView edit(UserActor actor, long id) { return reader.edit(actor, id); }
+    public ArticleEditView edit(UserActor actor, long id) {
+        try { return display.edit(reader.edit(actor, id)); }
+        catch (ApiException error) { throw error; }
+        catch (RuntimeException error) {
+            log.warn("文章编辑读取失败 articleId={} error={}", id, error.getClass().getSimpleName());
+            throw ArticleErrors.unavailable();
+        }
+    }
     private ArticleDetailData cachedDetail(long id) {
         long deadline = System.nanoTime() + ArticleCache.WAIT_BUDGET.toNanos();
         while (true) {

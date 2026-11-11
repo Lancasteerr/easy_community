@@ -14,21 +14,10 @@
     </select>
     <!-- 列表严格排除大正文，不能用SELECT *后在Java中丢弃。 -->
     <select id="listRows" resultType="com.febrie.backend.article.content.infrastructure.persistence.entity.ArticleEntity">
-        SELECT id, author_id, title, summary, cover_media_id, hidden, created_at, updated_at, published_at
+        SELECT id, author_id, title, summary, cover_media_id, hidden, tag_ids, created_at, updated_at, published_at
         FROM article WHERE id IN
         <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
     </select>
-    <select id="tags" resultType="com.febrie.backend.article.content.infrastructure.persistence.entity.ArticleTagRow">
-        SELECT r.article_id, t.id AS tag_id, t.name FROM article_tag r JOIN tag t ON t.id = r.tag_id
-        WHERE r.article_id IN
-        <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
-        ORDER BY r.article_id, t.id
-    </select>
-    <delete id="removeTags">DELETE FROM article_tag WHERE article_id = #{id}</delete>
-    <insert id="addTags">
-        INSERT INTO article_tag (article_id, tag_id) VALUES
-        <foreach collection="tags" item="tag" separator=",">(#{id}, #{tag})</foreach>
-    </insert>
     <select id="hiddenIds" resultType="long">
         SELECT id FROM article WHERE hidden = TRUE AND id &gt; #{after} ORDER BY id LIMIT #{size}
     </select>

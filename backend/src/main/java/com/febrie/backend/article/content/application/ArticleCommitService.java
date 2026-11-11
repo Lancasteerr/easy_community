@@ -68,7 +68,6 @@ public class ArticleCommitService {
     private void replace(long id, long author, PreparedArticle content, java.time.Instant now) {
         references.syncArticle(id, author, content.bodyMediaIds(), content.coverMediaId());
         articles.replace(id, content, now);
-        articles.replaceTags(id, content.tagIds());
     }
 
     /** 仅当前调用的内存确认，不是业务版本、幂等键或持久化操作状态。 */

@@ -2,7 +2,7 @@ package com.febrie.backend.article.content.infrastructure.persistence;
 
 import com.febrie.backend.article.content.application.dto.ArticleSnapshot;
 import com.febrie.backend.article.content.application.dto.PreparedArticle;
-import com.febrie.backend.article.tag.application.dto.TagView;
+import com.febrie.backend.article.common.ArticleTagIds;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.febrie.backend.article.content.infrastructure.persistence.entity.ArticleEntity;
@@ -35,6 +35,7 @@ public class ArticleRepository {
         row.setSummary(content.summary());
         row.setContentJson(content.contentJson());
         row.setContentHtml(content.contentHtml());
+        row.setTagIds(ArticleTagIds.encode(content.tagIds()));
         row.setCreatedAt(now);
         row.setUpdatedAt(now);
         row.setPublishedAt(now);
@@ -49,6 +50,7 @@ public class ArticleRepository {
         articles.update(null, Wrappers.<ArticleEntity>lambdaUpdate().eq(ArticleEntity::getId, id)
                 .set(ArticleEntity::getTitle, content.title()).set(ArticleEntity::getSummary, content.summary())
                 .set(ArticleEntity::getContentJson, content.contentJson()).set(ArticleEntity::getContentHtml, content.contentHtml())
+                .set(ArticleEntity::getTagIds, ArticleTagIds.encode(content.tagIds()))
                 .set(ArticleEntity::getCoverMediaId, content.coverMediaId() == null ? null : MediaIds.bytes(content.coverMediaId()))
                 .set(ArticleEntity::getUpdatedAt, now));
     }
@@ -58,25 +60,10 @@ public class ArticleRepository {
                 .set(ArticleEntity::isHidden, true).set(ArticleEntity::getUpdatedAt, now));
     }
 
-    public void replaceTags(long id, Collection<Long> tags) {
-        articles.removeTags(id);
-        if (!tags.isEmpty()) { articles.addTags(id, tags); }
-    }
-
     public Map<Long, ArticleSnapshot> listRows(Collection<Long> ids) {
         Map<Long, ArticleSnapshot> rows = new HashMap<>();
         if (!ids.isEmpty()) { articles.listRows(ids).forEach(row -> rows.put(row.getId(), row.snapshot())); }
         return rows;
-    }
-
-    public Map<Long, List<TagView>> tags(Collection<Long> ids) {
-        Map<Long, List<TagView>> result = new HashMap<>();
-        ids.forEach(id -> result.put(id, new ArrayList<>()));
-        if (!ids.isEmpty()) {
-            articles.tags(ids).forEach(row -> result.get(row.getArticleId())
-                    .add(new TagView(Long.toString(row.getTagId()), row.getName())));
-        }
-        return result;
     }
 
     public List<Long> hiddenIds(long after, int size) { return articles.hiddenIds(after, size); }

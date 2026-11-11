@@ -1,6 +1,7 @@
 package com.febrie.backend.article.search.application;
 
 import com.febrie.backend.article.search.infrastructure.persistence.mapper.ArticleIndexMapper;
+import com.febrie.backend.article.common.ArticleTagIds;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
@@ -15,11 +16,9 @@ public class ArticleIndexReader {
     public Map<Long, ArticleIndexMetadata> load(Collection<Long> ids) {
         if (ids.isEmpty()) { return Map.of(); }
         var rows = mapper.metadata(ids);
-        Map<Long, List<String>> tags = new HashMap<>();
-        mapper.tags(ids).forEach(t -> tags.computeIfAbsent(t.articleId(), ignored -> new ArrayList<>()).add(Long.toString(t.tagId())));
         Map<Long, ArticleIndexMetadata> result = new LinkedHashMap<>();
         rows.forEach(r -> result.put(r.articleId(), new ArticleIndexMetadata(r.articleId(), r.authorId(), r.title(), r.publishedAt(),
-                !r.hidden(), r.metaVersion(), tags.getOrDefault(r.articleId(), List.of()))));
+                !r.hidden(), r.metaVersion(), ArticleTagIds.decode(r.tagIdsJson()).stream().map(String::valueOf).toList())));
         return result;
     }
 }

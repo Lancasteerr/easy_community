@@ -25,7 +25,7 @@ public class ArticleContentRenderer {
 
     public PreparedArticle prepare(String title, JsonNode content, String coverId, List<Long> tags) {
         String normalizedTitle = title == null ? "" : title.strip();
-        if (normalizedTitle.isBlank() || length(normalizedTitle) > 100 || tags.size() > 5) { throw ArticleErrors.invalid(); }
+        if (normalizedTitle.isBlank() || length(normalizedTitle) > 100 || tags.size() > 5 || tags.stream().anyMatch(id -> id == null || id <= 0)) { throw ArticleErrors.invalid(); }
         requireFields(content, Set.of("schemaVersion", "doc"));
         if (!content.path("schemaVersion").isIntegralNumber() || content.path("schemaVersion").asInt(-1) != 1) {
             throw ArticleErrors.invalid();
