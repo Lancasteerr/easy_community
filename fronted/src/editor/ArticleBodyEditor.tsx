@@ -24,14 +24,15 @@ export function ArticleBodyEditor({ initialDoc, disabled, error, onChange, onRea
         onPaste: (instance, files) => { if (instance.isEditable) options.current.onFiles?.(files, instance.state.selection.from); } })],
     content: initialDoc,
     shouldRerenderOnTransaction: true,
-    editorProps: { attributes: { role: 'textbox', 'aria-label': '文章正文', 'aria-multiline': 'true' },
+    editorProps: { attributes: { role: 'textbox', 'aria-label': '文章正文', 'aria-multiline': 'true', 'aria-invalid': 'false' },
       // 外部 HTML 中的图片需重新上传，不能凭复制来的标识绑定他人的文件。
       transformPastedHTML: (html) => { const parsed = new DOMParser().parseFromString(html, 'text/html'); parsed.querySelectorAll('img').forEach((image) => image.remove()); return parsed.body.innerHTML; } },
     onUpdate: ({ editor: instance }) => options.current.onChange(instance.getJSON()),
   });
   useEffect(() => { if (editor) options.current.onReady(editor); }, [editor]);
   useEffect(() => { editor?.setEditable(!disabled); }, [editor, disabled]);
-  useEffect(() => { if (editor) editor.view.dom.setAttribute('aria-invalid', String(!!error)); }, [editor, error]);
+  // 懒加载路由首次提交时 EditorContent 可能尚未建立 view，不能提前读取 DOM。
+  useEffect(() => { if (editor?.isInitialized && !editor.isDestroyed) editor.view.dom.setAttribute('aria-invalid', String(!!error)); }, [editor, error]);
   if (!editor) return null;
   return <div className={`article-body${error ? ' has-error' : ''}`}>
     <EditorToolbar editor={editor} disabled={disabled} onImage={() => input.current?.click()} />

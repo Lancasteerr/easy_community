@@ -10,13 +10,13 @@ export function EditorDialog({ title, busy = false, onClose, children }: {
     const element = dialog.current!;
     const trigger = document.activeElement as HTMLElement | null;
     element.showModal();
-    (element.querySelector<HTMLElement>('[data-autofocus]:not(:disabled), button:not(:disabled)') ?? element).focus({ preventScroll: true });
+    (element.querySelector<HTMLElement>('[data-autofocus]:not(:disabled)') ?? element.querySelector<HTMLElement>('button:not(:disabled)') ?? element).focus({ preventScroll: true });
     return () => { element.close(); if (trigger?.isConnected) trigger.focus({ preventScroll: true }); };
   }, []);
   useLayoutEffect(() => {
     const element = dialog.current!;
     if (busy) element.focus({ preventScroll: true });
-    else (element.querySelector<HTMLElement>('[data-autofocus]:not(:disabled), button:not(:disabled)') ?? element).focus({ preventScroll: true });
+    else (element.querySelector<HTMLElement>('[data-autofocus]:not(:disabled)') ?? element.querySelector<HTMLElement>('button:not(:disabled)') ?? element).focus({ preventScroll: true });
   }, [busy]);
   return <dialog ref={dialog} className="editor-dialog" tabIndex={-1} aria-label={title}
     onCancel={(event) => { event.preventDefault(); if (!busy) callback.current(); }} onKeyDown={(event) => {

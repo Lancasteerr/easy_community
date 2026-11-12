@@ -57,6 +57,9 @@ export function useBodyImages(editor: RefObject<Editor | null>, disabled: boolea
     if (instance && !instance.isDestroyed) instance.view.dispatch(instance.state.tr.setMeta(uploadAnchorKey, { remove: id }));
     setTasks((items) => items.filter((item) => item.id !== id));
   }
-  return { tasks, message, add, remove, blocked: tasks.length > 0,
+  function clear() {
+    active.current?.controller.abort(); active.current = null; setTasks([]); setMessage('');
+  }
+  return { tasks, message, add, remove, clear, blocked: tasks.length > 0,
     retry: (id: string) => setTasks((items) => items.map((item) => item.id === id ? { ...item, status: 'queued', error: '', percent: 0 } : item)) };
 }

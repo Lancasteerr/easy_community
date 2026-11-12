@@ -15,7 +15,7 @@ export const UploadAnchors = Extension.create({
           const action = transaction.getMeta(uploadAnchorKey) as { add?: { id: string; position: number }; remove?: string } | undefined;
           if (action?.add) {
             const marker = document.createElement('span'); marker.className = 'editor-upload-anchor';
-            next = next.add(transaction.doc, [Decoration.widget(action.add.position, marker, { id: action.add.id, side: -1 })]);
+            next = next.add(transaction.doc, [Decoration.widget(action.add.position, marker, { id: action.add.id, side: 1 })]);
           }
           if (action?.remove) next = next.remove(next.find(undefined, undefined, (spec) => spec.id === action.remove));
           return next;

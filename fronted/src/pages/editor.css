@@ -7,9 +7,9 @@
 .article-editor-heading h1, .editor-read-state h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 500; }
 .article-editor-heading a { color: #a1a1aa; font-size: 14px; text-decoration: none; }
 .article-editor-page button, .article-editor-page input, .article-editor-page select, .article-editor-page textarea { font: inherit; }
-.article-editor-page button { border: 1px solid #44444e; border-radius: 8px; background: #2b2b30; padding: 9px 18px; color: inherit; }
-.article-editor-page button:hover:not(:disabled) { border-color: #737381; background: #34343c; }
-.article-editor-page button:disabled { opacity: .45; cursor: not-allowed; }
+.article-editor-panel button { border: 1px solid #44444e; border-radius: 8px; background: #2b2b30; padding: 9px 18px; color: inherit; }
+.article-editor-panel button:hover:not(:disabled) { border-color: #737381; background: #34343c; }
+.article-editor-panel button:disabled { opacity: .45; cursor: not-allowed; }
 .article-editor-page input, .article-editor-page select { border: 1px solid #44444e; background: #2b2b30; color: inherit; border-radius: 8px; padding: 9px 12px; }
 .article-editor-page :is(button, input, textarea, select):focus-visible { outline: 2px solid #9bceff; outline-offset: 2px; }
 .article-title { border: 1px solid #44444e; border-radius: 8px; background: #2b2b30; padding: 16px; margin-bottom: 20px; }

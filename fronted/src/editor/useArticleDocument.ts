@@ -12,15 +12,16 @@ export function useArticleDocument(routeId: string | undefined, onUnauthorized: 
   const [revision, setRevision] = useState(0);
   const [articleId, setArticleId] = useState(routeId);
   const loadedId = useRef<string | undefined>(undefined);
+  const loadedRevision = useRef(0);
   const callbacks = useRef({ onUnauthorized }); callbacks.current = { onUnauthorized };
   const bodyKey = useRef(0);
   useEffect(() => {
-    if (routeId === loadedId.current && revision === 0) return;
+    if (routeId === loadedId.current && revision === loadedRevision.current) return;
     const controller = new AbortController(); setState('loading');
     const read = routeId ? getArticleEdit(routeId, controller.signal) : Promise.resolve(emptyForm());
     read.then((data) => {
       if (controller.signal.aborted) return;
-      loadedId.current = routeId; bodyKey.current++;
+      loadedId.current = routeId; loadedRevision.current = revision; bodyKey.current++;
       setArticleId(routeId); setForm(data); setBaseline(data); setState('ready');
     }).catch((error) => {
       if (controller.signal.aborted) return;
@@ -36,5 +37,6 @@ export function useArticleDocument(routeId: string | undefined, onUnauthorized: 
     loadedId.current = id; setArticleId(id); setForm(normalized); setBaseline(normalized);
   };
   return { form, setForm, baseline, setBaseline, articleId, state, bodyKey: bodyKey.current,
-    dirty: formKey(form) !== formKey(baseline), saved, retry: () => setRevision((value) => value + 1) };
+    dirty: formKey(form) !== formKey(baseline), saved, retry: () => setRevision((value) => value + 1),
+    restore: (restored: ArticleForm, original: ArticleForm) => { bodyKey.current++; setForm(restored); setBaseline(original); } };
 }
