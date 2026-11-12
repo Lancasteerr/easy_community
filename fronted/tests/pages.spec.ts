@@ -178,6 +178,30 @@ for (const viewport of [
   });
 }
 
+test('滚动回调未执行时顶部边界仍稳定，连续双向滚动不会侵入导航留白', async ({ page }) => {
+  await guest(page);
+  await page.route('**/api/articles/feed?**', (route) => route.fulfill({ json: { items: firstPage, nextCursor: null } }));
+  // 屏蔽滚动回调，重现原生滚动已发生、JS 裁切参数尚未更新的情况。
+  await page.addInitScript(() => window.addEventListener('scroll', (event) => event.stopImmediatePropagation(), true));
+  await page.goto('/');
+  await expect(page.locator('.article-card')).toHaveCount(3);
+  await page.evaluate(() => document.fonts.ready);
+  const scroller = page.getByRole('region', { name: '首页滚动区域' });
+  const x = (await page.locator('.home-main').boundingBox())!.x + 300;
+  await page.mouse.move(x, 450);
+  let top = 0;
+  for (const delta of [64, 64, 64, 64, -64, -64, -64, -64]) {
+    top += delta;
+    await page.mouse.wheel(0, delta);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(top);
+    // 对顶部最后一行像素也做命中验证，避免仅检测远离边界的位置而漏掉闪动。
+    expect(await page.evaluate((left) => [150, 166, 166.5].every((y) =>
+      !document.elementFromPoint(left, y)?.closest('.home-main')), x)).toBe(true);
+    expect((await page.locator('.home-header').boundingBox())!.y).toBe(34);
+    expect((await page.locator('.home-sidebar').boundingBox())!.y).toBe(167);
+  }
+});
+
 test('主页窄屏允许横滚，宽屏背景持续覆盖窗口', async ({ page }, testInfo) => {
   await guest(page);
   await page.route('**/api/articles/feed?**', (route) => route.fulfill({ json: { items: [], nextCursor: null } }));

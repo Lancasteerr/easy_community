@@ -42,13 +42,12 @@ export function HomePage() {
   const avatarLabel = auth.status === 'authenticated' ? `${auth.user!.username} 的个人中心`
     : auth.status === 'guest' ? '登录' : auth.status === 'loading' ? '正在确认登录状态' : '重新检查登录状态';
   return <div className="home-page">
-    <div className="home-scroll" ref={scrollContainer} tabIndex={0} role="region" aria-label="首页滚动区域"
-      onScroll={(event) => {
-        // 滚动条覆盖完整视口，中间栏的裁切线仍固定在导航下方。
-        event.currentTarget.style.setProperty('--home-scroll-top', `${Math.max(0, event.currentTarget.scrollTop)}px`);
-      }}>
+    <div className="home-scroll" ref={scrollContainer} tabIndex={0} role="region" aria-label="首页滚动区域">
       <div className="home-scroll-canvas">
-        <Header avatarUrl={auth.user?.avatarUrl} avatarLabel={avatarLabel} onAvatarClick={onAvatarClick} />
+        {/* 顶部背景与导航共同吸顶，由浏览器直接遮挡滚动内容，避免 JS 裁切滞后一帧。 */}
+        <div className="home-top-frame">
+          <Header avatarUrl={auth.user?.avatarUrl} avatarLabel={avatarLabel} onAvatarClick={onAvatarClick} />
+        </div>
         <div className="home-columns">
           <Sidebar />
           <main className="home-main" aria-label="推荐信息流">
