@@ -16,11 +16,10 @@ export function Sidebar() {
 }
 
 export function PublishPanel() {
-  const unavailable = useUnavailable();
   return <aside className="publish-panel glass-panel" aria-label="作品发布">
     <h2 className="panel-heading">作品发布<span>POST</span></h2>
     <div className="publish-options">
-      <button onClick={unavailable}><Icon name="publish" size={48} /><span>发图文</span></button>
+      <Link to="/articles/new"><Icon name="publish" size={48} /><span>发图文</span></Link>
       <Link to="/manage/articles"><Icon name="inbox" size={48} /><span>管理作品</span></Link>
     </div>
   </aside>;

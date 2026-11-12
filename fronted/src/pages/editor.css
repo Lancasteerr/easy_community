@@ -1,0 +1,46 @@
+/* 编辑页由文档自然滚动，桌面内栏尺寸沿用 Figma，不复用主页的固定视口。 */
+.article-editor-page { position: relative; isolation: isolate; min-width: 1440px; min-height: 100dvh; padding: 34px 0 48px; color: #e8e8ed; }
+.article-editor-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: #171719 url('../assets/home-background.png') center / cover no-repeat; }
+.article-editor-panel { width: 1227px; margin: 59px auto 0; padding: 32px 0; border-radius: 12px; background: #242428; }
+.article-editor-inner { width: 920px; margin: 0 auto; }
+.article-editor-heading { display: flex; align-items: center; justify-content: space-between; height: 32px; margin-bottom: 24px; }
+.article-editor-heading h1, .editor-read-state h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 500; }
+.article-editor-heading a { color: #a1a1aa; font-size: 14px; text-decoration: none; }
+.article-editor-page button, .article-editor-page input, .article-editor-page select, .article-editor-page textarea { font: inherit; }
+.article-editor-page button { border: 1px solid #44444e; border-radius: 8px; background: #2b2b30; padding: 9px 18px; color: inherit; }
+.article-editor-page button:hover:not(:disabled) { border-color: #737381; background: #34343c; }
+.article-editor-page button:disabled { opacity: .45; cursor: not-allowed; }
+.article-editor-page input, .article-editor-page select { border: 1px solid #44444e; background: #2b2b30; color: inherit; border-radius: 8px; padding: 9px 12px; }
+.article-editor-page :is(button, input, textarea, select):focus-visible { outline: 2px solid #9bceff; outline-offset: 2px; }
+.article-title { border: 1px solid #44444e; border-radius: 8px; background: #2b2b30; padding: 16px; margin-bottom: 20px; }
+.article-title:hover { border-color: #62626f; }
+.article-title:focus-within { border-color: #9bceff; }
+.article-title textarea { display: block; width: 100%; padding: 0; border: 0; resize: none; overflow: hidden; color: #e8e8ed; background: transparent; font-size: 26px; font-weight: 500; line-height: 36px; outline: none !important; }
+.article-title span { display: block; text-align: right; color: #a1a1aa; font-size: 12px; line-height: 18px; margin-top: 8px; }
+.article-body { border: 1px solid #44444e; border-radius: 8px; background: #2b2b30; overflow: clip; }
+.article-body:focus-within { border-color: #9bceff; }
+.editor-toolbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 10px; border-bottom: 1px solid #44444e; }
+.editor-toolbar button, .editor-toolbar select { font-size: 13px; padding: 6px 8px; border-color: transparent; }
+.editor-toolbar button[aria-pressed=true] { color: #9bceff; background: #334455; border-color: #5e809c; }
+.article-body .tiptap { min-height: 480px; padding: 16px; outline: none; line-height: 1.8; overflow-wrap: anywhere; }
+.tiptap > :first-child { margin-top: 0; }
+.tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #a1a1aa; float: left; height: 0; pointer-events: none; }
+.tiptap img { max-width: 100%; height: auto; border-radius: 6px; }
+.tiptap .ProseMirror-selectednode { outline: 2px solid #9bceff; }
+.tiptap blockquote { border-left: 3px solid #9bceff; margin-left: 0; padding-left: 20px; color: #bdbdc7; }
+.tiptap pre { white-space: pre-wrap; padding: 20px; border-radius: 8px; background: #19191d; }
+.tiptap :not(pre) > code { padding: 2px 5px; background: #19191d; border-radius: 4px; }
+.tiptap a { color: #9bceff; }
+.tiptap hr { border: 0; border-top: 1px solid #62626f; margin: 24px 0; }
+.editor-inline-field, .editor-attributes { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px; border-bottom: 1px solid #44444e; font-size: 14px; }
+.editor-attributes label { display: flex; align-items: center; gap: 8px; }
+.editor-attributes input { width: 260px; }
+.editor-error { color: #f0aaaa; font-size: 13px; line-height: 22px; }
+.has-error { border-color: #c77878 !important; }
+.article-settings { border-top: 1px solid #44444e; margin-top: 32px; padding-top: 24px; }
+.article-settings h2 { font-size: 18px; line-height: 26px; margin: 0 0 24px; font-weight: 500; }
+.article-submit-row { display: flex; justify-content: flex-end; margin-top: 32px; }
+.article-editor-page .editor-primary { background: #9bceff; border-color: #9bceff; color: #142333; min-width: 128px; min-height: 44px; }
+.article-editor-page .editor-primary:hover:not(:disabled) { background: #bbdfff; border-color: #bbdfff; }
+.editor-read-state { width: 920px; margin: 0 auto; min-height: 480px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+.editor-read-state p { color: #a1a1aa; margin: 0; }

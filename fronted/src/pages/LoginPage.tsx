@@ -13,7 +13,9 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   // 回跳仅接受本轮受保护路由，外部地址或任意路由状态均回到首页。
-  const destination = location.state?.returnTo === '/manage/articles' ? '/manage/articles' : '/';
+  const target: unknown = location.state?.returnTo;
+  const destination = typeof target === 'string' && (target === '/manage/articles' || target === '/articles/new'
+    || /^\/articles\/[1-9]\d{0,18}\/edit$/.test(target)) ? target : '/';
   const notify = useToast();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

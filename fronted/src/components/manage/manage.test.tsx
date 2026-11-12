@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { article } from '../../test/fixtures';
 import { ManageArticleRow, compactCount } from './ManageArticleRow';
 import { DeleteArticleDialog, type DeleteDialogState } from './DeleteArticleDialog';
@@ -27,7 +28,7 @@ describe('管理页展示边界', () => {
   it('真实零值、未开放指标及坏图复用无封面占位，完整标题保留', () => {
     const data = { ...article(), coverUrl: '/broken.png', viewCount: 0 };
     const remove = vi.fn();
-    render(<ManageArticleRow article={data} onDelete={remove} />);
+    render(<MemoryRouter><ManageArticleRow article={data} onDelete={remove} /></MemoryRouter>);
     expect(screen.getByLabelText('阅读 0')).toHaveTextContent('0');
     expect(screen.getByLabelText('评论暂未开放')).toHaveTextContent('—');
     expect(screen.getByTitle(data.title)).toHaveTextContent(data.title);

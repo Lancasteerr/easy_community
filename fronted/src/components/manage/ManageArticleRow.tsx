@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ArticleCardData } from '../../api/types';
 import { Icon } from '../Icon';
 import { useUnavailable } from '../Toast';
@@ -21,6 +22,7 @@ export function ManageArticleRow({ article, disabled = false, uncertain = false,
   article: ArticleCardData; disabled?: boolean; uncertain?: boolean; onDelete: (article: ArticleCardData) => void;
 }) {
   const unavailable = useUnavailable();
+  const navigate = useNavigate();
   const [brokenCover, setBrokenCover] = useState<string>();
   const coverFailed = !!article.coverUrl && brokenCover === article.coverUrl;
   return <article className="manage-row" aria-labelledby={`manage-title-${article.articleId}`}>
@@ -40,7 +42,7 @@ export function ManageArticleRow({ article, disabled = false, uncertain = false,
       </div>
     </div>
     <div className="manage-row-actions">
-      <button className="manage-edit" onClick={unavailable}>编辑</button>
+      <button className="manage-edit" disabled={disabled} onClick={() => navigate(`/articles/${article.articleId}/edit`)}>编辑</button>
       <button className="manage-delete" data-delete-id={article.articleId} disabled={disabled}
         aria-label={`${uncertain ? '核对删除结果' : '删除'} ${article.title}`} onClick={() => onDelete(article)}>{uncertain ? '核对' : '删除'}</button>
     </div>
