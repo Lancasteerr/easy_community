@@ -20,7 +20,7 @@ describe('管理页展示边界', () => {
     expect(screen.getByText('请检查网络连接后重试')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
     expect(retry).toHaveBeenCalledTimes(1);
-    rerender(<ManageEmpty />);
+    rerender(<MemoryRouter><ManageEmpty /></MemoryRouter>);
     expect(screen.getByRole('heading')).toHaveTextContent('暂无已发布内容');
     expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(screen.getByRole('button')).toHaveTextContent('去发布');

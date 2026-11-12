@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useUnavailable } from '../Toast';
+import { useNavigate } from 'react-router-dom';
 import stateDocument from '../../assets/manage-state-document.svg';
 
 /** 五行骨架对应设计交付，首次读取与已有内容的刷新采用不同反馈。 */
@@ -10,11 +10,11 @@ export function ManageSkeleton() {
 }
 
 export function ManageEmpty() {
-  const unavailable = useUnavailable();
+  const navigate = useNavigate();
   return <div className="manage-centered-state"><div className="manage-state-content">
     <img src={stateDocument} alt="" aria-hidden="true" width={64} height={64} /><h2>暂无已发布内容</h2>
     <p>把值得分享的内容，发布到社区吧</p>
-    <button className="manage-primary" onClick={unavailable}>去发布</button>
+    <button className="manage-primary" onClick={() => navigate('/articles/new')}>去发布</button>
   </div></div>;
 }
 

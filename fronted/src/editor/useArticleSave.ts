@@ -23,7 +23,7 @@ export function useArticleSave(onSaved: (id: string, form: ArticleForm) => void,
       const csrf = await getCsrf(controller.signal);
       const result = await saveArticle(form, articleId, csrf, controller.signal);
       if (controller.signal.aborted) return;
-      if (!/^[1-9]\d{0,18}$/.test(result.articleId)) throw new Error('无效保存响应');
+      if (typeof result.articleId !== 'string' || !/^[1-9]\d{0,18}$/.test(result.articleId)) throw new Error('无效保存响应');
       callbacks.current.onSaved(result.articleId, form);
       setDialog({ status: 'success', editing, message: editing ? '修改已保存。' : '文章已发布。', retryAt: 0 });
     } catch (error) {

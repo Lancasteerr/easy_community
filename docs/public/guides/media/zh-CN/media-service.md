@@ -2,7 +2,7 @@
 
 > Windows 命令中的 `JAVA_SOCKET_TMPDIR` 需由运行者预先设置为本机可用的短ASCII绝对路径，并确保目录已创建；其他平台可省略该JVM参数。此环境变量仅用于展开本文命令，不是应用配置。
 
-当前实现采用 [V2 设计](../../../designs/media/zh-CN/media-service-v2-design.md)。生产通过 COS Callback 同步审核、复制并提交 READY；开发使用 MinIO Webhook 发布，原有上传联调方案经 Caddy 转换响应。日常开发使用独立配置的 Docker 容器。只支持新建空库，不提供旧协议、旧表和 Flyway 历史兼容。
+当前实现采用 [V2 设计](../../../designs/media/zh-CN/media-service-v2-design.md)。生产通过 COS Callback 同步审核、复制并提交 READY；开发使用 MinIO Webhook 发布，文章编辑页通过 Vite 转换上传响应，历史独立联调方案仍可使用 Caddy。日常开发使用独立配置的 Docker 容器。只支持新建空库，不提供旧协议、旧表和 Flyway 历史兼容。
 
 应用流程按 `media.application.upload`、`reference`、`lifecycle` 归组，`MediaUrls` 独立生成公开地址；通知HTTP适配集中在 `media.web.notification`。结构与调用边界见[后端架构约定](../../../architecture/backend/zh-CN/backend-architecture.md)。
 
@@ -81,7 +81,7 @@ GC 每五分钟按三个状态分别扫描最多 100 个候选。加文件行锁
 | 配置 | 默认或用途 |
 |---|---|
 | MEDIA_STORAGE_ENDPOINT | 后端存储端点 |
-| MEDIA_STORAGE_UPLOAD_ENDPOINT | 浏览器上传入口根地址，开发为 Caddy |
+| MEDIA_STORAGE_UPLOAD_ENDPOINT | 浏览器上传入口根地址，日常开发为 Vite 的 `/__media/upload` |
 | MEDIA_PUBLIC_BASE_URL | 桶根的公开读取地址，MinIO包含桶名 |
 | MEDIA_KEY_PREFIX | 隔离项目与环境，例如 easy-community/dev |
 | MEDIA_COS_CALLBACK_URL / MEDIA_COS_CALLBACK_KEY | 固定生产回调地址与约定密钥 |
@@ -98,7 +98,13 @@ GC 每五分钟按三个状态分别扫描最多 100 个候选。加文件行锁
 
 独立配置并启动 MinIO 容器，在 `backend/.env.dev` 中填写实际存储端点、凭证、桶和前缀，再复制为 `backend/.env` 供应用读取。开发桶的公开策略、临时对象生命周期和精确 POST 通知需自行配置，步骤见下文；Spring 运行期只校验配置，不创建桶或修改权限。
 
-后端通过宿主机发布的端口访问 MinIO，容器通知宿主机时使用 `host.docker.internal` 和后端实际监听端口。MinIO 原生 POST 响应不满足上文统一 JSON 协议，现有 `upload.mjs` 不能直接识别；后续由 Vite 开发接入单独适配，普通代理不会自动转换响应。可使用底层 multipart POST 验证存储和 Webhook。
+后端通过宿主机发布的端口访问 MinIO，容器通知宿主机时使用 `host.docker.internal` 和后端实际监听端口。MinIO 原生 POST 响应不满足上文统一 JSON 协议；`fronted/dev/mediaUploadProxy.ts` 已提供专用 Vite 开发适配，普通 `/api` 代理不负责此转换。
+
+将后端开发环境的 `MEDIA_STORAGE_UPLOAD_ENDPOINT` 设为 `http://127.0.0.1:5173/__media/upload`，重新启动后端。复制 `fronted/.env.development.example` 为 `.env.development.local`，使 `MEDIA_DEV_MINIO_TARGET` 和 `MEDIA_DEV_BUCKET` 与实际 MinIO 端点、桶一致，然后重启 Vite。后端仍在签发时附加桶名，浏览器继续原样使用 `upload.url`。不修改 `MEDIA_PUBLIC_BASE_URL`，不将上传代理当成公开读取地址。
+
+代理只接受固定桶路径的 POST，流式转发 multipart，限制整体请求为 11MiB，不转发社区 Cookie 或 Authorization。仅 MinIO 返回 200 且包含 ETag、请求 ID 时转换为 `success:true`，存储错误、连接中断和异常响应保持失败。代理不等待 Webhook、不查询 READY、不触发发布，也不自动重传。
+
+文章封面、正文图片和保存流程不加固定等待，公共上传函数也不加等待。开发环境偶发图片尚未发布时，预览可手动重新加载，保存失败保留输入并由用户重试。未来头像上传实现时，才在开发环境上传成功后、立即绑定头像前等待 500ms；这只错开常见时序，不证明已 READY，生产不等待。
 
 ### 历史 Caddy 上传联调示例
 

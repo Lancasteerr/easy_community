@@ -25,7 +25,7 @@ Java 25 / Spring Boot 4.1.1 / MySQL 8 / Redis。首次启动前创建空库 `eas
 
 先独立配置并启动 MySQL、Redis、MinIO、RabbitMQ 容器，在 `backend/.env.dev` 中填写实际发布端口和凭证，并确认 `SPRING_PROFILES_ACTIVE=dev`，再复制为同目录的 `.env`。
 开发模板默认开启管理员初始化；首次启动前填写 `ADMIN_USERNAME`、`ADMIN_PASSWORD`，正常启动即可创建首个管理员，无需先打包或单独执行命令。
-直接使用 MinIO 原生上传响应时，现有 `upload.mjs` 仍需响应适配，详见文件服务说明。
+文章编辑页已提供 Vite 开发上传响应适配。将开发上传端点配置为 `http://127.0.0.1:5173/__media/upload`，并使前端代理目标、桶与后端配置一致；实际 `.env` 需手动更新并重启。代理不等待 Webhook，详见文件服务说明。
 
 ```powershell
 # 在 backend 目录首次配置；已有文件时直接编辑，填写独立容器的连接及存储凭证。

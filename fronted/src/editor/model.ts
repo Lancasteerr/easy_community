@@ -30,7 +30,9 @@ export const mediaIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-
 export function validLink(href: string) {
   try {
     const url = new URL(href);
-    return href.length <= 2048 && !/[\s<>"{}|\\^`]/.test(href) && /^https?:$/i.test(url.protocol)
+    const authority = href.match(/^https?:\/\/([^/?#]+)/i)?.[1];
+    return !!authority && /^[\x21-\x7e]+$/.test(authority) && !/%(?![a-f0-9]{2})/i.test(href)
+      && href.length <= 2048 && !/[\s<>"{}|\\^`]/.test(href) && /^https?:$/i.test(url.protocol)
       && !!url.hostname && !url.username && !url.password;
   } catch { return false; }
 }

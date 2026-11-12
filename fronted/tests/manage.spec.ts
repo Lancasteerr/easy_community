@@ -165,6 +165,8 @@ test('游客由管理作品入口登录回跳，离开重进读取首批', async
   const list = page.getByRole('region', { name: '已发布文章列表' });
   await list.evaluate((element) => { element.scrollTop = 400; });
   await page.getByRole('link', { name: 'Easy Community' }).click();
+  // Data Router 使用并发导航，等主页真正挂载后再后退，才能验证“离开重进”。
+  await expect(page.locator('.home-columns')).toBeVisible();
   await page.goBack();
   await expect(page.locator('.manage-row')).toHaveCount(12);
   expect(await list.evaluate((element) => element.scrollTop)).toBe(0);

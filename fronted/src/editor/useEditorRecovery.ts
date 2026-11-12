@@ -30,7 +30,7 @@ export function useEditorRecovery(options: {
     if (auth.status === 'guest') goLogin();
     else if (auth.status === 'authenticated' && !accountMatches) {
       clearRecovery(); setError('账号已切换，当前内容属于原账号。请重新登录原账号后继续。');
-    }
+    } else if (accountMatches) setError('');
   }, [auth.status, auth.user?.userId]);
   useEffect(() => {
     if (!accountMatches || !options.ready || restored.current) return;
@@ -38,5 +38,5 @@ export function useEditorRecovery(options: {
     const snapshot = takeRecovery(options.ownerId, options.articleId);
     if (snapshot) options.restore(snapshot.form, snapshot.baseline);
   }, [accountMatches, options.ready]);
-  return { error, accountMatches, goLogin };
+  return { error, accountMatches, mismatched: auth.status === 'authenticated' && !accountMatches, goLogin };
 }

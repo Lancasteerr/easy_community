@@ -10,6 +10,8 @@ export function CoverUpload({ value, disabled, onChange, onBlocked, onUnauthoriz
   const [busy, setBusy] = useState(false);
   const [percent, setPercent] = useState(0);
   const [message, setMessage] = useState('');
+  const [brokenUrl, setBrokenUrl] = useState('');
+  const [previewRevision, setPreviewRevision] = useState(0);
   const pending = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const previousFile = useRef<File | null>(null);
@@ -36,12 +38,18 @@ export function CoverUpload({ value, disabled, onChange, onBlocked, onUnauthoriz
     <h3>封面 <small>选填</small></h3>
     <div className="editor-cover-row">
       <button type="button" className="editor-cover-slot" aria-label={value ? '更换封面' : '上传封面'} disabled={disabled || busy} onClick={() => fileInput.current?.click()}>
-        {value ? <img src={value.publicUrl} alt="文章封面" /> : <span>＋ 上传封面</span>}
+        {value ? <><img style={{ display: brokenUrl === value.publicUrl ? 'none' : undefined }}
+          src={previewRevision ? `${value.publicUrl}${value.publicUrl.includes('?') ? '&' : '?'}preview=${previewRevision}` : value.publicUrl}
+          alt="文章封面" onError={() => setBrokenUrl(value.publicUrl)} />{brokenUrl === value.publicUrl && <span>图片暂时无法显示</span>}</> : <span>＋ 上传封面</span>}
         {busy && <span className="editor-cover-progress" role="status">{percent < 100 ? `上传中 ${percent}%` : '正在处理上传响应…'}</span>}
       </button>
       <div className="editor-cover-description"><p>支持 JPG、PNG、WebP，最大 5 MiB；建议使用 16:9 图片</p>
         {(value || message) && <div className="editor-cover-actions">
           <button type="button" disabled={disabled || busy} onClick={() => fileInput.current?.click()}>{value ? '更换' : '重新选择'}</button>
+          {value && brokenUrl === value.publicUrl && <button type="button" disabled={disabled || busy} onClick={() => {
+            // 只在用户主动操作时刷新预览；不轮询，不等待发布，不影响已选择的媒体身份。
+            setBrokenUrl(''); setPreviewRevision(Date.now());
+          }}>重新加载预览</button>}
           {message && previousFile.current && <button type="button" disabled={disabled || busy} onClick={() => { void start(previousFile.current!); }}>重新上传</button>}
           <button type="button" disabled={disabled || busy} onClick={() => { onChange(null); setMessage(''); previousFile.current = null; options.current.onBlocked(false); }}>移除</button>
         </div>}

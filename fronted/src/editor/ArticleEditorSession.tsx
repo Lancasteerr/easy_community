@@ -35,10 +35,10 @@ export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; o
   const blocked = disabled || coverBlocked || uploads.blocked;
   const guard = useEditorLeaveGuard(document.dirty || coverBlocked || uploads.blocked, save.busy);
   allowNavigation.current = guard.allowNextNavigation;
-  const recovery = useEditorRecovery({ ownerId, articleId: document.articleId, ready: document.state === 'ready', form, baseline: document.baseline,
+  const recovery = useEditorRecovery({ ownerId, articleId: document.state === 'loading' ? routeId : document.articleId, ready: document.state === 'ready', form, baseline: document.baseline,
     allowNavigation: guard.allowNextNavigation, restore: document.restore });
   // 切换文章或恢复登录快照后，旧文档的本地上传任务不能流入新文档。
-  useEffect(() => { uploads.clear(); setCoverBlocked(false); }, [document.bodyKey]);
+  useEffect(() => { uploads.clear(); setCoverBlocked(false); save.close(); save.setErrors({}); }, [document.bodyKey]);
   const title = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     if (title.current) { title.current.style.height = 'auto'; title.current.style.height = `${Math.max(36, title.current.scrollHeight)}px`; }
@@ -50,7 +50,9 @@ export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; o
   if (document.state !== 'ready') return <EditorReadState state={document.state} onRetry={document.retry} />;
   return <div className="article-editor-inner">
     <div className="article-editor-heading"><h1>{document.articleId ? '编辑文章' : '发布文章'}</h1><Link to="/">返回首页</Link></div>
-    {recovery.error && <p role="alert" className="editor-error">{recovery.error} <button type="button" onClick={recovery.goLogin}>重试保存并登录</button></p>}
+    {recovery.error && <p role="alert" className="editor-error">{recovery.error} {recovery.mismatched
+      ? <button type="button" onClick={() => { void auth.refresh(); }}>重新检查登录状态</button>
+      : <button type="button" onClick={recovery.goLogin}>重试保存并登录</button>}</p>}
     <div hidden={!recovery.accountMatches && auth.status === 'authenticated'}>
     <form noValidate onSubmit={(event) => { event.preventDefault(); void save.submit(form, document.articleId, blocked); }}>
       <div className={`article-title${save.errors.title ? ' has-error' : ''}`}><textarea ref={title} aria-label="文章标题" value={form.title} rows={1} placeholder="请输入文章标题"
