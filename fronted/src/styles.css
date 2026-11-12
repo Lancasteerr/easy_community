@@ -20,9 +20,14 @@ button { color: inherit; }
 a { color: inherit; }
 img { display: block; max-width: 100%; }
 
-/* 主页占满视口，文章列表消化剩余高度；背景仍独立附着视口，窄屏保留横滚。 */
-.home-page { position: relative; isolation: isolate; display: flex; flex-direction: column; min-width: 1440px; height: 100dvh; padding-top: 34px; }
+/* 原生滚动条覆盖整个视口，背景独立附着视口；内容保留原有顶部间距。 */
+.home-page { position: relative; isolation: isolate; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
 .home-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: #171719 url('./assets/home-background.png') center / cover no-repeat; }
+.home-scroll { --home-scroll-height: calc(var(--home-viewport-height, 100dvh) - 167px); flex: 1; min-height: 0; overflow: auto; scroll-padding-top: 167px; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #55555c transparent; }
+.home-scroll:focus-visible { outline: 2px solid #9bceff; outline-offset: -2px; }
+.home-scroll-canvas { min-width: 1440px; padding-top: 34px; }
+/* 与内容共用桌面画布，自然保持横向对齐，仅纵向吸顶。 */
+.home-page .home-header { position: sticky; top: 34px; }
 .glass-panel { background: rgb(60 60 67 / 30%); border-radius: 12px; }
 .home-header { position: relative; z-index: 10; flex: 0 0 90px; width: 1227px; height: 90px; margin: 0 auto; padding: 0 38px 0 33px; display: flex; align-items: center; justify-content: space-between; backdrop-filter: blur(20px); }
 .site-title { flex-shrink: 0; font-size: 32px; font-weight: 700; line-height: 1.2; text-decoration: none; }
@@ -41,8 +46,11 @@ img { display: block; max-width: 100%; }
 .avatar-entry { width: 40px; height: 40px; border-radius: 50%; }
 .avatar { flex-shrink: 0; border-radius: 50%; object-fit: cover; background: #f5f5f5; }
 .icon { display: inline-block; flex: 0 0 auto; background: currentColor; mask: var(--icon-source) center / contain no-repeat; }
-.home-columns { flex: 1; min-height: 0; display: grid; grid-template-columns: 225px 681px 287px; grid-template-rows: minmax(0, 1fr); gap: 17px; width: 1227px; margin: 43px auto 0; align-items: start; }
-.home-sidebar { height: 100%; padding: 25px 16px; }
+.home-columns { min-height: var(--home-scroll-height, calc(100dvh - 167px)); display: grid; grid-template-columns: 225px 681px 287px; gap: 17px; width: 1227px; margin: 43px auto 0; align-items: start; }
+/* 两侧栏仅纵向吸顶；左侧面板高度取通栏可视高度，避免随文章数量拉长。 */
+.home-columns > aside { position: sticky; top: 167px; }
+/* 左侧导航在可视区域底部保留设计稿要求的 22px 留白，吸顶后仍保持该间距。 */
+.home-sidebar { height: calc(var(--home-scroll-height, calc(100dvh - 167px)) - 22px); padding: 25px 16px; }
 /* 用圆角线条替代边框，保留标题总高度，避免下方导航随线宽变化而移动。 */
 .panel-heading { position: relative; display: table; margin: 0; padding: 0 0 3px; font-size: 18px; font-weight: 500; line-height: 22px; white-space: nowrap; }
 .panel-heading::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 1px; background: #9bceff; }
@@ -58,12 +66,11 @@ img { display: block; max-width: 100%; }
 .publish-options button, .publish-options a { display: flex; align-items: center; flex-direction: column; border: 0; padding: 0; background: transparent; text-decoration: none; }
 .publish-options button span:last-child, .publish-options a span:last-child { font-size: 14px; color: #757575; }
 .publish-options button:hover, .publish-options a:hover { color: #9bceff; }
-/* 中间栏逐层允许收缩，只有文章区域滚动，横幅不会被内容挤压或覆盖。 */
-.home-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; }
+/* 裁切线随滚动量补偿，始终停在视口 167px 处，防止内容侵入导航及留白。 */
+.home-main { display: flex; flex-direction: column; min-width: 0; clip-path: inset(var(--home-scroll-top, 0px) -6px -6px); }
 .home-banner { flex-shrink: 0; display: block; width: 681px; height: 229px; border: 0; padding: 0; border-radius: 12px; overflow: hidden; background: #25252a; margin-bottom: 15px; }
 .home-banner img { width: 100%; height: 100%; object-fit: cover; }
-.feed-list { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-color: #55555c transparent; border: 1px solid rgb(255 255 255 / 6%); border-radius: 12px; background: #25252a; }
-.feed-list:focus-visible { outline: 2px solid #9bceff; outline-offset: -2px; }
+.feed-list { border: 1px solid rgb(255 255 255 / 6%); border-radius: 12px; background: #25252a; }
 .article-card { padding: 20px 24px; }
 .article-card + .article-card { position: relative; }
 .article-card + .article-card::before { content: ''; position: absolute; left: 24px; right: 24px; top: 0; height: 1px; background: rgb(255 255 255 / 8%); }

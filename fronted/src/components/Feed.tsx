@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { ApiError, errorMessage } from '../api/client';
 import { useFeed } from '../hooks/useFeed';
 import { useCooldown } from '../hooks/useCooldown';
@@ -6,13 +6,12 @@ import { ArticleCard } from './ArticleCard';
 import { useLocation } from 'react-router-dom';
 import { useScrollMemory } from '../navigation/useScrollMemory';
 
-/** 观察器绑定文章滚动区域；每次游标变化重建，以支持短列表自动填充首屏。 */
-export function Feed() {
+/** 加载与位置记忆共用首页通栏容器；每次游标变化重建观察器，支持短列表补页。 */
+export function Feed({ scrollContainer }: { scrollContainer: RefObject<HTMLDivElement | null> }) {
   const location = useLocation();
   const feed = useFeed(`feed:${location.key}`);
-  const scrollContainer = useRef<HTMLElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
-  useScrollMemory(scrollContainer, `feed-scroll:${location.key}`, feed.items.length > 0);
+  const stopRestoring = useScrollMemory(scrollContainer, `feed-scroll:${location.key}`, feed.items.length > 0);
   const seconds = useCooldown(feed.retryAt);
   // 无效游标重试不会恢复；与过期游标一样，需要用户明确开始新一轮读取。
   const invalidCursor = feed.error instanceof ApiError && feed.error.code === 'ARTICLE_SEARCH_INVALID';
@@ -23,14 +22,15 @@ export function Feed() {
     }, { root: scrollContainer.current, rootMargin: '600px 0px' });
     observer.observe(sentinel.current);
     return () => observer.disconnect();
-  }, [feed.status, feed.nextCursor, feed.paused, feed.loadMore]);
+  }, [scrollContainer, feed.status, feed.nextCursor, feed.paused, feed.loadMore]);
 
   const restart = () => {
-    // 重载只重置文章位置，避免改变窄屏横滚或影响主页其他区域。
+    // 主动重载终止旧位置校正，让横幅与文章一起回顶，保留窄屏横向位置。
+    stopRestoring();
     scrollContainer.current?.scrollTo({ top: 0, behavior: 'instant' });
     feed.restart();
   };
-  return <section ref={scrollContainer} className="feed-list" tabIndex={0} aria-label="推荐文章" aria-busy={feed.status === 'loading'}>
+  return <section className="feed-list" aria-label="推荐文章" aria-busy={feed.status === 'loading'}>
     {feed.items.map((article) => <ArticleCard key={article.articleId} article={article} />)}
     {feed.status === 'loading' && !feed.items.length && <div className="feed-skeleton" role="status" aria-label="正在加载推荐文章">
       <div className="skeleton-author"><i /><span /></div><div className="skeleton-title" /><div className="skeleton-summary" /><div className="skeleton-cover" />

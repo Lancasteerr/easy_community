@@ -21,7 +21,8 @@ function relativeTime(value: string) {
 export function ArticleCard({ article }: { article: ArticleCardData }) {
   const unavailable = useUnavailable();
   const [brokenCover, setBrokenCover] = useState<string>();
-  return <article className="article-card" aria-labelledby={`article-${article.articleId}`}>
+  // 稳定的文章锚点用于返回首页后校正图片加载造成的阅读位置偏移。
+  return <article className="article-card" data-read-block={article.articleId} aria-labelledby={`article-${article.articleId}`}>
     <div className="article-author-row">
       <button className="author-entry" aria-label={`查看作者 ${article.authorName}`} onClick={unavailable}>
         <Avatar src={article.authorAvatarUrl} /><span className="author-details"><span className="author-name">{article.authorName}</span>

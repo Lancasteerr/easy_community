@@ -99,7 +99,7 @@ for (const viewport of [
   { name: 'wide', width: 1920, height: 1080 },
   { name: 'short', width: 1440, height: 768 },
 ]) {
-  test(`主页仅信息流内部滚动、触底续页与卡片缺图状态（${viewport.name}）`, async ({ page }, testInfo) => {
+  test(`主页横幅与信息流统一滚动、顶部裁切与触底续页（${viewport.name}）`, async ({ page }, testInfo) => {
     await guest(page);
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     let requests = 0;
@@ -118,37 +118,62 @@ for (const viewport of [
     expect((await page.locator('.search-form').boundingBox())?.x).toBe(headerX + 630);
     expect((await page.locator('.home-main').boundingBox())?.x).toBe(headerX + 242);
     const feed = page.getByRole('region', { name: '推荐文章' });
-    expect(await feed.boundingBox()).toMatchObject({ x: headerX + 242, y: 411, width: 681, height: viewport.height - 411 });
-    // 完整页面不能随文章数量增长；只滚列表时，四个固定区域的位置及尺寸均不变。
+    const scroller = page.getByRole('region', { name: '首页滚动区域' });
+    // 原生滚动轨道从窗口顶端延伸到底端，内容可见边界仍保持在 167px。
+    expect(await scroller.boundingBox()).toMatchObject({ x: 0, y: 0, width: viewport.width, height: viewport.height });
+    expect(await feed.boundingBox()).toMatchObject({ x: headerX + 242, y: 411, width: 681 });
+    await expect(feed).not.toHaveAttribute('tabindex');
+    await expect(feed).toHaveCSS('overflow-y', 'visible');
+    expect(await feed.evaluate((element) => element.clientHeight)).toBeGreaterThan(viewport.height - 411);
+    // 文档不滚动，只有通栏增长；导航和两侧栏的位置与尺寸始终不变。
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(viewport.height);
-    const fixedRegions = page.locator('.home-header, .home-sidebar, .home-banner, .publish-panel');
+    const fixedRegions = page.locator('.home-header, .home-sidebar, .publish-panel');
     const originalBounds = await Promise.all((await fixedRegions.all()).map((region) => region.boundingBox()));
     expect(requests).toBe(1);
     await page.screenshot({ path: testInfo.outputPath(`home-${viewport.name}.png`) });
-    await feed.hover();
+    const bannerBefore = (await page.locator('.home-banner').boundingBox())!;
+    const feedBefore = (await feed.boundingBox())!;
+    // 导航也在全视口滚动容器中，在导航上使用滚轮同样推动中间内容。
+    await page.mouse.move(bannerBefore.x + 300, 80);
+    await page.mouse.wheel(0, 100);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    const firstScroll = await scroller.evaluate((element) => element.scrollTop);
+    expect((await page.locator('.home-banner').boundingBox())!.y).toBeCloseTo(bannerBefore.y - firstScroll, 1);
+    expect((await feed.boundingBox())!.y).toBeCloseTo(feedBefore.y - firstScroll, 1);
+    // 部分横幅滚过裁切线时，上方留白不能命中横幅，区域内仍可以点击横幅。
+    expect(await page.evaluate((x) => ({
+      above: !!document.elementFromPoint(x, 150)?.closest('.home-banner, .article-card'),
+      inside: !!document.elementFromPoint(x, 180)?.closest('.home-banner'),
+    }), bannerBefore.x + 300)).toEqual({ above: false, inside: true });
+    await page.mouse.click(bannerBefore.x + 300, 180);
+    await expect(page.getByText('功能暂未开放')).toBeVisible();
     await page.mouse.wheel(0, 1400);
-    await expect.poll(() => feed.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
     await expect(page.locator('.article-card')).toHaveCount(6);
     expect(requests).toBe(2);
-    await feed.evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: 'instant' }));
+    await scroller.evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: 'instant' }));
     await expect(page.getByText('已经到底了')).toBeVisible();
-    // 触底继续滚动也不传递给页面；横幅及其下方间隔不能被文章命中覆盖。
+    // 触底继续滚动不传递给页面；导航及其周围留白不能被滚动内容命中覆盖。
     await page.mouse.wheel(0, 1000);
     expect(await page.evaluate(() => scrollY)).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(viewport.height);
-    expect(await Promise.all((await fixedRegions.all()).map((region) => region.boundingBox()))).toEqual(originalBounds);
-    expect(await page.locator('.home-banner').evaluate((element) => {
-      const bounds = element.getBoundingClientRect();
-      const atBanner = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-      const atGap = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.bottom + 7);
-      return atBanner?.closest('.home-banner') === element && !atGap?.closest('.article-card');
-    })).toBe(true);
+    for (const [index, region] of (await fixedRegions.all()).entries()) {
+      const bounds = (await region.boundingBox())!;
+      expect(bounds).toMatchObject({ x: originalBounds[index]!.x, width: originalBounds[index]!.width, height: originalBounds[index]!.height });
+      // 触底高度取整可能带来不足半像素的 sticky 边界差异。
+      expect(bounds.y).toBeCloseTo(originalBounds[index]!.y, 0);
+    }
+    expect(await page.evaluate((x) => [20, 80, 150, 166].every((y) =>
+      !document.elementFromPoint(x, y)?.closest('.home-banner, .article-card')), bannerBefore.x + 300)).toBe(true);
+    await page.getByRole('searchbox', { name: '搜索内容' }).fill('滚动后搜索');
+    await page.getByRole('button', { name: '搜索', exact: true }).click();
+    await expect(page.getByText('功能暂未开放')).toBeVisible();
     await expect(page.getByText('封面暂时无法显示')).toHaveCount(1);
     await expect(page.locator('.article-card').nth(3).locator('.article-cover')).toHaveCount(0);
     await expect(page.locator('.article-card').last().getByRole('button', { name: '点赞 328' })).toHaveAttribute('aria-pressed', 'true');
     const title = page.locator('.article-card').last().locator('h2');
     expect((await title.boundingBox())!.height).toBeLessThanOrEqual(52);
     expect(await page.locator('.home-main').evaluate((element) => element.scrollTop)).toBe(0);
+    expect(await feed.evaluate((element) => element.scrollTop)).toBe(0);
     await page.screenshot({ path: testInfo.outputPath(`home-${viewport.name}-scrolled.png`) });
   });
 }
@@ -159,14 +184,80 @@ test('主页窄屏允许横滚，宽屏背景持续覆盖窗口', async ({ page 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.getByText('还没有推荐内容，稍后再来看看吧')).toBeVisible();
-  expect(await page.evaluate(() => ({ width: document.documentElement.scrollWidth, x: scrollX }))).toEqual({ width: 1440, x: 0 });
+  const scroller = page.getByRole('region', { name: '首页滚动区域' });
+  expect(await page.evaluate(() => ({ width: document.documentElement.scrollWidth, x: scrollX }))).toEqual({ width: 390, x: 0 });
+  expect(await scroller.evaluate((element) => element.scrollWidth)).toBe(1440);
+  expect(await scroller.boundingBox()).toMatchObject({ x: 0, width: 390 });
   expect(await page.locator('.home-page').evaluate((element) => getComputedStyle(element, '::before').width)).toBe('390px');
-  await page.evaluate(() => window.scrollTo(1000, 0));
-  expect(await page.evaluate(() => scrollX)).toBeGreaterThan(0);
+  await scroller.evaluate((element) => element.scrollTo({ left: 700, behavior: 'instant' }));
+  await expect.poll(() => page.locator('.home-header').evaluate((element) => element.getBoundingClientRect().x)).toBe(106.5 - 700);
+  expect((await page.locator('.home-main').boundingBox())!.x).toBe(106.5 + 242 - 700);
+  // 导航与三栏共用画布，聚焦屏幕外的导航操作仍保持横向对齐。
+  await page.getByRole('link', { name: 'Easy Community', exact: true }).focus();
+  await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeLessThan(700);
+  expect((await page.locator('.home-main').boundingBox())!.x - (await page.locator('.home-header').boundingBox())!.x).toBe(242);
   await page.setViewportSize({ width: 1920, height: 1080 });
-  expect((await page.locator('.home-header').boundingBox())?.x).toBe(346.5);
+  await expect.poll(() => page.locator('.home-header').evaluate((element) => element.getBoundingClientRect().x)).toBe(346.5);
   expect(await page.locator('.home-page').evaluate((element) => getComputedStyle(element, '::before').height)).toBe('1080px');
   await page.screenshot({ path: testInfo.outputPath('home-wide.png') });
+});
+
+test('首页短列表自动补页，通栏焦点支持键盘翻页', async ({ page }) => {
+  await guest(page);
+  let reads = 0;
+  await page.route('**/api/articles/feed?**', (route) => {
+    reads++;
+    return route.fulfill({ json: new URL(route.request().url()).searchParams.has('cursor')
+      ? { items: firstPage, nextCursor: null }
+      : { items: [article('10')], nextCursor: 'short-page' } });
+  });
+  await page.goto('/');
+  await expect(page.locator('.article-card')).toHaveCount(4);
+  expect(reads).toBe(2);
+  const scroller = page.getByRole('region', { name: '首页滚动区域' });
+  await scroller.focus();
+  await expect(scroller).toHaveCSS('outline-style', 'solid');
+  await scroller.press('PageDown');
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+});
+
+test('文章详情保持独立滚动，后退恢复首页通栏阅读位置和横向对齐', async ({ page }) => {
+  await guest(page);
+  await page.setViewportSize({ width: 1280, height: 844 });
+  let reads = 0;
+  await page.route('**/api/articles/feed?**', (route) => {
+    reads++;
+    return route.fulfill({ json: { items: firstPage, nextCursor: null } });
+  });
+  await page.route('**/api/articles/2', (route) => route.fulfill({ json: {
+    ...article('2'), coverMediaId: null, contentHtml: '<p>详情阅读内容</p>'.repeat(60),
+  } }));
+  await page.goto('/');
+  await expect(page.locator('.article-card')).toHaveCount(3);
+  await page.evaluate(() => document.fonts.ready);
+  const scroller = page.getByRole('region', { name: '首页滚动区域' });
+  await page.mouse.move(650, 450);
+  await page.mouse.wheel(0, 700);
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(700);
+  await scroller.evaluate((element) => element.scrollTo({ left: 100, top: 700, behavior: 'instant' }));
+  const position = await scroller.evaluate((element) => ({ top: element.scrollTop, left: element.scrollLeft }));
+  const secondArticle = page.getByRole('link', { name: '文章 2', exact: true });
+  const articleTop = (await secondArticle.boundingBox())!.y;
+  await secondArticle.click();
+  await expect(page).toHaveURL(/\/articles\/2$/);
+  const reader = page.getByRole('region', { name: '文章阅读区域' });
+  await expect(reader).toBeVisible();
+  await reader.press('PageDown');
+  await expect.poll(() => reader.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+  await page.goBack();
+  await expect(page.locator('.article-card')).toHaveCount(3);
+  await expect.poll(() => scroller.evaluate((element) => ({ top: element.scrollTop, left: element.scrollLeft }))).toEqual(position);
+  expect((await secondArticle.boundingBox())!.y).toBeCloseTo(articleTop, 1);
+  await expect.poll(async () => (await page.locator('.home-main').boundingBox())!.x
+    - (await page.locator('.home-header').boundingBox())!.x).toBe(242);
+  expect(reads).toBe(1);
 });
 
 test('登录页桌面布局、固定反馈、密码显隐与认证失败', async ({ page }, testInfo) => {
@@ -252,7 +343,7 @@ test('游客头像、CSRF、HttpOnly 会话与登录后刷新推荐形成闭环'
   await expect(page).toHaveURL(/:5175\/$/);
 });
 
-test('游标过期保留文章，重载只让信息流回顶并保留横向位置', async ({ page }) => {
+test('游标过期保留文章，重载让横幅与信息流回顶并保留横向位置', async ({ page }) => {
   await guest(page);
   await page.setViewportSize({ width: 1280, height: 768 });
   let firstReads = 0;
@@ -267,22 +358,24 @@ test('游标过期保留文章，重载只让信息流回顶并保留横向位�
   });
   await page.goto('/');
   await expect(page.locator('.article-card')).toHaveCount(3);
-  await page.evaluate(() => window.scrollTo(100, 0));
-  const horizontalPosition = await page.evaluate(() => scrollX);
+  const scroller = page.getByRole('region', { name: '首页滚动区域' });
+  await scroller.evaluate((element) => element.scrollTo({ left: 100, behavior: 'instant' }));
+  const horizontalPosition = await scroller.evaluate((element) => element.scrollLeft);
   expect(horizontalPosition).toBeGreaterThan(0);
-  const feed = page.getByRole('region', { name: '推荐文章' });
-  await feed.evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: 'instant' }));
+  await page.mouse.move(650, 450);
+  await page.mouse.wheel(0, 2500);
   await expect(page.getByText('列表已过期，已读内容仍保留')).toBeVisible();
   await expect(page.getByRole('heading', { name: '已读文章' })).toBeVisible();
   expect(firstReads).toBe(1);
-  expect(await feed.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await page.getByRole('button', { name: '重新加载' }).click();
   await expect(page.getByRole('heading', { name: '刷新后的文章' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '已读文章' })).toHaveCount(0);
   expect(firstReads).toBe(2);
-  expect(await feed.evaluate((element) => element.scrollTop)).toBe(0);
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0);
+  expect((await page.locator('.home-banner').boundingBox())!.y).toBe(167);
   expect(await page.evaluate(() => scrollY)).toBe(0);
-  expect(await page.evaluate(() => scrollX)).toBe(horizontalPosition);
+  expect(await scroller.evaluate((element) => element.scrollLeft)).toBe(horizontalPosition);
 });
 
 test('登录限流期间不重发请求，倒计时结束恢复按钮', async ({ page }) => {

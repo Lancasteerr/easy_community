@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react';
 import { readSnapshot, saveSnapshot } from './snapshots';
 
-export interface ReadingPosition { top: number; anchor?: string; offset?: number }
+export interface ReadingPosition { top: number; left?: number; anchor?: string; offset?: number }
 
 /** 使用内容块锚点及相对位置恢复，图片在锚点上方变高时仍能保持阅读进度。 */
 export function capturePosition(root: HTMLElement | null): ReadingPosition {
@@ -9,7 +9,7 @@ export function capturePosition(root: HTMLElement | null): ReadingPosition {
   const edge = root.getBoundingClientRect().top;
   const blocks = Array.from(root.querySelectorAll<HTMLElement>('[data-read-block]'));
   const anchor = blocks.find((block) => block.getBoundingClientRect().bottom > edge);
-  return { top: root.scrollTop, anchor: anchor?.dataset.readBlock,
+  return { top: root.scrollTop, left: root.scrollLeft, anchor: anchor?.dataset.readBlock,
     offset: anchor ? anchor.getBoundingClientRect().top - edge : undefined };
 }
 
@@ -32,12 +32,14 @@ export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>
         .find((block) => block.dataset.readBlock === position.anchor);
       element.scrollTop = anchor && position.offset !== undefined
         ? element.scrollTop + anchor.getBoundingClientRect().top - element.getBoundingClientRect().top - position.offset : position.top;
+      // 首页通栏同时承接横向浏览；旧快照或显式回顶不改变当前横向位置。
+      if (position.left !== undefined) element.scrollLeft = position.left;
     };
     const save = () => saveSnapshot(key, capturePosition(element), owner);
     const interact = () => { restoring = false; };
     stopRestoring.current = interact;
     const onKey = (event: KeyboardEvent) => {
-      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) interact();
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) interact();
     };
     restore();
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(restore);

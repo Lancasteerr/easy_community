@@ -5,15 +5,28 @@ import banner from '../assets/home-banner.png';
 import { Feed } from '../components/Feed';
 import { useAuth } from '../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { errorMessage } from '../api/client';
 
-/** 主页限定在视口内，横幅与两侧栏保持原位，文章列表负责内部纵向滚动。 */
+/** 首页共用覆盖视口的滚动容器，导航与侧栏吸顶，中间内容在导航下方裁切。 */
 export function HomePage() {
+  const scrollContainer = useRef<HTMLDivElement>(null);
   const unavailable = useUnavailable();
   const auth = useAuth();
   const navigate = useNavigate();
   const notify = useToast();
+  useLayoutEffect(() => {
+    const container = scrollContainer.current;
+    if (!container) return;
+    // 扣除顶部布局后确定侧栏高度，兼容窄屏横向滚动条对可视高度的占用。
+    const syncSize = () => {
+      container.style.setProperty('--home-viewport-height', `${container.clientHeight}px`);
+    };
+    syncSize();
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(syncSize);
+    observer?.observe(container);
+    return () => observer?.disconnect();
+  }, []);
   useEffect(() => {
     document.title = 'Easy Community';
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -29,14 +42,22 @@ export function HomePage() {
   const avatarLabel = auth.status === 'authenticated' ? `${auth.user!.username} 的个人中心`
     : auth.status === 'guest' ? '登录' : auth.status === 'loading' ? '正在确认登录状态' : '重新检查登录状态';
   return <div className="home-page">
-    <Header avatarUrl={auth.user?.avatarUrl} avatarLabel={avatarLabel} onAvatarClick={onAvatarClick} />
-    <div className="home-columns">
-      <Sidebar />
-      <main className="home-main" aria-label="推荐信息流">
-        <button className="home-banner" aria-label="首页横幅" onClick={unavailable}><img src={banner} alt="城市出行主题插画" /></button>
-        <Feed />
-      </main>
-      <PublishPanel />
+    <div className="home-scroll" ref={scrollContainer} tabIndex={0} role="region" aria-label="首页滚动区域"
+      onScroll={(event) => {
+        // 滚动条覆盖完整视口，中间栏的裁切线仍固定在导航下方。
+        event.currentTarget.style.setProperty('--home-scroll-top', `${Math.max(0, event.currentTarget.scrollTop)}px`);
+      }}>
+      <div className="home-scroll-canvas">
+        <Header avatarUrl={auth.user?.avatarUrl} avatarLabel={avatarLabel} onAvatarClick={onAvatarClick} />
+        <div className="home-columns">
+          <Sidebar />
+          <main className="home-main" aria-label="推荐信息流">
+            <button className="home-banner" aria-label="首页横幅" onClick={unavailable}><img src={banner} alt="城市出行主题插画" /></button>
+            <Feed scrollContainer={scrollContainer} />
+          </main>
+          <PublishPanel />
+        </div>
+      </div>
     </div>
   </div>;
 }
