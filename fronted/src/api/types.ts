@@ -32,6 +32,20 @@ export interface FeedPage {
   nextCursor: string | null;
 }
 
+/** 公开详情直接复用文章展示字段；阅读数由服务端返回，前端不补计本次 PV。 */
+export interface ArticleDetailData extends ArticleCardData {
+  coverMediaId: string | null;
+  contentHtml: string;
+}
+
+/** 202 仅表示命令已受理；版本号不能转换为 JavaScript 数值。 */
+export interface ArticleLikeAccepted {
+  accepted: boolean;
+  operationId: string;
+  liked: boolean;
+  version: string;
+}
+
 export interface CsrfToken { token: string; headerName: string }
 
 export interface ProblemDetail {

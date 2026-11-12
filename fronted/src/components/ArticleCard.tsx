@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { ArticleCardData } from '../api/types';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
@@ -31,13 +32,13 @@ export function ArticleCard({ article }: { article: ArticleCardData }) {
       <button className="follow-button" onClick={unavailable}>+ 关注</button>
     </div>
     <div className="article-copy">
-      <h2 id={`article-${article.articleId}`}><button onClick={unavailable}>{article.title}</button></h2>
+      <h2 id={`article-${article.articleId}`}><Link to={`/articles/${article.articleId}`}>{article.title}</Link></h2>
       <p>{article.summary}</p>
     </div>
-    {article.coverUrl && <button className="article-cover" onClick={unavailable} aria-label={`阅读 ${article.title}`}>
+    {article.coverUrl && <Link className="article-cover" to={`/articles/${article.articleId}`} aria-label={`阅读 ${article.title}`}>
       {brokenCover === article.coverUrl ? <span className="image-placeholder">封面暂时无法显示</span>
         : <img src={article.coverUrl} alt="" loading="lazy" onError={() => setBrokenCover(article.coverUrl!)} />}
-    </button>}
+    </Link>}
     <div className="article-interactions">
       <button className={`interaction-button${article.likedByMe ? ' is-liked' : ''}`} aria-pressed={article.likedByMe}
         aria-label={`点赞 ${number.format(article.likeCount)}`} onClick={unavailable}>

@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { ArticleCardData } from '../../api/types';
 import { Icon } from '../Icon';
-import { useUnavailable } from '../Toast';
 
 /** 管理列表保持绝对发布时间；不将展示时间用于排序或游标计算。 */
 export function publicationTime(value: string) {
@@ -21,18 +20,17 @@ export function compactCount(value: number) {
 export function ManageArticleRow({ article, disabled = false, uncertain = false, onDelete }: {
   article: ArticleCardData; disabled?: boolean; uncertain?: boolean; onDelete: (article: ArticleCardData) => void;
 }) {
-  const unavailable = useUnavailable();
   const navigate = useNavigate();
   const [brokenCover, setBrokenCover] = useState<string>();
   const coverFailed = !!article.coverUrl && brokenCover === article.coverUrl;
   return <article className="manage-row" aria-labelledby={`manage-title-${article.articleId}`}>
-    <button className="manage-cover" onClick={unavailable} aria-label={`查看文章 ${article.title}`}>
+    <Link className="manage-cover" to={`/articles/${article.articleId}`} aria-label={`查看文章 ${article.title}`}>
       {article.coverUrl && !coverFailed
         ? <img src={article.coverUrl} alt="" loading="lazy" onError={() => setBrokenCover(article.coverUrl!)} />
         : <span className="manage-cover-placeholder"><Icon name="document" size={36} /><span>暂无封面</span></span>}
-    </button>
+    </Link>
     <div className="manage-copy">
-      <h2 id={`manage-title-${article.articleId}`}><button title={article.title} onClick={unavailable}>{article.title}</button></h2>
+      <h2 id={`manage-title-${article.articleId}`}><Link title={article.title} to={`/articles/${article.articleId}`}>{article.title}</Link></h2>
       <time dateTime={article.publishedAt}>{publicationTime(article.publishedAt)}</time>
       <div className="manage-metrics">
         <span title={`阅读 ${article.viewCount}`} aria-label={`阅读 ${article.viewCount}`}><Icon name="manageView" size={16} />{compactCount(article.viewCount)}</span>
