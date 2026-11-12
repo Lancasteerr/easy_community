@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, getMyArticles } from '../api/client';
 import type { ArticleCardData } from '../api/types';
+import { readSnapshot, saveSnapshot } from '../navigation/snapshots';
 
 type Status = 'initialLoading' | 'ready' | 'loadingMore' | 'refreshing' | 'initialError' | 'appendError' | 'refreshError' | 'resetRequired';
 interface MyArticlesState {
@@ -15,7 +16,7 @@ interface MyArticlesState {
 const initial = (): MyArticlesState => ({ items: [], nextCursor: null, status: 'initialLoading', error: null, paused: false, retryAt: 0, revision: 0 });
 
 /** 页面内的游标会话：刷新保留旧展示，删除排除集合独立于读取代次。 */
-export function useMyArticles(userId: string, enabled: boolean, onUnauthorized: () => void) {
+export function useMyArticles(userId: string, enabled: boolean, onUnauthorized: () => void, snapshotKey?: string) {
   const [state, setState] = useState<MyArticlesState>(initial);
   const current = useRef(state);
   const permitted = useRef(enabled);
@@ -72,11 +73,23 @@ export function useMyArticles(userId: string, enabled: boolean, onUnauthorized: 
   useEffect(() => {
     generation.current++;
     removed.current.clear(); emptyPages.current = 0;
-    publish(initial());
-    return () => { generation.current++; pending.current?.abort(); pending.current = null; };
-  }, [userId, publish]);
+    const saved = readSnapshot<{ state: MyArticlesState; removed: string[]; emptyPages: number }>(snapshotKey, userId);
+    if (saved) {
+      removed.current = new Set(saved.removed); emptyPages.current = saved.emptyPages;
+      publish(saved.state);
+    } else publish(initial());
+    return () => {
+      const latest = current.current;
+      if (latest.status !== 'initialLoading' && latest.status !== 'initialError') {
+        saveSnapshot(snapshotKey, { state: { ...latest,
+          status: latest.status === 'loadingMore' || latest.status === 'refreshing' ? 'ready' : latest.status },
+          removed: [...removed.current], emptyPages: emptyPages.current }, userId);
+      }
+      generation.current++; pending.current?.abort(); pending.current = null;
+    };
+  }, [userId, publish, snapshotKey]);
   useEffect(() => {
-    if (enabled && state.status === 'initialLoading' && !pending.current) void read('initial');
+    if (enabled && current.current.status === 'initialLoading' && !pending.current) void read('initial');
   }, [enabled, state.status, read]);
 
   const remove = useCallback((id: string) => {

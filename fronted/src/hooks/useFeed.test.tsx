@@ -11,6 +11,19 @@ beforeEach(() => { read.mockReset(); });
 afterEach(() => vi.restoreAllMocks());
 
 describe('推荐流请求与游标', () => {
+  it('返回同一历史项恢复条目和游标，不重读首屏', async () => {
+    read.mockResolvedValueOnce({ items: [article('1')], nextCursor: 'next' })
+      .mockResolvedValueOnce({ items: [article('2')], nextCursor: null });
+    const first = renderHook(() => useFeed('feed-history-test'));
+    await waitFor(() => expect(first.result.current.status).toBe('ready'));
+    first.unmount();
+    const returned = renderHook(() => useFeed('feed-history-test'));
+    await waitFor(() => expect(returned.result.current.items).toHaveLength(1));
+    expect(read).toHaveBeenCalledTimes(1);
+    await act(() => returned.result.current.loadMore());
+    expect(read).toHaveBeenLastCalledWith('next', expect.any(AbortSignal));
+    expect(returned.result.current.items.map((item) => item.articleId)).toEqual(['1', '2']);
+  });
   it('短页仍续页，保持顺序并去除跨页及页内重复 ID', async () => {
     read.mockResolvedValueOnce({ items: [article('1')], nextCursor: 'opaque+/cursor=' })
       .mockResolvedValueOnce({ items: [article('1'), article('2'), article('2')], nextCursor: null });

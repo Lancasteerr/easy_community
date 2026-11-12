@@ -4,6 +4,7 @@ import { ApiError, getMyArticles } from '../api/client';
 import type { FeedPage } from '../api/types';
 import { article, deferred } from '../test/fixtures';
 import { useMyArticles } from './useMyArticles';
+import { setSnapshotOwner } from '../navigation/snapshots';
 
 vi.mock('../api/client', async (original) => ({ ...await original<typeof import('../api/client')>(), getMyArticles: vi.fn() }));
 const read = vi.mocked(getMyArticles);
@@ -12,6 +13,22 @@ const mount = () => renderHook(() => useMyArticles('author', true, expire));
 beforeEach(() => { read.mockReset(); expire.mockReset(); });
 
 describe('本人游标会话', () => {
+  it('返回管理历史项恢复删除排除集合和续页游标', async () => {
+    setSnapshotOwner('author');
+    read.mockResolvedValueOnce({ items: [article('1'), article('2')], nextCursor: 'next' })
+      .mockResolvedValueOnce({ items: [article('1'), article('3')], nextCursor: null });
+    const first = renderHook(() => useMyArticles('author', true, expire, 'manage-history-test'));
+    await waitFor(() => expect(first.result.current.status).toBe('ready'));
+    act(() => first.result.current.remove('1'));
+    first.unmount();
+    const returned = renderHook(() => useMyArticles('author', true, expire, 'manage-history-test'));
+    await waitFor(() => expect(returned.result.current.items.map((item) => item.articleId)).toEqual(['2']));
+    expect(read).toHaveBeenCalledTimes(1);
+    await act(() => returned.result.current.loadMore());
+    expect(read).toHaveBeenLastCalledWith('next', expect.any(AbortSignal));
+    expect(returned.result.current.items.map((item) => item.articleId)).toEqual(['2', '3']);
+    returned.unmount(); setSnapshotOwner(null);
+  });
   it('按ID去重，短页继续；同步触底只发送一个请求', async () => {
     const pending = deferred<FeedPage>();
     read.mockResolvedValueOnce({ items: [article('1')], nextCursor: 'next' }).mockReturnValueOnce(pending.promise);

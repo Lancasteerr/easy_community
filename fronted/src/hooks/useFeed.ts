@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, getFeed } from '../api/client';
 import type { ArticleCardData } from '../api/types';
+import { readSnapshot, saveSnapshot } from '../navigation/snapshots';
 
 interface FeedState {
   items: ArticleCardData[];
@@ -14,7 +15,7 @@ interface FeedState {
 const initialState = (): FeedState => ({ items: [], nextCursor: null, status: 'loading', error: null, paused: false, retryAt: 0 });
 
 /** 请求锁同步建立；代次令牌隔离重载前后的响应，取消只负责节省网络资源。 */
-export function useFeed() {
+export function useFeed(snapshotKey?: string) {
   const [state, setState] = useState<FeedState>(initialState);
   const current = useRef(state);
   const pending = useRef<AbortController | null>(null);
@@ -65,9 +66,19 @@ export function useFeed() {
   }, [loadMore, publish]);
 
   useEffect(() => {
-    restart();
-    return () => { generation.current++; pending.current?.abort(); pending.current = null; };
-  }, [restart]);
+    const saved = readSnapshot<{ state: FeedState; hasLoaded: boolean; emptyPages: number }>(snapshotKey);
+    if (saved) {
+      hasLoaded.current = saved.hasLoaded; emptyPages.current = saved.emptyPages;
+      publish(saved.state);
+    } else restart();
+    return () => {
+      // 续页被取消时恢复为可继续的展示态，不能把 loading 锁带回历史页面。
+      if (hasLoaded.current) saveSnapshot(snapshotKey, { state: { ...current.current,
+        status: current.current.status === 'loading' ? 'ready' : current.current.status },
+        hasLoaded: true, emptyPages: emptyPages.current });
+      generation.current++; pending.current?.abort(); pending.current = null;
+    };
+  }, [restart, publish, snapshotKey]);
 
   return { ...state, loadMore, restart };
 }

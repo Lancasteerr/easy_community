@@ -3,12 +3,16 @@ import { ApiError, errorMessage } from '../api/client';
 import { useFeed } from '../hooks/useFeed';
 import { useCooldown } from '../hooks/useCooldown';
 import { ArticleCard } from './ArticleCard';
+import { useLocation } from 'react-router-dom';
+import { useScrollMemory } from '../navigation/useScrollMemory';
 
 /** 观察器绑定文章滚动区域；每次游标变化重建，以支持短列表自动填充首屏。 */
 export function Feed() {
-  const feed = useFeed();
+  const location = useLocation();
+  const feed = useFeed(`feed:${location.key}`);
   const scrollContainer = useRef<HTMLElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
+  useScrollMemory(scrollContainer, `feed-scroll:${location.key}`, feed.items.length > 0);
   const seconds = useCooldown(feed.retryAt);
   // 无效游标重试不会恢复；与过期游标一样，需要用户明确开始新一轮读取。
   const invalidCursor = feed.error instanceof ApiError && feed.error.code === 'ARTICLE_SEARCH_INVALID';

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError, getProfile } from '../api/client';
 import type { UserIdentity, UserProfile } from '../api/types';
+import { setSnapshotOwner } from '../navigation/snapshots';
 
 export interface AuthState {
   status: 'loading' | 'guest' | 'authenticated' | 'error';
@@ -23,7 +24,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const current = useRef(state);
   const pending = useRef<AbortController | null>(null);
   const generation = useRef(0);
-  const publish = useCallback((next: AuthState) => { current.current = next; setState(next); return next; }, []);
+  const publish = useCallback((next: AuthState) => {
+    if (next.status === 'guest') setSnapshotOwner(null);
+    else if (next.user) setSnapshotOwner(next.user.userId);
+    current.current = next; setState(next); return next;
+  }, []);
   const expireSession = useCallback(() => {
     // 业务接口确认401后，同时作废在途资料读取，防止旧响应恢复已经过期的身份。
     generation.current++;

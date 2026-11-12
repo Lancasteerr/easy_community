@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { useScrollMemory } from '../../navigation/useScrollMemory';
 import { useCooldown } from '../../hooks/useCooldown';
 import type { useMyArticles } from '../../hooks/useMyArticles';
 import type { ArticleCardData } from '../../api/types';
@@ -6,14 +7,15 @@ import { ManageArticleRow } from './ManageArticleRow';
 import { ManageEmpty, ManageError, ManageSkeleton } from './ManageStates';
 
 /** 观察器只绑定右侧视口，刷新成功才回顶；刷新失败保留旧条目与滚动位置。 */
-export function ManageArticleList({ list, enabled, paused = false, uncertainIds, onDelete }: {
+export function ManageArticleList({ list, enabled, paused = false, uncertainIds, onDelete, scrollKey = '', ownerId }: {
   list: ReturnType<typeof useMyArticles>; enabled: boolean; paused?: boolean; uncertainIds?: ReadonlySet<string>;
   onDelete: (article: ArticleCardData) => void;
+  scrollKey?: string; ownerId?: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
   const seconds = useCooldown(list.retryAt);
-  useLayoutEffect(() => { if (root.current) root.current.scrollTop = 0; }, [list.revision]);
+  useScrollMemory(root, scrollKey, list.status !== 'initialLoading', undefined, ownerId, list.revision);
   useEffect(() => {
     if (!root.current || !sentinel.current || !enabled || paused || list.status !== 'ready' || list.paused
       || list.nextCursor === null || !window.IntersectionObserver) return;

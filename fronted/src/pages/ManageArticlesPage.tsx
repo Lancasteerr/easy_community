@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Header } from '../components/Header';
 import { useToast, useUnavailable } from '../components/Toast';
@@ -18,7 +18,8 @@ function MyArticles({ userId }: { userId: string }) {
   const notify = useToast();
   const [recoveringAuth, setRecoveringAuth] = useState(false);
   const enabled = !auth.refreshing && !auth.error;
-  const list = useMyArticles(userId, enabled, auth.expireSession);
+  const location = useLocation();
+  const list = useMyArticles(userId, enabled, auth.expireSession, `manage:${location.key}`);
   const deletion = useArticleDeletion(enabled, auth.expireSession, (id, message) => {
     const controls = Array.from(document.querySelectorAll<HTMLButtonElement>('.manage-row [data-delete-id]'));
     const index = controls.findIndex((element) => element.dataset.deleteId === id);
@@ -48,7 +49,8 @@ function MyArticles({ userId }: { userId: string }) {
       onClick={() => { void list.refresh(); }}>{list.status === 'refreshing' ? '刷新中…' : seconds > 0 ? `${seconds}秒后重试` : '刷新'}</button></div>
     <ManageLoadBoundary failed={!!auth.error || list.status === 'refreshError'} loading={recoveringAuth}
       seconds={auth.error ? identitySeconds : seconds} onRetry={() => { void retry(); }}>
-      <ManageArticleList list={list} enabled={enabled} paused={!!deletion.state.article} uncertainIds={deletion.uncertainIds} onDelete={deletion.open} />
+      <ManageArticleList list={list} enabled={enabled} paused={!!deletion.state.article} uncertainIds={deletion.uncertainIds} onDelete={deletion.open}
+        scrollKey={`manage-scroll:${location.key}`} ownerId={userId} />
     </ManageLoadBoundary>
     <DeleteArticleDialog state={deletion.state} seconds={deleteSeconds} blocked={!enabled} onClose={deletion.close}
       onConfirm={() => { void deletion.confirm(); }} onCheck={() => { void deletion.check(); }} />
