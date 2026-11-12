@@ -41,7 +41,7 @@ export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; o
   useEffect(() => { uploads.clear(); setCoverBlocked(false); save.close(); save.setErrors({}); }, [document.bodyKey]);
   const title = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
-    if (title.current) { title.current.style.height = 'auto'; title.current.style.height = `${Math.max(36, title.current.scrollHeight)}px`; }
+    if (title.current) { title.current.style.height = 'auto'; title.current.style.height = `${Math.max(28, title.current.scrollHeight)}px`; }
   }, [form.title, document.state]);
   useEffect(() => {
     if (save.errors.title) title.current?.focus();
@@ -55,12 +55,12 @@ export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; o
       : <button type="button" onClick={recovery.goLogin}>重试保存并登录</button>}</p>}
     <div hidden={!recovery.accountMatches && auth.status === 'authenticated'}>
     <form noValidate onSubmit={(event) => { event.preventDefault(); void save.submit(form, document.articleId, blocked); }}>
-      <div className={`article-title${save.errors.title ? ' has-error' : ''}`}><textarea ref={title} aria-label="文章标题" value={form.title} rows={1} placeholder="请输入文章标题"
+      <div className="article-title-field"><div className={`article-title${save.errors.title ? ' has-error' : ''}`}><textarea ref={title} aria-label="文章标题" value={form.title} rows={1} placeholder="请输入文章标题"
         disabled={disabled} aria-invalid={!!save.errors.title} aria-describedby="article-title-error"
         onBlur={() => { if (save.errors.title) save.setErrors({ ...save.errors, title: validateForm(form).title }); }}
         onChange={(event) => { const next = { ...form, title: event.target.value }; setForm(next); if (save.errors.title) save.setErrors({ ...save.errors, title: validateForm(next).title }); }} />
-        <span>{codePoints(form.title)}/100</span></div>
-      {save.errors.title && <p id="article-title-error" className="editor-error" role="alert">{save.errors.title}</p>}
+        </div><div className="article-title-feedback"><span id="article-title-error" className="editor-error" role={save.errors.title ? 'alert' : undefined}>{save.errors.title}</span>
+          <span>{codePoints(form.title)}/100</span></div></div>
       <ArticleBodyEditor key={document.bodyKey} initialDoc={form.content.doc} disabled={disabled} error={save.errors.content} onFiles={uploads.add}
         onReady={(instance) => { editor.current = instance; }} onChange={(doc) => {
           setForm((current) => ({ ...current, content: { schemaVersion: 1, doc } }));
