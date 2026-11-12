@@ -1,12 +1,13 @@
 /* 白色写作卡片与社区暗色外壳独立，编辑页样式不覆盖共享顶栏。 */
 .article-editor-page { position: relative; isolation: isolate; min-width: 1440px; min-height: 100dvh; padding: 34px 0 48px; }
 .article-editor-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: #171719 url('../assets/home-background.png') center / cover no-repeat; }
-.article-editor-panel { --editor-ink: #24292f; --editor-muted: #68717d; --editor-line: #e2e6eb; --editor-accent: #9bceff; --editor-blue: #245d93; width: 1227px; margin: 59px auto 0; padding: 40px 0; border-radius: 12px; background: #fff; color: var(--editor-ink); color-scheme: light; }
+.article-editor-panel { --editor-ink: #24292f; --editor-muted: #68717d; --editor-line: #e2e6eb; --editor-accent: #9bceff; --editor-blue: #245d93; width: 1227px; margin: 59px auto 0; padding: 40px 0; border-radius: 12px; background: #fff; color: var(--editor-ink); color-scheme: light; font-weight: 500; }
 .article-editor-inner { width: 920px; margin: 0 auto; }
 .article-editor-heading { display: flex; align-items: center; justify-content: space-between; height: 32px; margin-bottom: 24px; }
-.article-editor-heading h1, .editor-read-state h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; }
+.article-editor-heading h1, .editor-read-state h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 700; }
 .article-editor-heading a { color: var(--editor-muted); font-size: 14px; text-decoration: none; }
 .article-editor-panel :is(button, input, select, textarea) { font: inherit; }
+.article-editor-panel :is(button, input, select) { font-weight: 600; }
 .article-editor-panel button { border: 1px solid var(--editor-line); border-radius: 6px; background: #fff; padding: 9px 18px; color: var(--editor-ink); }
 .article-editor-panel button:hover:not(:disabled) { border-color: #b4cdec; background: #f2f7fd; color: var(--editor-blue); }
 .article-editor-panel button:disabled { opacity: .45; cursor: not-allowed; }
@@ -16,17 +17,19 @@
 .article-title { min-height: 52px; border: 1px solid var(--editor-line); border-radius: 8px; background: #fff; padding: 11px 16px; }
 .article-title:hover { border-color: #b8c2ce; }
 .article-title:focus-within { border-color: var(--editor-accent); box-shadow: 0 0 0 2px #9bceff26; }
-.article-title textarea { display: block; width: 100%; padding: 0; border: 0; resize: none; overflow: hidden; color: var(--editor-ink); background: transparent; font-size: 20px; font-weight: 500; line-height: 28px; outline: none !important; }
+.article-title textarea { display: block; width: 100%; padding: 0; border: 0; resize: none; overflow: hidden; color: var(--editor-ink); background: transparent; font-size: 20px; font-weight: 700; line-height: 28px; outline: none !important; }
 .article-title textarea::placeholder { color: #8b929c; }
 .article-title-feedback { display: flex; justify-content: space-between; gap: 12px; min-height: 18px; padding: 4px 2px 0; font-size: 12px; line-height: 18px; color: var(--editor-muted); }
 .article-body { border: 1px solid var(--editor-line); border-radius: 10px; background: #fff; }
 .article-body:focus-within { border-color: #a8c6e9; }
+.editor-body-loading { min-height: 534px; padding: 30px 24px; border: 1px solid var(--editor-line); border-radius: 10px; color: var(--editor-muted); font-size: 14px; }
 .editor-toolbar { position: sticky; top: 16px; z-index: 20; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; padding: 10px 12px; border-bottom: 1px solid var(--editor-line); border-radius: 9px 9px 0 0; background: #fffffffA; box-shadow: 0 5px 14px #24292f06; overflow-x: auto; scrollbar-width: thin; }
 .editor-toolbar-group { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 3px; padding-right: 6px; border-right: 1px solid var(--editor-line); }
 .editor-toolbar-group:last-child { border-right: 0; padding-right: 0; }
 .editor-toolbar button, .editor-toolbar select { height: 32px; min-width: 32px; font-size: 14px; padding: 0 7px; border-color: transparent; white-space: nowrap; }
 .editor-toolbar select { min-width: 88px; background: #fff; border-color: var(--editor-line); }
 .editor-toolbar b, .editor-toolbar i, .editor-toolbar u, .editor-toolbar s { font-family: Arial, sans-serif; font-size: 15px; }
+.editor-clear-symbol { font-family: Arial, sans-serif; text-decoration: line-through; }
 .editor-toolbar .editor-code-language { width: 116px; height: 32px; font-size: 12px; padding: 0 6px; }
 .editor-list-start { display: flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--editor-muted); font-size: 12px; }
 .editor-toolbar .editor-list-start input { width: 68px; height: 32px; padding: 0 5px; font-size: 12px; }
@@ -36,7 +39,7 @@
 .article-body .tiptap > :first-child { margin-top: 0; }
 .article-body .tiptap > :last-child { margin-bottom: 0; }
 .article-body .tiptap p { margin: 0 0 16px; }
-.article-body .tiptap :is(h1, h2, h3, h4, h5, h6) { margin: 28px 0 16px; font-weight: 600; line-height: 1.35; }
+.article-body .tiptap :is(h1, h2, h3, h4, h5, h6) { margin: 28px 0 16px; font-weight: 700; line-height: 1.35; }
 .article-body .tiptap h1 { font-size: 30px; }
 .article-body .tiptap h2 { font-size: 26px; }
 .article-body .tiptap h3 { font-size: 22px; }
@@ -53,10 +56,19 @@
 .article-body .tiptap blockquote { border-left: 3px solid #cbd5e1; margin: 16px 0; padding: 4px 0 4px 20px; color: #68717d; }
 .article-body .tiptap blockquote > :last-child { margin-bottom: 0; }
 .article-body .tiptap pre { margin: 16px 0; padding: 18px; border-radius: 6px; background: #111827; color: #d6deeb; overflow-x: auto; white-space: pre; font-size: 14px; line-height: 1.6; }
-.article-body .tiptap pre code { font: inherit; font-family: Consolas, 'Cascadia Code', monospace; white-space: inherit; background: transparent; color: inherit; }
+.article-body .tiptap pre code { font: inherit; font-family: Consolas, 'Cascadia Code', monospace; font-weight: 400; white-space: inherit; background: transparent; color: inherit; }
 .article-body .tiptap :not(pre) > code { padding: 2px 5px; background: #eff1f4; border-radius: 4px; color: #334155; font-size: .875em; }
 .article-body .tiptap a { color: var(--editor-blue); text-decoration: underline; text-underline-offset: 3px; }
 .article-body .tiptap hr { border: 0; border-top: 1px solid var(--editor-line); margin: 24px 0; }
+/* 高亮只通过视图装饰着色，不将 span 或颜色属性写入文档。 */
+.article-body .tiptap .hljs-comment, .article-body .tiptap .hljs-quote { color: #94a3b8; font-style: italic; }
+.article-body .tiptap .hljs-keyword, .article-body .tiptap .hljs-selector-tag, .article-body .tiptap .hljs-literal { color: #c792ea; }
+.article-body .tiptap .hljs-string, .article-body .tiptap .hljs-regexp, .article-body .tiptap .hljs-addition { color: #c3e88d; }
+.article-body .tiptap .hljs-number, .article-body .tiptap .hljs-attr, .article-body .tiptap .hljs-variable { color: #f78c6c; }
+.article-body .tiptap .hljs-title, .article-body .tiptap .hljs-name, .article-body .tiptap .hljs-selector-id { color: #82aaff; }
+.article-body .tiptap .hljs-type, .article-body .tiptap .hljs-built_in { color: #ffcb6b; }
+.article-body .tiptap .hljs-meta, .article-body .tiptap .hljs-symbol, .article-body .tiptap .hljs-bullet { color: #89ddff; }
+.editor-word-count { display: block; padding: 0 24px 16px; color: var(--editor-muted); font-size: 12px; text-align: right; }
 /* 原生 Popover 位于顶层，不受工具栏横向滚动和卡片边界裁切。 */
 .editor-popover { position: fixed; inset: auto; margin: 0; width: 340px; max-width: calc(100vw - 24px); padding: 18px; border: 1px solid var(--editor-line); border-radius: 10px; background: #fff; color: var(--editor-ink); box-shadow: 0 12px 36px #1f293726; font-size: 14px; }
 .editor-popover h2 { font-size: 15px; margin: 0 0 14px; line-height: 22px; font-weight: 600; }
@@ -69,7 +81,7 @@
 .editor-error { color: #bf3535; font-size: 13px; line-height: 22px; }
 .has-error { border-color: #cc5757 !important; }
 .article-settings { border-top: 1px solid var(--editor-line); margin-top: 32px; padding-top: 24px; }
-.article-settings h2 { font-size: 18px; line-height: 26px; margin: 0 0 24px; font-weight: 600; }
+.article-settings h2 { font-size: 18px; line-height: 26px; margin: 0 0 24px; font-weight: 700; }
 .article-submit-row { display: flex; justify-content: flex-end; margin-top: 32px; }
 /* 主按钮严格使用社区主题色；深色文字确保浅蓝背景上的可读性。 */
 .article-editor-panel .editor-primary { background: var(--editor-accent); border-color: var(--editor-accent); color: #142333; min-width: 128px; min-height: 44px; }
@@ -77,7 +89,7 @@
 .editor-read-state { width: 920px; margin: 0 auto; min-height: 480px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .editor-read-state p { color: var(--editor-muted); margin: 0; }
 /* 封面和标签沿用现有交互，仅调整为白色卡片中的浅色控件。 */
-.article-settings h3 { font-size: 14px; line-height: 22px; font-weight: 500; margin: 0 0 12px; }
+.article-settings h3 { font-size: 14px; line-height: 22px; font-weight: 700; margin: 0 0 12px; }
 .article-settings h3 small { color: var(--editor-muted); font-size: 12px; margin-left: 8px; }
 .editor-cover-row { display: flex; gap: 24px; align-items: flex-start; }
 .article-editor-panel .editor-cover-slot { position: relative; flex-shrink: 0; width: 240px; height: 135px; padding: 0; overflow: hidden; color: var(--editor-blue); background: #f8fafc; border-style: dashed; }

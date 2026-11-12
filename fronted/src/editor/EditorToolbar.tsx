@@ -1,10 +1,13 @@
 import { useState, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/react';
 import { EditorAttributePopover, type AttributeTarget } from './EditorAttributePopover';
+import { codeLanguages } from './codeHighlight';
+import { clearEditorFormatting } from './editingCommands';
 
 /** 短符号只负责显示，中文名称和工具提示保持稳定，按钮按编辑用途分组。 */
 export function EditorToolbar({ editor, disabled, onImage }: { editor: Editor; disabled: boolean; onImage: () => void }) {
   const [panel, setPanel] = useState<AttributeTarget | null>(null);
+  const language: string = editor.getAttributes('codeBlock').language ?? '';
   const command = (label: string, glyph: ReactNode, active: boolean | undefined, action: () => void, unavailable = false) => <button type="button"
     disabled={disabled || unavailable} aria-label={label} title={label} aria-pressed={active}
     onMouseDown={(event) => event.preventDefault()} onClick={action}>{glyph}</button>;
@@ -18,6 +21,9 @@ export function EditorToolbar({ editor, disabled, onImage }: { editor: Editor; d
       <div className="editor-toolbar-group" role="group" aria-label="编辑历史">
         {command('撤销', '↶', undefined, () => { editor.chain().focus().undo().run(); }, !editor.can().undo())}
         {command('重做', '↷', undefined, () => { editor.chain().focus().redo().run(); }, !editor.can().redo())}
+        {command('清除格式', <span className="editor-clear-symbol">Tx</span>, undefined, () => {
+          editor.commands.focus(); clearEditorFormatting(editor);
+        }, editor.isActive('image'))}
       </div>
       <div className="editor-toolbar-group" role="group" aria-label="插入内容">
         {command('插入图片', '图片', undefined, onImage)}
@@ -51,9 +57,11 @@ export function EditorToolbar({ editor, disabled, onImage }: { editor: Editor; d
       </div>
       <div className="editor-toolbar-group" role="group" aria-label="代码格式">
         {command('代码块', 'Code', editor.isActive('codeBlock'), () => { editor.chain().focus().toggleCodeBlock().run(); })}
-        {editor.isActive('codeBlock') && <input className="editor-code-language" aria-label="代码语言" disabled={disabled}
-          value={editor.getAttributes('codeBlock').language ?? ''} placeholder="例如 java" maxLength={32}
-          pattern="[A-Za-z0-9_+\-]*" onChange={(event) => editor.chain().updateAttributes('codeBlock', { language: event.target.value || null }).run()} />}
+        {editor.isActive('codeBlock') && <select className="editor-code-language" aria-label="代码语言" title="代码语言" disabled={disabled} value={language}
+          onChange={(event) => editor.chain().focus().updateAttributes('codeBlock', { language: event.target.value || null }).run()}>
+          {codeLanguages.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          {language && !codeLanguages.some((option) => option.value === language) && <option value={language}>{language}{language === 'xml' ? '（HTML / XML）' : '（纯文本）'}</option>}
+        </select>}
       </div>
     </div>
     {panel && <EditorAttributePopover key={panel.kind} editor={editor} target={panel} disabled={disabled} onClose={() => setPanel(null)} />}

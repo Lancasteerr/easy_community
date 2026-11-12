@@ -12,6 +12,9 @@ test('白色卡片覆盖表单与读取状态，暗色共享顶栏保持原尺�
   await setup(page); await page.goto('/articles/12/edit'); await page.evaluate(() => document.fonts.ready);
   await expect(page.locator('.article-editor-panel')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(page.getByRole('textbox', { name: '文章标题' })).toHaveCSS('color', 'rgb(36, 41, 47)');
+  await expect(page.getByRole('textbox', { name: '文章标题' })).toHaveCSS('font-weight', '700');
+  await expect(page.getByRole('textbox', { name: '文章正文' })).toHaveCSS('font-weight', '500');
+  await expect(page.getByRole('button', { name: '代码块', exact: true })).toHaveCSS('font-weight', '600');
   expect(await page.locator('.home-header').boundingBox()).toMatchObject({ x: 106.5, y: 34, width: 1227, height: 90 });
   expect(await page.locator('.publish-entry').boundingBox()).toMatchObject({ width: 40, height: 40 });
   expect((await page.locator('.article-editor-inner').boundingBox())?.width).toBe(920);
@@ -64,4 +67,55 @@ test('链接浮层不改变正文高度，取消和外部关闭不修改文档�
   await page.getByRole('button', { name: '应用', exact: true }).click(); await expect(body.locator('a')).toHaveText('选择这段文字'); await expect(link).toBeFocused();
   await page.getByRole('button', { name: '保存修改' }).click(); await expect(page.getByRole('dialog', { name: '保存成功' })).toBeVisible();
   expect(saved.content.doc.content[0].content[0].marks).toEqual([{ type: 'link', attrs: { href: 'https://example.com' } }]);
+});
+
+test('清除格式作用于当前文本块且一步撤销，保留其他块和图片', async ({ page }) => {
+  await setup(page, { type: 'doc', content: [
+    { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: '加粗标题', marks: [{ type: 'bold' }] }] },
+    { type: 'paragraph', content: [{ type: 'text', text: '斜体段落', marks: [{ type: 'italic' }] }] },
+    { type: 'image', attrs: { fileId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', src: '/style-image.png', alt: '配图' } },
+  ] });
+  await page.route('**/style-image.png', (route) => route.fulfill({ path: 'src/assets/home-banner.png', contentType: 'image/png' }));
+  await page.goto('/articles/12/edit'); const body = page.getByRole('textbox', { name: '文章正文' });
+  await body.locator('h2').click(); await page.getByRole('button', { name: '清除格式' }).click();
+  await expect(body.locator('h2')).toHaveCount(0); await expect(body.locator('p').first()).toHaveText('加粗标题'); await expect(body.locator('strong')).toHaveCount(0);
+  await expect(body.locator('em')).toHaveText('斜体段落'); await expect(body.locator('img')).toHaveCount(1);
+  await page.getByRole('button', { name: '撤销', exact: true }).click(); await expect(body.locator('h2 strong')).toHaveText('加粗标题');
+  await body.click(); await body.press('ControlOrMeta+a'); await page.getByRole('button', { name: '清除格式' }).click();
+  await expect(body.locator('h2, strong, em')).toHaveCount(0); await expect(body.locator('img')).toHaveCount(1);
+});
+
+test('代码语言、高亮和缩进沿用协议，换行不计字数', async ({ page }, info) => {
+  const code = 'public class Demo {\n  int value = 123;\n}';
+  await setup(page, { type: 'doc', content: [{ type: 'codeBlock', attrs: { language: 'java' }, content: [{ type: 'text', text: code }] }, { type: 'paragraph', content: [{ type: 'text', text: '中😀 A，' }] }] });
+  let saved: any; await page.route('**/api/articles', (route) => { saved = route.request().postDataJSON(); return route.fulfill({ json: { articleId: '12' } }); });
+  await page.goto('/articles/12/edit'); const body = page.getByRole('textbox', { name: '文章正文' }); const language = page.getByRole('combobox', { name: '代码语言' });
+  await body.locator('pre').click(); await body.press('ControlOrMeta+Home');
+  await expect(language).toHaveValue('java'); await expect(body.locator('.hljs-keyword').first()).toBeVisible();
+  const count = Array.from(code.replace(/\n/g, '') + '中😀 A，').length;
+  await expect(page.getByLabel('正文字数')).toHaveText(`${count} 字`);
+  await body.press('Tab'); await expect(body.locator('pre code')).toHaveText(`  ${code}`); await expect(page.getByLabel('正文字数')).toHaveText(`${count + 2} 字`);
+  await body.press('Shift+Tab'); await expect(body.locator('pre code')).toHaveText(code);
+  await language.selectOption('plaintext'); await expect(body.locator('pre span[class*="hljs-"]')).toHaveCount(0);
+  await language.selectOption('java'); await expect(body.locator('.hljs-keyword').first()).toBeVisible();
+  await expect(body.locator('pre code')).toHaveCSS('font-weight', '400');
+  await page.screenshot({ path: info.outputPath('white-editor-code-highlight.png'), fullPage: true });
+  await page.getByRole('button', { name: '保存修改' }).click(); await expect(page.getByRole('dialog', { name: '保存成功' })).toBeVisible();
+  expect(saved.content.doc.content[0]).toEqual({ type: 'codeBlock', attrs: { language: 'java' }, content: [{ type: 'text', text: code }] });
+  expect(JSON.stringify(saved)).not.toMatch(/hljs-|className/);
+});
+
+test('未知代码语言原样保存，自动识别不回写语言，显示操作不触发离开确认', async ({ page }) => {
+  await setup(page, { type: 'doc', content: [{ type: 'codeBlock', attrs: { language: 'future_lang' }, content: [{ type: 'text', text: 'public class Demo { int value = 123; }' }] }] });
+  let saved: any; await page.route('**/api/articles', (route) => { saved = route.request().postDataJSON(); return route.fulfill({ json: { articleId: '12' } }); });
+  await page.route('**/api/articles/feed?**', (route) => route.fulfill({ json: { items: [], nextCursor: null } }));
+  await page.goto('/articles/12/edit'); const body = page.getByRole('textbox', { name: '文章正文' }); await body.locator('pre').click();
+  const language = page.getByRole('combobox', { name: '代码语言' }); await expect(language).toHaveValue('future_lang'); await expect(body.locator('pre span[class*="hljs-"]')).toHaveCount(0);
+  await page.getByRole('button', { name: '保存修改' }).click(); await expect(page.getByRole('dialog', { name: '保存成功' })).toBeVisible(); expect(saved.content.doc.content[0].attrs.language).toBe('future_lang');
+  await page.getByRole('button', { name: '继续编辑', exact: true }).click(); await body.locator('pre').click(); await language.selectOption('');
+  await expect(body.locator('pre span[class*="hljs-"]').first()).toBeVisible();
+  await page.getByRole('button', { name: '保存修改' }).click(); await expect(page.getByRole('dialog', { name: '保存成功' })).toBeVisible(); expect(saved.content.doc.content[0]).not.toHaveProperty('attrs');
+  await page.getByRole('button', { name: '继续编辑', exact: true }).click();
+  await body.click(); await body.press('ArrowLeft'); await page.getByRole('button', { name: '链接', exact: true }).click(); await page.keyboard.press('Escape');
+  await page.getByRole('link', { name: '返回首页' }).click(); await expect(page).toHaveURL('http://127.0.0.1:5175/'); await expect(page.getByRole('dialog')).toHaveCount(0);
 });

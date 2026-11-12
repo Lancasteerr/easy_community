@@ -1,8 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Editor } from '@tiptap/react';
 import { useAuth } from '../auth/AuthContext';
-import { ArticleBodyEditor } from './ArticleBodyEditor';
 import { CoverUpload } from './CoverUpload';
 import { TagSelector } from './TagSelector';
 import { ImageUploadTasks } from './ImageUploadTasks';
@@ -17,6 +16,9 @@ import { useEditorRecovery } from './useEditorRecovery';
 import { clearRecovery } from './recovery';
 import { EditorDialog } from './EditorDialog';
 
+// 正文语法与高亮按需加载，文章外层表单及其他路由不承担完整编辑依赖。
+const ArticleBodyEditor = lazy(() => import('./ArticleBodyEditor').then((module) => ({ default: module.ArticleBodyEditor })));
+
 /** 表单、上传与保存的编排入口，文档协议和请求生命周期由专用模块负责。 */
 export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; ownerId: string }) {
   const auth = useAuth();
@@ -29,10 +31,11 @@ export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; o
     if (!document.articleId) { allowNavigation.current(); navigate(`/articles/${id}/edit`, { replace: true }); }
   }, auth.expireSession);
   const editor = useRef<Editor | null>(null);
+  const [readyBodyKey, setReadyBodyKey] = useState<number | null>(null);
   const [coverBlocked, setCoverBlocked] = useState(false);
   const disabled = auth.status !== 'authenticated' || auth.user?.userId !== ownerId || auth.refreshing || !!auth.error || save.busy;
   const uploads = useBodyImages(editor, disabled, auth.expireSession);
-  const blocked = disabled || coverBlocked || uploads.blocked;
+  const blocked = disabled || coverBlocked || uploads.blocked || readyBodyKey !== document.bodyKey;
   const guard = useEditorLeaveGuard(document.dirty || coverBlocked || uploads.blocked, save.busy);
   allowNavigation.current = guard.allowNextNavigation;
   const recovery = useEditorRecovery({ ownerId, articleId: document.state === 'loading' ? routeId : document.articleId, ready: document.state === 'ready', form, baseline: document.baseline,
@@ -61,11 +64,13 @@ export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; o
         onChange={(event) => { const next = { ...form, title: event.target.value }; setForm(next); if (save.errors.title) save.setErrors({ ...save.errors, title: validateForm(next).title }); }} />
         </div><div className="article-title-feedback"><span id="article-title-error" className="editor-error" role={save.errors.title ? 'alert' : undefined}>{save.errors.title}</span>
           <span>{codePoints(form.title)}/100</span></div></div>
+      <Suspense fallback={<div className="editor-body-loading" role="status">正在加载正文编辑器…</div>}>
       <ArticleBodyEditor key={document.bodyKey} initialDoc={form.content.doc} disabled={disabled} error={save.errors.content} onFiles={uploads.add}
-        onReady={(instance) => { editor.current = instance; }} onChange={(doc) => {
+        onReady={(instance) => { editor.current = instance; setReadyBodyKey(document.bodyKey); }} onChange={(doc) => {
           setForm((current) => ({ ...current, content: { schemaVersion: 1, doc } }));
           if (save.errors.content) save.setErrors({ ...save.errors, content: validateForm({ ...form, content: { schemaVersion: 1, doc } }).content });
         }} />
+      </Suspense>
       {save.errors.content && <p className="editor-error" role="alert">{save.errors.content}</p>}
       <ImageUploadTasks uploads={uploads} disabled={disabled} />
       <section className="article-settings" aria-label="发布设置"><h2>发布设置</h2>
