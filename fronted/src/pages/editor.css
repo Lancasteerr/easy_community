@@ -1,7 +1,7 @@
 /* 白色写作卡片与社区暗色外壳独立，编辑页样式不覆盖共享顶栏。 */
 .article-editor-page { position: relative; isolation: isolate; min-width: 1440px; min-height: 100dvh; padding: 34px 0 48px; }
 .article-editor-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: #171719 url('../assets/home-background.png') center / cover no-repeat; }
-.article-editor-panel { --editor-ink: #24292f; --editor-muted: #68717d; --editor-line: #e2e6eb; --editor-blue: #1667be; width: 1227px; margin: 59px auto 0; padding: 40px 0; border-radius: 12px; background: #fff; color: var(--editor-ink); color-scheme: light; }
+.article-editor-panel { --editor-ink: #24292f; --editor-muted: #68717d; --editor-line: #e2e6eb; --editor-accent: #9bceff; --editor-blue: #245d93; width: 1227px; margin: 59px auto 0; padding: 40px 0; border-radius: 12px; background: #fff; color: var(--editor-ink); color-scheme: light; }
 .article-editor-inner { width: 920px; margin: 0 auto; }
 .article-editor-heading { display: flex; align-items: center; justify-content: space-between; height: 32px; margin-bottom: 24px; }
 .article-editor-heading h1, .editor-read-state h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; }
@@ -11,19 +11,26 @@
 .article-editor-panel button:hover:not(:disabled) { border-color: #b4cdec; background: #f2f7fd; color: var(--editor-blue); }
 .article-editor-panel button:disabled { opacity: .45; cursor: not-allowed; }
 .article-editor-panel :is(input, select) { border: 1px solid #d5dbe2; background: #fff; color: var(--editor-ink); border-radius: 6px; padding: 9px 12px; }
-.article-editor-panel :is(button, input, textarea, select, a):focus-visible { outline: 2px solid var(--editor-blue); outline-offset: 2px; }
+.article-editor-panel :is(button, input, textarea, select, a):focus-visible { outline: 2px solid var(--editor-accent); outline-offset: 2px; }
 .article-title-field { margin-bottom: 20px; }
 .article-title { min-height: 52px; border: 1px solid var(--editor-line); border-radius: 8px; background: #fff; padding: 11px 16px; }
 .article-title:hover { border-color: #b8c2ce; }
-.article-title:focus-within { border-color: var(--editor-blue); box-shadow: 0 0 0 2px #1667be12; }
+.article-title:focus-within { border-color: var(--editor-accent); box-shadow: 0 0 0 2px #9bceff26; }
 .article-title textarea { display: block; width: 100%; padding: 0; border: 0; resize: none; overflow: hidden; color: var(--editor-ink); background: transparent; font-size: 20px; font-weight: 500; line-height: 28px; outline: none !important; }
 .article-title textarea::placeholder { color: #8b929c; }
 .article-title-feedback { display: flex; justify-content: space-between; gap: 12px; min-height: 18px; padding: 4px 2px 0; font-size: 12px; line-height: 18px; color: var(--editor-muted); }
 .article-body { border: 1px solid var(--editor-line); border-radius: 10px; background: #fff; }
 .article-body:focus-within { border-color: #a8c6e9; }
-.editor-toolbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 10px; border-bottom: 1px solid var(--editor-line); border-radius: 9px 9px 0 0; background: #fff; }
-.editor-toolbar button, .editor-toolbar select { font-size: 13px; padding: 6px 8px; border-color: transparent; }
-.editor-toolbar button[aria-pressed=true] { color: var(--editor-blue); background: #eaf3ff; border-color: #bed7f6; }
+.editor-toolbar { position: sticky; top: 16px; z-index: 20; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; padding: 10px 12px; border-bottom: 1px solid var(--editor-line); border-radius: 9px 9px 0 0; background: #fffffffA; box-shadow: 0 5px 14px #24292f06; overflow-x: auto; scrollbar-width: thin; }
+.editor-toolbar-group { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 3px; padding-right: 6px; border-right: 1px solid var(--editor-line); }
+.editor-toolbar-group:last-child { border-right: 0; padding-right: 0; }
+.editor-toolbar button, .editor-toolbar select { height: 32px; min-width: 32px; font-size: 14px; padding: 0 7px; border-color: transparent; white-space: nowrap; }
+.editor-toolbar select { min-width: 88px; background: #fff; border-color: var(--editor-line); }
+.editor-toolbar b, .editor-toolbar i, .editor-toolbar u, .editor-toolbar s { font-family: Arial, sans-serif; font-size: 15px; }
+.editor-toolbar .editor-code-language { width: 116px; height: 32px; font-size: 12px; padding: 0 6px; }
+.editor-list-start { display: flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--editor-muted); font-size: 12px; }
+.editor-toolbar .editor-list-start input { width: 68px; height: 32px; padding: 0 5px; font-size: 12px; }
+.editor-toolbar button[aria-pressed=true] { color: var(--editor-blue); background: #9bceff33; border-color: var(--editor-accent); }
 /* 正文节点均显式排版，避免浏览器默认标题和段落间距主导写作体验。 */
 .article-body .tiptap { min-height: 480px; padding: 30px 24px; outline: none; font-size: 16px; line-height: 1.7; overflow-wrap: anywhere; color: var(--editor-ink); }
 .article-body .tiptap > :first-child { margin-top: 0; }
@@ -42,7 +49,7 @@
 .article-body .tiptap li > :is(ul, ol) { margin-bottom: 6px; }
 .article-body .tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #8b929c; float: left; height: 0; pointer-events: none; }
 .article-body .tiptap img { max-width: 100%; height: auto; border-radius: 6px; margin: 16px 0; }
-.article-body .tiptap .ProseMirror-selectednode { outline: 2px solid var(--editor-blue); outline-offset: 2px; }
+.article-body .tiptap .ProseMirror-selectednode { outline: 2px solid var(--editor-accent); outline-offset: 2px; }
 .article-body .tiptap blockquote { border-left: 3px solid #cbd5e1; margin: 16px 0; padding: 4px 0 4px 20px; color: #68717d; }
 .article-body .tiptap blockquote > :last-child { margin-bottom: 0; }
 .article-body .tiptap pre { margin: 16px 0; padding: 18px; border-radius: 6px; background: #111827; color: #d6deeb; overflow-x: auto; white-space: pre; font-size: 14px; line-height: 1.6; }
@@ -50,16 +57,23 @@
 .article-body .tiptap :not(pre) > code { padding: 2px 5px; background: #eff1f4; border-radius: 4px; color: #334155; font-size: .875em; }
 .article-body .tiptap a { color: var(--editor-blue); text-decoration: underline; text-underline-offset: 3px; }
 .article-body .tiptap hr { border: 0; border-top: 1px solid var(--editor-line); margin: 24px 0; }
-.editor-inline-field, .editor-attributes { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px; border-bottom: 1px solid var(--editor-line); font-size: 14px; }
-.editor-attributes label { display: flex; align-items: center; gap: 8px; }
-.editor-attributes input { width: 260px; }
+/* 原生 Popover 位于顶层，不受工具栏横向滚动和卡片边界裁切。 */
+.editor-popover { position: fixed; inset: auto; margin: 0; width: 340px; max-width: calc(100vw - 24px); padding: 18px; border: 1px solid var(--editor-line); border-radius: 10px; background: #fff; color: var(--editor-ink); box-shadow: 0 12px 36px #1f293726; font-size: 14px; }
+.editor-popover h2 { font-size: 15px; margin: 0 0 14px; line-height: 22px; font-weight: 600; }
+.editor-popover label { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; color: var(--editor-muted); }
+.editor-popover input { width: 100%; font-size: 14px; }
+.editor-popover .editor-error { min-height: 22px; margin: 6px 0; }
+.editor-popover-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.editor-popover-actions button { padding: 7px 10px; font-size: 13px; }
+.editor-popover-actions .editor-primary { min-width: 56px; min-height: 34px; }
 .editor-error { color: #bf3535; font-size: 13px; line-height: 22px; }
 .has-error { border-color: #cc5757 !important; }
 .article-settings { border-top: 1px solid var(--editor-line); margin-top: 32px; padding-top: 24px; }
 .article-settings h2 { font-size: 18px; line-height: 26px; margin: 0 0 24px; font-weight: 600; }
 .article-submit-row { display: flex; justify-content: flex-end; margin-top: 32px; }
-.article-editor-panel .editor-primary { background: var(--editor-blue); border-color: var(--editor-blue); color: #fff; min-width: 128px; min-height: 44px; }
-.article-editor-panel .editor-primary:hover:not(:disabled) { background: #11569f; border-color: #11569f; color: #fff; }
+/* 主按钮严格使用社区主题色；深色文字确保浅蓝背景上的可读性。 */
+.article-editor-panel .editor-primary { background: var(--editor-accent); border-color: var(--editor-accent); color: #142333; min-width: 128px; min-height: 44px; }
+.article-editor-panel .editor-primary:hover:not(:disabled) { background: #b9ddff; border-color: #b9ddff; color: #142333; }
 .editor-read-state { width: 920px; margin: 0 auto; min-height: 480px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
 .editor-read-state p { color: var(--editor-muted); margin: 0; }
 /* 封面和标签沿用现有交互，仅调整为白色卡片中的浅色控件。 */
@@ -77,10 +91,10 @@
 .editor-tag-field > input { width: 100%; height: 44px; font-size: 14px; }
 .editor-tag-results { position: absolute; top: 82px; width: 100%; z-index: 3; max-height: 260px; overflow-y: auto; padding: 8px; background: #fff; border: 1px solid var(--editor-line); border-radius: 8px; box-shadow: 0 10px 28px #1f29371a; }
 .editor-tag-results > button { display: block; width: 100%; text-align: left; border: 0; }
-.editor-tag-results > button.is-active { background: #eaf3ff; color: var(--editor-blue); }
+.editor-tag-results > button.is-active { background: #9bceff33; color: var(--editor-blue); }
 .editor-tag-results p { margin: 8px; font-size: 14px; }
 .editor-selected-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.editor-selected-tags > span { display: inline-flex; align-items: center; gap: 10px; padding: 4px 10px; border: 1px solid #bed7f6; border-radius: 6px; color: var(--editor-blue); background: #eaf3ff; font-size: 14px; }
+.editor-selected-tags > span { display: inline-flex; align-items: center; gap: 10px; padding: 4px 10px; border: 1px solid var(--editor-accent); border-radius: 6px; color: var(--editor-blue); background: #9bceff33; font-size: 14px; }
 .editor-selected-tags button { border: 0; padding: 0; color: inherit; background: none; line-height: 22px; }
 .editor-field-hint { color: var(--editor-muted); font-size: 14px; margin: 12px 0 0; line-height: 22px; }
 .editor-upload-task { display: flex; align-items: center; gap: 12px; padding: 12px 0; font-size: 13px; }
