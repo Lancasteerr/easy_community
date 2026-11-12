@@ -126,9 +126,14 @@ class ArticleHttpIntegrationTests {
         assertEquals(400, owner.call("GET", "/api/tags?q=x&limit=21", null, false).statusCode());
         var command = save(null, "tagged"); command.put("tagIds", List.of(tag));
         String id = mapper.readTree(owner.call("POST", "/api/articles", command, true).body()).path("articleId").asString();
-        assertEquals(200, visitor.call("GET", "/api/articles/" + id, null, false).statusCode());
+        // 冷、热内容缓存均在最终响应读取实时统计，返回值不包含各自本次PV。
+        var cold = visitor.call("GET", "/api/articles/" + id, null, false);
+        assertEquals(200, cold.statusCode(), cold.body());
+        assertEquals(0, mapper.readTree(cold.body()).get("viewCount").asLong());
         clearInvocations(reader);
         var warm = visitor.call("GET", "/api/articles/" + id, null, false);
+        assertEquals(200, warm.statusCode(), warm.body());
+        assertEquals(1, mapper.readTree(warm.body()).get("viewCount").asLong());
         assertEquals(tag, mapper.readTree(warm.body()).path("tags").get(0).path("tagId").asString());
         verifyNoInteractions(reader);
         var edit = owner.call("GET", "/api/articles/" + id + "/edit", null, false);

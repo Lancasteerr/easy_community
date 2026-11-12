@@ -7,7 +7,7 @@ import com.febrie.backend.article.content.application.dto.ArticleEditView;
 
 import com.febrie.backend.article.content.web.request.ArticleSaveRequest;
 import com.febrie.backend.article.content.web.response.ArticleSaveResponse;
-import com.febrie.backend.article.content.web.response.ArticleLikeAssembler;
+import com.febrie.backend.article.content.web.response.ArticleDetailResponseAssembler;
 import com.febrie.backend.article.view.application.ArticleViewService;
 import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.user.application.dto.UserActor;
@@ -27,11 +27,11 @@ public class ArticleController {
     private final ArticleService articles;
     private final ArticleQueryService queries;
     private final ObjectMapper mapper;
-    private final ArticleLikeAssembler likes;
+    private final ArticleDetailResponseAssembler responses;
     private final ArticleViewService views;
     public ArticleController(ArticleService articles, ArticleQueryService queries, ObjectMapper mapper,
-                             ArticleLikeAssembler likes, ArticleViewService views) {
-        this.articles = articles; this.queries = queries; this.mapper = mapper; this.likes=likes;
+                             ArticleDetailResponseAssembler responses, ArticleViewService views) {
+        this.articles = articles; this.queries = queries; this.mapper = mapper; this.responses = responses;
         this.views = views;
     }
     @PostMapping(value = "/api/articles", consumes = "application/json")
@@ -45,10 +45,10 @@ public class ArticleController {
         articles.hide(actor(principal), ArticleIds.parse(id));
     }
     @GetMapping("/api/articles/{id}")
-    public Object detail(@PathVariable String id, @AuthenticationPrincipal SessionPrincipal principal) {
+    public ArticleDetailResponseAssembler.Detail detail(@PathVariable String id, @AuthenticationPrincipal SessionPrincipal principal) {
         long articleId = ArticleIds.parse(id);
-        var response = likes.detail(queries.detail(articleId), principal == null ? null : principal.userId());
-        // 公开详情与点赞信息读取成功后记录一次PV；缓存命中同样计数。
+        var response = responses.detail(queries.detail(articleId), principal == null ? null : principal.userId());
+        // 先读统计并完成响应组装，再记录一次PV；响应阅读数不含本次加一，缓存命中同样计数。
         try {
             views.record(articleId);
         } catch (RuntimeException failure) {

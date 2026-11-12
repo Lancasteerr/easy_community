@@ -22,6 +22,10 @@
 
 所有响应 no-store，文章、作者和 Tag ID 为字符串。编辑权不因管理员/巡查员角色扩展。保存为完整替换；非法 ID 不回退新增，不存在不 UPSERT。
 
+公开详情响应在原文章字段旁平铺返回 `viewCount`（非空整数）、`likeCount` 和 `likedByMe`；游客 `likedByMe=false`。阅读数复用现有实时统计查询，Redis读取或初始化失败时回退SQL，SQL也无法提供基线则返回503 DEPENDENCY_UNAVAILABLE，不伪造为零。
+
+详情先取得内容、点赞信息和阅读数并完成响应组装，再尝试记录一次PV；返回的阅读数不包含本次新增PV，但可能包含并发访问产生的计数。内容冷缓存与热缓存均执行这一流程，统计字段不写入共享内容缓存。内容或统计读取失败不计数；组装成功后的计数异常仅记录日志，不重试结果未知的加一，仍返回已取得的详情。这里的PV表示后端成功取得详情，不保证用户实际读完。
+
 保存体字段仅限 articleId、title、content、coverMediaId、tagIds。除 articleId 外必须显式提交，coverMediaId=null 清除封面，tagIds=[] 清空标签数组。content={schemaVersion:1,doc:受限Tiptap文档}。摘要从正文生成，不接收 HTML、身份、状态、时间或独立摘要。
 
 标题1～100个Unicode码点，摘要合并空白后取前200码点；纯图片允许，空白正文拒绝。请求最多1MiB，深度32、节点10000、图片节点50、Tag5。Tag名去首尾空白，1～32码点，区分大小写唯一，不支持改名/删除/排序。
