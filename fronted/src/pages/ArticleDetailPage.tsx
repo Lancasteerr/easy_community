@@ -57,7 +57,6 @@ function DetailSession({ id }: { id: string | undefined }) {
 function ArticleReader({ article }: { article: ArticleDetailData }) {
   const root = useRef<HTMLElement>(null);
   const location = useLocation();
-  const auth = useAuth();
   const unavailable = useUnavailable();
   const content = useMemo(() => prepareContent(article.contentHtml), [article.contentHtml]);
   const toc = useArticleToc(root, content.entries);
@@ -71,7 +70,9 @@ function ArticleReader({ article }: { article: ArticleDetailData }) {
       <section className="detail-author glass-panel" aria-label="文章作者">
         <div className="detail-author-row"><button className="author-entry" aria-label={`查看作者 ${article.authorName}`} onClick={unavailable}>
           <Avatar src={article.authorAvatarUrl} size={60} /><span className="detail-author-name" title={article.authorName}>{article.authorName}</span>
-        </button>{auth.user?.userId !== article.authorId && <button className="follow-button" onClick={unavailable}>+ 关注</button>}</div>
+        </button>
+          {/* 作者卡片始终保留关注入口，目前仅提供未开放反馈。 */}
+          <button className="follow-button" onClick={unavailable}>+ 关注</button></div>
         <p>作者简介暂未开放</p>
       </section>
       <ArticleToc entries={content.entries} active={toc.active} onJump={(id) => { stopRestoring(); toc.jump(id); }} />
