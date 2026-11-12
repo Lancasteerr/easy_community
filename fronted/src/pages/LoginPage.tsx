@@ -6,16 +6,17 @@ import { useAuth } from '../auth/AuthContext';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { useCooldown } from '../hooks/useCooldown';
+import { loginDestination } from '../article/routes';
+import { readingReturnState } from '../navigation/readingReturn';
 
 /** 只做登录所必需的前端校验，凭证规范与认证结果由后端决定。 */
 export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  // 回跳仅接受本轮受保护路由，外部地址或任意路由状态均回到首页。
-  const target: unknown = location.state?.returnTo;
-  const destination = typeof target === 'string' && (target === '/manage/articles' || target === '/articles/new'
-    || /^\/articles\/[1-9]\d{0,18}\/edit$/.test(target)) ? target : '/';
+  // 回跳白名单包含公开详情；仅传回合法阅读位置，不重放登录前的点赞动作。
+  const destination = loginDestination(location.state?.returnTo);
+  const returnState = readingReturnState(destination, location.state?.readingPosition);
   const notify = useToast();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -65,7 +66,7 @@ export function LoginPage() {
       if (results.some((result) => result.status === 'rejected') || (results[1].status === 'fulfilled' && results[1].value?.error)) {
         notify('登录成功，部分资料暂时无法刷新');
       }
-      navigate(destination, { replace: true });
+      navigate(destination, { replace: true, state: returnState });
     } catch (error) {
       if (signal.aborted) return;
       if (error instanceof ApiError && error.status === 403) {
@@ -92,7 +93,7 @@ export function LoginPage() {
   }
 
   // 登录过程先更新全局身份，等待后续读取完成后再统一导航。
-  if (auth.status === 'authenticated' && !busy) return <Navigate to={destination} replace />;
+  if (auth.status === 'authenticated' && !busy) return <Navigate to={destination} state={returnState} replace />;
   const editField = () => { setInvalid(null); setMessage(''); };
   return <main className="login-page">
     <div className="login-decoration" aria-hidden="true" />

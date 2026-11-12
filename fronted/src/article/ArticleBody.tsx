@@ -9,9 +9,7 @@ export function ArticleBody({ content }: { content: PreparedContent }) {
     if (!element) return;
     let disposed = false;
     // 后端没有图片尺寸；加载失败替换为有文字的块，避免破图破坏阅读。
-    const fail = (event: Event) => {
-      const image = event.target;
-      if (!(image instanceof HTMLImageElement)) return;
+    const replaceFailedImage = (image: HTMLImageElement) => {
       const placeholder = document.createElement('span');
       placeholder.className = 'detail-image-failed';
       placeholder.setAttribute('role', 'img');
@@ -20,9 +18,14 @@ export function ArticleBody({ content }: { content: PreparedContent }) {
       if (image.dataset.readBlock) placeholder.dataset.readBlock = image.dataset.readBlock;
       image.replaceWith(placeholder);
     };
+    const fail = (event: Event) => {
+      if (event.target instanceof HTMLImageElement) replaceFailedImage(event.target);
+    };
     element.addEventListener('error', fail, true);
     // 捕捉在监听器建立前已经失败的缓存图片。
-    element.querySelectorAll('img').forEach((image) => { if (image.complete && image.naturalWidth === 0) fail({ target: image } as unknown as Event); });
+    element.querySelectorAll('img').forEach((image) => {
+      if (image.complete && image.naturalWidth === 0) replaceFailedImage(image);
+    });
     if (element.querySelector('pre code')) void import('./highlight').then((module) => {
       if (!disposed) module.highlightCode(element);
     }).catch(() => { /* 高亮资源失败仍保留完整纯文本正文。 */ });

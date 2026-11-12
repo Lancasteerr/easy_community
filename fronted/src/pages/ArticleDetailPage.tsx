@@ -7,14 +7,14 @@ import { useCooldown } from '../hooks/useCooldown';
 import { useAuth } from '../auth/AuthContext';
 import { Header } from '../components/Header';
 import { Avatar } from '../components/Avatar';
-import { Icon } from '../components/Icon';
 import { useToast, useUnavailable } from '../components/Toast';
 import { ArticleHero } from '../article/ArticleHero';
 import { ArticleBody } from '../article/ArticleBody';
 import { ArticleToc } from '../article/ArticleToc';
 import { prepareContent } from '../article/content';
 import { useArticleToc } from '../article/useArticleToc';
-import { useScrollMemory, type ReadingPosition } from '../navigation/useScrollMemory';
+import { capturePosition, useScrollMemory, type ReadingPosition } from '../navigation/useScrollMemory';
+import { ArticleActions } from '../article/ArticleActions';
 import './detail.css';
 
 /** 详情读取不依赖登录初始化，公开文章允许游客直接阅读。 */
@@ -32,7 +32,8 @@ function DetailSession({ id }: { id: string | undefined }) {
   useEffect(() => { document.title = `${detail.article?.title ?? '文章详情'} · Easy Community`; }, [detail.article?.title]);
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); }, []);
   const avatarClick = () => {
-    if (auth.status === 'guest') navigate('/login', { state: { returnTo: `/articles/${id}` } });
+    if (auth.status === 'guest') navigate('/login', { state: { returnTo: `/articles/${id}`,
+      readingPosition: capturePosition(document.querySelector<HTMLElement>('.detail-reader')) } });
     else if (auth.status === 'authenticated') notify('个人中心暂未开放');
     else { notify('正在确认登录状态，请稍后重试'); void auth.refresh(); }
   };
@@ -57,16 +58,12 @@ function ArticleReader({ article }: { article: ArticleDetailData }) {
   const root = useRef<HTMLElement>(null);
   const location = useLocation();
   const auth = useAuth();
-  const notify = useToast();
   const unavailable = useUnavailable();
   const content = useMemo(() => prepareContent(article.contentHtml), [article.contentHtml]);
   const toc = useArticleToc(root, content.entries);
-  useScrollMemory(root, `detail:${location.key}`, true, location.state?.readingPosition as ReadingPosition | undefined);
+  const stopRestoring = useScrollMemory(root, `detail:${location.key}`, true, location.state?.readingPosition as ReadingPosition | undefined);
   return <main className="detail-columns" aria-label="文章详情">
-    <aside className="detail-actions" aria-label="文章操作">
-      <div><button aria-label={`点赞 ${article.likeCount}`} aria-pressed={article.likedByMe} onClick={unavailable}><Icon name="like" size={24} /></button><span>{article.likeCount}</span></div>
-      <div><button aria-label="评论暂未开放" onClick={() => notify('评论暂未开放')}><Icon name="comment" size={24} /></button><span>—</span></div>
-    </aside>
+    <ArticleActions article={article} reader={root} />
     <section className="detail-reader" ref={root} tabIndex={0} aria-label="文章阅读区域">
       <article className="detail-flow"><ArticleHero article={article} /><ArticleBody content={content} /></article>
     </section>
@@ -77,7 +74,7 @@ function ArticleReader({ article }: { article: ArticleDetailData }) {
         </button>{auth.user?.userId !== article.authorId && <button className="follow-button" onClick={unavailable}>+ 关注</button>}</div>
         <p>作者简介暂未开放</p>
       </section>
-      <ArticleToc entries={content.entries} active={toc.active} onJump={toc.jump} />
+      <ArticleToc entries={content.entries} active={toc.active} onJump={(id) => { stopRestoring(); toc.jump(id); }} />
     </aside>
   </main>;
 }

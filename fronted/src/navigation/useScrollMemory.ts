@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type RefObject } from 'react';
+import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react';
 import { readSnapshot, saveSnapshot } from './snapshots';
 
 export interface ReadingPosition { top: number; anchor?: string; offset?: number }
@@ -17,6 +17,7 @@ export function capturePosition(root: HTMLElement | null): ReadingPosition {
 export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>, key: string,
   ready: boolean, initial?: ReadingPosition, owner?: string, revision = 0) {
   const previousRevision = useRef(revision);
+  const stopRestoring = useRef<() => void>(() => {});
   useLayoutEffect(() => {
     const element = root.current;
     if (!element || !ready) return;
@@ -34,6 +35,7 @@ export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>
     };
     const save = () => saveSnapshot(key, capturePosition(element), owner);
     const interact = () => { restoring = false; };
+    stopRestoring.current = interact;
     const onKey = (event: KeyboardEvent) => {
       if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) interact();
     };
@@ -58,4 +60,6 @@ export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>
       element.removeEventListener('keydown', onKey);
     };
   }, [root, key, ready, initial, owner, revision]);
+  // 目录位于阅读容器外，显式章节跳转也应终止返回页面时的自动校正。
+  return useCallback(() => stopRestoring.current(), []);
 }
