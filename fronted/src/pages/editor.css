@@ -68,3 +68,9 @@
 .editor-upload-task { display: flex; align-items: center; gap: 12px; padding: 12px 0; font-size: 13px; }
 .editor-upload-task > span:first-child { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor-upload-task > span:nth-child(2) { flex: 1; color: #b0b0ba; }
+/* 弹窗沿用编辑页配色，由浏览器原生模态层保证背景不可交互。 */
+.editor-dialog { width: 420px; max-width: calc(100vw - 48px); padding: 28px; border: 1px solid #44444e; border-radius: 12px; background: #2b2b30; color: #e8e8ed; }
+.editor-dialog::backdrop { background: #0009; }
+.editor-dialog h2 { margin: 0 0 16px; font-size: 20px; line-height: 28px; font-weight: 500; }
+.editor-dialog p { color: #bdbdc7; font-size: 14px; line-height: 24px; }
+.editor-dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
