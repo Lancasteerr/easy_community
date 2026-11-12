@@ -6,6 +6,7 @@ import FileHandler from '@tiptap/extension-file-handler';
 import { ArticleImage } from './extensions';
 import { EditorToolbar } from './EditorToolbar';
 import { validLink } from './model';
+import { UploadAnchors } from './uploadAnchors';
 
 /** 编辑器只维护文档；媒体任务由上层持有，重新渲染不会重复上传。 */
 export function ArticleBodyEditor({ initialDoc, disabled, error, onChange, onReady, onFiles }: {
@@ -17,7 +18,7 @@ export function ArticleBodyEditor({ initialDoc, disabled, error, onChange, onRea
   const input = useRef<HTMLInputElement>(null);
   const editor = useEditor({
     extensions: [StarterKit.configure({ trailingNode: false, link: { openOnClick: false, autolink: false,
-      isAllowedUri: (url) => validLink(url) } }), ArticleImage, Placeholder.configure({ placeholder: '请输入正文…' }),
+      isAllowedUri: (url) => validLink(url) } }), ArticleImage, UploadAnchors, Placeholder.configure({ placeholder: '请输入正文…' }),
       FileHandler.configure({ allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'], consumePasteEvent: true,
         onDrop: (instance, files, position) => { if (instance.isEditable) options.current.onFiles?.(files, position); },
         onPaste: (instance, files) => { if (instance.isEditable) options.current.onFiles?.(files, instance.state.selection.from); } })],

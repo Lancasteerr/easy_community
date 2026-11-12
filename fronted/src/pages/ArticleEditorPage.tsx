@@ -9,6 +9,10 @@ import { getArticleEdit } from '../api/articles';
 import { ArticleBodyEditor } from '../editor/ArticleBodyEditor';
 import { codePoints, emptyForm, type ArticleForm } from '../editor/model';
 import './editor.css';
+import { CoverUpload } from '../editor/CoverUpload';
+import { TagSelector } from '../editor/TagSelector';
+import { ImageUploadTasks } from '../editor/ImageUploadTasks';
+import { useBodyImages } from '../editor/useBodyImages';
 
 /** 路由身份变化时重新建立编辑会话，新建成功换地址则由会话自身保留内容。 */
 export function ArticleEditorPage() {
@@ -37,6 +41,9 @@ function ArticleEditorSession({ initialId }: { initialId?: string }) {
   const [state, setState] = useState<ReadState>(initialId ? 'loading' : 'ready');
   const [revision, setRevision] = useState(0);
   const editor = useRef<Editor | null>(null);
+  const [coverBlocked, setCoverBlocked] = useState(false);
+  const disabled = auth.refreshing || !!auth.error;
+  const uploads = useBodyImages(editor, disabled, auth.expireSession);
   const title = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     if (title.current) { title.current.style.height = 'auto'; title.current.style.height = `${Math.max(36, title.current.scrollHeight)}px`; }
@@ -62,9 +69,15 @@ function ArticleEditorSession({ initialId }: { initialId?: string }) {
     <form noValidate onSubmit={(event) => event.preventDefault()}>
       <div className="article-title"><textarea ref={title} aria-label="文章标题" value={form.title} rows={1} placeholder="请输入文章标题"
         onChange={(event) => setForm({ ...form, title: event.target.value })} /><span>{codePoints(form.title)}/100</span></div>
-      <ArticleBodyEditor initialDoc={form.content.doc} disabled={auth.refreshing || !!auth.error}
+      <ArticleBodyEditor initialDoc={form.content.doc} disabled={disabled} onFiles={uploads.add}
         onReady={(instance) => { editor.current = instance; }} onChange={(doc) => setForm((current) => ({ ...current, content: { schemaVersion: 1, doc } }))} />
-      <section className="article-settings" aria-label="发布设置"><h2>发布设置</h2></section>
+      <ImageUploadTasks uploads={uploads} disabled={disabled} />
+      <section className="article-settings" aria-label="发布设置"><h2>发布设置</h2>
+        <CoverUpload value={form.coverMediaId ? { mediaId: form.coverMediaId, publicUrl: form.coverUrl! } : null}
+          disabled={disabled} onBlocked={setCoverBlocked} onUnauthorized={auth.expireSession}
+          onChange={(value) => setForm((current) => ({ ...current, coverMediaId: value?.mediaId ?? null, coverUrl: value?.publicUrl ?? null }))} />
+        <TagSelector value={form.tags} disabled={disabled} onUnauthorized={auth.expireSession} onChange={(tags) => setForm((current) => ({ ...current, tags }))} />
+      </section>
       <div className="article-submit-row"><button className="editor-primary" disabled type="submit">{initialId ? '保存修改' : '发布文章'}</button></div>
     </form>
   </div>;
