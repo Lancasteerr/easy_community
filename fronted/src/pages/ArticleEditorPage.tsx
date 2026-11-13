@@ -19,10 +19,17 @@ export function ArticleEditorPage() {
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, []);
   if (auth.status === 'guest' && !owner.current) return <Navigate to="/login" replace state={{ returnTo: id ? `/articles/${id}/edit` : '/articles/new' }} />;
   return <div className="article-editor-page">
-    <Header hideSearch avatarUrl={auth.user?.avatarUrl} avatarLabel="个人中心" onAvatarClick={() => notify('个人中心暂未开放')} />
-    <main className="article-editor-panel">
-      {owner.current ? <ArticleEditorSession key={owner.current.userId} ownerId={owner.current.userId} routeId={id} />
-        : <EditorReadState state={auth.status === 'error' ? 'error' : 'loading'} onRetry={() => { void auth.refresh(); }} />}
-    </main>
+    {/* 横向浏览由外层承接，Header 不参与卡片内部的纵向滚动。 */}
+    <div className="article-editor-scroll">
+      <div className="article-editor-canvas">
+        <Header hideSearch avatarUrl={auth.user?.avatarUrl} avatarLabel="个人中心" onAvatarClick={() => notify('个人中心暂未开放')} />
+        <main className="article-editor-panel" tabIndex={0} aria-label="文章编辑滚动区域">
+          <div className="article-editor-content">
+            {owner.current ? <ArticleEditorSession key={owner.current.userId} ownerId={owner.current.userId} routeId={id} />
+              : <EditorReadState state={auth.status === 'error' ? 'error' : 'loading'} onRetry={() => { void auth.refresh(); }} />}
+          </div>
+        </main>
+      </div>
+    </div>
   </div>;
 }
