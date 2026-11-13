@@ -49,10 +49,10 @@ public class AccountRepository {
     public Optional<UserProfileSnapshot> profile(long userId, boolean lock) {
         UserEntity user = lock ? users.lockProfile(userId) : users.selectOne(Wrappers.<UserEntity>lambdaQuery()
                 .select(UserEntity::getId, UserEntity::getUsername, UserEntity::getRole,
-                        UserEntity::getStatus, UserEntity::getAuthVersion, UserEntity::getAvatarMediaId)
+                        UserEntity::getStatus, UserEntity::getAuthVersion, UserEntity::getAvatarMediaId, UserEntity::getBio)
                 .eq(UserEntity::getId, userId));
         return Optional.ofNullable(user).map(row -> new UserProfileSnapshot(row.getId(), row.getUsername(),
-                row.getRole(), row.getStatus(), row.getAuthVersion(), MediaIds.text(row.getAvatarMediaId())));
+                row.getRole(), row.getStatus(), row.getAuthVersion(), MediaIds.text(row.getAvatarMediaId()), row.getBio()));
     }
 
     public void updateAvatar(long userId, String mediaId) {

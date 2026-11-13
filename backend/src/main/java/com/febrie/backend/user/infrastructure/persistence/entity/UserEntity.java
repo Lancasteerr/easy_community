@@ -16,6 +16,8 @@ public class UserEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String username;
+    /** 公开展示简介，空字符串表示尚未填写。 */
+    private String bio;
     private Role role;
     private String status;
     private Long authVersion;

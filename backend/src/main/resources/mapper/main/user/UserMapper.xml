@@ -25,7 +25,7 @@
         FOR UPDATE
     </select>
     <select id="lockProfile" resultType="com.febrie.backend.user.infrastructure.persistence.entity.UserEntity">
-        SELECT id, username, role, status, auth_version, avatar_media_id
+        SELECT id, username, role, status, auth_version, avatar_media_id, bio
         FROM users WHERE id = #{userId}
         FOR UPDATE
     </select>
