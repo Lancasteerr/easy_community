@@ -19,15 +19,16 @@ export function ArticleEditorPage() {
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, []);
   if (auth.status === 'guest' && !owner.current) return <Navigate to="/login" replace state={{ returnTo: id ? `/articles/${id}/edit` : '/articles/new' }} />;
   return <div className="article-editor-page">
-    {/* 横向浏览由外层承接，Header 不参与卡片内部的纵向滚动。 */}
-    <div className="article-editor-scroll">
+    {/* 与文章详情页一致：整页共用滚动口，白色卡片由内容自然撑高。 */}
+    <div className="article-editor-scroll" tabIndex={0} role="region" aria-label="文章编辑滚动区域">
       <div className="article-editor-canvas">
-        <Header hideSearch avatarUrl={auth.user?.avatarUrl} avatarLabel="个人中心" onAvatarClick={() => notify('个人中心暂未开放')} />
-        <main className="article-editor-panel" tabIndex={0} aria-label="文章编辑滚动区域">
-          <div className="article-editor-content">
-            {owner.current ? <ArticleEditorSession key={owner.current.userId} ownerId={owner.current.userId} routeId={id} />
-              : <EditorReadState state={auth.status === 'error' ? 'error' : 'loading'} onRetry={() => { void auth.refresh(); }} />}
-          </div>
+        {/* 顶部背景随导航吸顶，遮挡从下方经过的编辑卡片。 */}
+        <div className="article-editor-top-frame">
+          <Header hideSearch avatarUrl={auth.user?.avatarUrl} avatarLabel="个人中心" onAvatarClick={() => notify('个人中心暂未开放')} />
+        </div>
+        <main className="article-editor-panel" aria-label="文章编辑区域">
+          {owner.current ? <ArticleEditorSession key={owner.current.userId} ownerId={owner.current.userId} routeId={id} />
+            : <EditorReadState state={auth.status === 'error' ? 'error' : 'loading'} onRetry={() => { void auth.refresh(); }} />}
         </main>
       </div>
     </div>

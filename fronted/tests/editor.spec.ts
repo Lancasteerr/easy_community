@@ -124,13 +124,24 @@ test('长文自然增高，标题和标签换行，标准桌面几何与底部�
   await page.route('**/api/articles/12/edit', (route) => route.fulfill({ json: { ...edit, title: '记录创作中的灵感与日常'.repeat(8), tags: Array.from({ length: 5 }, (_, index) => ({ tagId: String(index + 1), name: '社区功能体验与长期记录建议' + index })),
     content: { schemaVersion: 1, doc: { type: 'doc', content: Array.from({ length: 35 }, (_, index) => ({ type: 'paragraph', content: [{ type: 'text', text: `第${index + 1}段：让每一次分享都留下值得回看的痕迹。` }] })) } } } }));
   await page.goto('/articles/12/edit'); await page.evaluate(() => document.fonts.ready);
-  const card = page.getByRole('main', { name: '文章编辑滚动区域' });
+  const card = page.getByRole('main', { name: '文章编辑区域' });
+  const scroll = page.getByRole('region', { name: '文章编辑滚动区域' });
+  const body = page.getByRole('textbox', { name: '文章正文' });
+  await expect(body).toBeVisible();
   expect(await card.boundingBox()).toMatchObject({ x: 106.5, y: 167, width: 1227 });
   expect((await page.locator('.article-editor-inner').boundingBox())?.width).toBe(920);
+  // 外侧大卡片也要随继续输入而增高，不能仅让正文或卡片内部溢出。
+  const originalHeight = (await card.boundingBox())!.height;
+  expect(originalHeight).toBeGreaterThan(1024);
+  await body.press('ControlOrMeta+End'); await body.press('Enter');
+  await page.keyboard.insertText('继续补充文章内容。');
+  await expect.poll(async () => (await card.boundingBox())!.height).toBeGreaterThan(originalHeight);
   const before = await page.locator('.home-header').boundingBox();
   await page.getByRole('button', { name: '保存修改' }).scrollIntoViewIfNeeded();
   expect(await page.locator('.home-header').boundingBox()).toEqual(before);
-  expect(await card.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await card.evaluate((element) => element.scrollTop)).toBe(0);
+  expect(await card.evaluate((element) => element.scrollHeight <= element.clientHeight + 2)).toBe(true);
   expect(await page.evaluate(() => scrollY)).toBe(0);
   expect(await page.locator('.tiptap').evaluate((element) => element.scrollHeight <= element.clientHeight + 2)).toBe(true);
   await page.screenshot({ path: info.outputPath('editor-long-bottom.png') });
@@ -193,13 +204,17 @@ test('短视口外层布局不压缩，空白页面视觉截图', async ({ page 
   expect(await page.locator('.publish-entry').boundingBox()).toMatchObject({ width: 40, height: 40 });
   expect((await page.locator('.tiptap').boundingBox())!.height).toBeGreaterThanOrEqual(480);
   await page.screenshot({ path: info.outputPath('editor-empty-short.png'), fullPage: true });
-  const card = page.getByRole('main', { name: '文章编辑滚动区域' });
-  await card.focus(); await expect(card).toHaveCSS('outline-style', 'solid');
-  await card.press('PageDown');
-  await expect.poll(() => card.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-  // 窄屏横向滚动只移动画布，顶栏与卡片保持同列，浏览器页面不产生滚动。
+  const card = page.getByRole('main', { name: '文章编辑区域' });
+  const scroll = page.getByRole('region', { name: '文章编辑滚动区域' });
+  await scroll.focus(); await expect(scroll).toHaveCSS('outline-style', 'solid');
+  await scroll.press('PageDown');
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  // 窄屏由同一个视口滚动口横移画布，顶栏与卡片始终保持同列。
   await page.setViewportSize({ width: 1280, height: 768 });
-  await page.locator('.article-editor-scroll').evaluate((element) => element.scrollTo({ left: 160, behavior: 'instant' }));
+  // 等待键盘滚动回到顶部，避免 PageDown 的原生动画干扰横向坐标检查。
+  await scroll.press('Home');
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBe(0);
+  await scroll.evaluate((element) => element.scrollTo({ left: 160, behavior: 'instant' }));
   expect(await page.locator('.home-header').boundingBox()).toMatchObject({ x: -53.5, y: 34, width: 1227, height: 90 });
   expect(await card.boundingBox()).toMatchObject({ x: -53.5, y: 167, width: 1227 });
   expect(await page.evaluate(() => ({ x: scrollX, y: scrollY, width: document.documentElement.scrollWidth,

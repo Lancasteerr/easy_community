@@ -1,13 +1,12 @@
 /* 白色写作卡片与社区暗色外壳独立，编辑页样式不覆盖共享顶栏。 */
-.article-editor-page { position: relative; isolation: isolate; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
-.article-editor-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: #171719 url('../assets/home-background.png') center / cover no-repeat; }
-/* 窄屏只横移整幅画布，纵向空间始终交给白色卡片，保留顶栏和底部留白。 */
-.article-editor-scroll { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; }
-.article-editor-canvas { display: flex; flex-direction: column; min-width: 1440px; height: 100%; padding: 34px 0 48px; }
-.article-editor-panel { --editor-ink: #24292f; --editor-muted: #68717d; --editor-line: #e2e6eb; --editor-accent: #9bceff; --editor-blue: #245d93; flex: 1; min-height: 0; width: 1227px; margin: 43px auto 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; border-radius: 12px; background: #fff; color: var(--editor-ink); color-scheme: light; font-weight: 500; }
-.article-editor-panel:focus-visible { outline: 2px solid var(--editor-accent); outline-offset: -2px; }
-/* 留白随内容滚走，不能放在滚动容器上，否则 sticky 会额外下移 40px。 */
-.article-editor-content { padding: 40px 0; }
+.article-editor-page { --editor-top-height: 167px; --editor-background: #171719 url('../assets/home-background.png') center / cover no-repeat fixed; position: relative; isolation: isolate; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.article-editor-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: var(--editor-background); }
+/* 纵横滚动均由整个视口承接，卡片和正文都不创建内部纵向滚动区。 */
+.article-editor-scroll { flex: 1; min-height: 0; overflow: auto; scroll-padding-top: var(--editor-top-height); overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #55555c transparent; }
+.article-editor-scroll:focus-visible { outline: 2px solid #9bceff; outline-offset: -2px; }
+.article-editor-canvas { min-width: 1440px; padding-bottom: 48px; }
+.article-editor-top-frame { position: sticky; top: 0; z-index: 30; height: var(--editor-top-height); padding-top: 34px; background: var(--editor-background); }
+.article-editor-panel { --editor-ink: #24292f; --editor-muted: #68717d; --editor-line: #e2e6eb; --editor-accent: #9bceff; --editor-blue: #245d93; width: 1227px; margin: 0 auto; padding: 40px 0; border-radius: 12px; background: #fff; color: var(--editor-ink); color-scheme: light; font-weight: 500; }
 .article-editor-inner { width: 920px; margin: 0 auto; }
 .article-editor-heading { display: flex; align-items: center; justify-content: space-between; height: 32px; margin-bottom: 24px; }
 .article-editor-heading h1, .editor-read-state h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 700; }
@@ -29,8 +28,8 @@
 .article-body { border: 1px solid var(--editor-line); border-radius: 10px; background: #fff; }
 .article-body:focus-within { border-color: #a8c6e9; }
 .editor-body-loading { min-height: 534px; padding: 30px 24px; border: 1px solid var(--editor-line); border-radius: 10px; color: var(--editor-muted); font-size: 14px; }
-/* 工具栏贴住卡片滚动口上沿；不透明背景遮挡经过的正文，吸顶范围仍由正文容器限定。 */
-.editor-toolbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; padding: 10px 12px; border-bottom: 1px solid var(--editor-line); border-radius: 9px 9px 0 0; background: #fff; box-shadow: 0 5px 14px #24292f06; overflow-x: auto; scrollbar-width: thin; }
+/* 工具栏紧贴顶部区域下沿，不另留空隙，吸顶范围仍由正文容器限定。 */
+.editor-toolbar { position: sticky; top: var(--editor-top-height); z-index: 20; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; padding: 10px 12px; border-bottom: 1px solid var(--editor-line); border-radius: 9px 9px 0 0; background: #fff; box-shadow: 0 5px 14px #24292f06; overflow-x: auto; scrollbar-width: thin; }
 .editor-toolbar-group { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 3px; padding-right: 6px; border-right: 1px solid var(--editor-line); }
 .editor-toolbar-group:last-child { border-right: 0; padding-right: 0; }
 .editor-toolbar button, .editor-toolbar select { height: 32px; min-width: 32px; font-size: 14px; padding: 0 7px; border-color: transparent; white-space: nowrap; }

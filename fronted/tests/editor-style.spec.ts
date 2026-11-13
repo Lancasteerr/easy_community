@@ -16,7 +16,8 @@ test('白色卡片覆盖表单与读取状态，暗色共享顶栏保持原尺�
   await expect(page.getByRole('textbox', { name: '文章正文' })).toHaveCSS('font-weight', '500');
   await expect(page.getByRole('button', { name: '代码块', exact: true })).toHaveCSS('font-weight', '600');
   expect(await page.locator('.home-header').boundingBox()).toMatchObject({ x: 106.5, y: 34, width: 1227, height: 90 });
-  expect(await page.getByRole('main', { name: '文章编辑滚动区域' }).boundingBox()).toMatchObject({ y: 167, width: 1227, height: 809 });
+  expect(await page.getByRole('region', { name: '文章编辑滚动区域' }).boundingBox()).toMatchObject({ x: 0, y: 0, width: 1440, height: 1024 });
+  expect(await page.getByRole('main', { name: '文章编辑区域' }).boundingBox()).toMatchObject({ y: 167, width: 1227 });
   expect(await page.locator('.publish-entry').boundingBox()).toMatchObject({ width: 40, height: 40 });
   expect((await page.locator('.article-editor-inner').boundingBox())?.width).toBe(920);
   await expect(page.getByRole('button', { name: '保存修改' })).toHaveCSS('background-color', 'rgb(155, 206, 255)');
@@ -45,17 +46,20 @@ test('工具栏单行分组，长文吸顶且受正文底部约束', async ({ pa
   const buttons = await toolbar.locator('button').all(); const bounds = await Promise.all(buttons.map((button) => button.boundingBox()));
   expect(new Set(bounds.map((box) => box!.y)).size).toBe(1);
   expect(await toolbar.getByRole('group').count()).toBe(6);
-  const card = page.getByRole('main', { name: '文章编辑滚动区域' });
+  const card = page.getByRole('main', { name: '文章编辑区域' });
+  const scroll = page.getByRole('region', { name: '文章编辑滚动区域' });
   const cardBounds = (await card.boundingBox())!;
-  // 只滚动卡片：顶栏与卡片边界不动，工具栏必须实际覆盖经过的正文。
-  await card.evaluate((element) => element.scrollTo({ top: 700, behavior: 'instant' }));
+  // 整张卡片从顶部遮挡层下方经过，工具栏停在内容可视区域上沿。
+  await scroll.evaluate((element) => element.scrollTo({ top: 700, behavior: 'instant' }));
   await expect.poll(async () => (await toolbar.boundingBox())!.y).toBe(cardBounds.y);
-  expect(await card.boundingBox()).toEqual(cardBounds);
+  expect(await card.boundingBox()).toMatchObject({ y: cardBounds.y - 700, height: cardBounds.height });
+  expect(await card.evaluate((element) => element.scrollTop)).toBe(0);
   expect((await page.locator('.home-header').boundingBox())!.y).toBe(34);
   expect(await page.evaluate(() => ({ x: scrollX, y: scrollY, height: document.documentElement.scrollHeight }))).toEqual({ x: 0, y: 0, height: 1024 });
   const toolbarBounds = (await toolbar.boundingBox())!;
   expect(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('.editor-toolbar'),
     { x: toolbarBounds.x + toolbarBounds.width / 2, y: toolbarBounds.y + 5 })).toBe(true);
+  expect(await page.evaluate(() => !!document.elementFromPoint(200, 150)?.closest('.article-editor-top-frame'))).toBe(true);
   await page.screenshot({ path: info.outputPath('white-editor-sticky-toolbar.png') });
   await page.setViewportSize({ width: 1440, height: 300 });
   await page.getByRole('button', { name: '保存修改' }).scrollIntoViewIfNeeded();
@@ -75,12 +79,12 @@ test('链接浮层不改变正文高度，取消和外部关闭不修改文档�
   const body = page.getByRole('textbox', { name: '文章正文' });
   // 只选择首段，再滚动至吸顶位置，验证浮层仍操作原选区。
   await body.locator('p').first().click(); await body.press('Home'); await body.press('Shift+End');
-  const card = page.getByRole('main', { name: '文章编辑滚动区域' });
-  await card.evaluate((element) => element.scrollTo({ top: 700, behavior: 'instant' }));
+  const scroll = page.getByRole('region', { name: '文章编辑滚动区域' });
+  await scroll.evaluate((element) => element.scrollTo({ top: 700, behavior: 'instant' }));
   const before = await body.boundingBox(); const link = page.getByRole('button', { name: '链接', exact: true }); await link.click();
   const popup = page.getByRole('dialog', { name: '编辑链接' }); await expect(popup).toBeVisible(); expect(await body.boundingBox()).toEqual(before);
-  // 卡片内部滚动同样触发已有定位监听，浮层跟随工具栏而不撑开正文。
-  await card.evaluate((element) => element.scrollTo({ top: 0, behavior: 'instant' }));
+  // 整页滚动继续触发已有定位监听，浮层跟随工具栏而不撑开正文。
+  await scroll.evaluate((element) => element.scrollTo({ top: 0, behavior: 'instant' }));
   await expect.poll(async () => (await popup.boundingBox())!.y).toBeCloseTo((await link.boundingBox())!.y + (await link.boundingBox())!.height + 8, 0);
   await page.getByLabel('链接地址').fill('https://cancel.example'); await page.keyboard.press('Escape'); await expect(link).toBeFocused(); await expect(body.locator('a')).toHaveCount(0);
   await link.click(); await page.getByLabel('链接地址').fill('https://outside.example'); await page.getByRole('heading', { name: '编辑文章', exact: true }).click(); await expect(popup).toHaveCount(0); await expect(body.locator('a')).toHaveCount(0);
