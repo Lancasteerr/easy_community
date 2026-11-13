@@ -246,7 +246,7 @@ test('首页短列表自动补页，通栏焦点支持键盘翻页', async ({ pa
   expect(await page.evaluate(() => scrollY)).toBe(0);
 });
 
-test('文章详情保持独立滚动，后退恢复首页通栏阅读位置和横向对齐', async ({ page }) => {
+test('文章详情使用通栏滚动，后退恢复首页通栏阅读位置和横向对齐', async ({ page }) => {
   await guest(page);
   await page.setViewportSize({ width: 1280, height: 844 });
   let reads = 0;
@@ -270,7 +270,7 @@ test('文章详情保持独立滚动，后退恢复首页通栏阅读位置和�
   const articleTop = (await secondArticle.boundingBox())!.y;
   await secondArticle.click();
   await expect(page).toHaveURL(/\/articles\/2$/);
-  const reader = page.getByRole('region', { name: '文章阅读区域' });
+  const reader = page.getByRole('region', { name: '文章详情滚动区域' });
   await expect(reader).toBeVisible();
   await reader.press('PageDown');
   await expect.poll(() => reader.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);

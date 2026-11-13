@@ -1,12 +1,16 @@
-/* 桌面阅读框架消化窗口剩余高度，正文自身不受固定高度或最大高度约束。 */
-.detail-page { position: relative; isolation: isolate; display: flex; flex-direction: column; min-width: 1440px; height: 100dvh; padding: 34px 0; }
-.detail-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: #171719 url('../assets/home-background.png') center / cover no-repeat; }
-.detail-columns { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: 888px 322px; grid-template-rows: minmax(0, 1fr); gap: 17px; width: 1227px; margin: 43px auto 0; }
-.detail-reader { min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; border: 1px solid rgb(255 255 255 / 10%); border-radius: 12px; background: #25282e; scrollbar-width: thin; scrollbar-color: #606369 transparent; }
-.detail-reader:focus-visible { outline: 2px solid #9bceff; outline-offset: -2px; }
+/* 与首页相同：一个视口滚动框承接纵横浏览，正文卡片自然增长。 */
+.detail-page { --detail-background: #171719 url('../assets/home-background.png') center / cover no-repeat fixed; position: relative; isolation: isolate; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.detail-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: var(--detail-background); }
+.detail-scroll { --detail-top-height: 167px; --detail-content-height: calc(var(--detail-viewport-height, 100dvh) - var(--detail-top-height) - 34px); flex: 1; min-height: 0; overflow: auto; scroll-padding-top: var(--detail-top-height); overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #55555c transparent; }
+.detail-scroll:focus-visible { outline: 2px solid #9bceff; outline-offset: -2px; }
+.detail-scroll-canvas { min-width: 1440px; padding-bottom: 34px; }
+.detail-top-frame { position: sticky; top: 0; z-index: 10; height: 167px; padding-top: 34px; background: var(--detail-background); }
+.detail-columns { position: relative; display: grid; grid-template-columns: 888px 322px; align-items: start; gap: 17px; width: 1227px; min-height: var(--detail-content-height); margin: 0 auto; }
+/* clip 只裁切圆角，不创建会争抢正文滚动的内部滚动容器。 */
+.detail-reader { min-height: var(--detail-content-height); min-width: 0; overflow: clip; border: 1px solid rgb(255 255 255 / 10%); border-radius: 12px; background: #25282e; }
 .detail-flow { min-width: 0; }
-.detail-state { text-align: center; color: #aaa; }
-.detail-state > div:not(.feed-skeleton) { display: flex; min-height: 100%; flex-direction: column; align-items: center; justify-content: center; padding: 32px; }
+.detail-state { display: flex; flex-direction: column; text-align: center; color: #aaa; }
+.detail-state > div:not(.feed-skeleton) { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 32px; }
 .detail-state h1 { color: #eee; font-size: 22px; }
 .detail-state a { color: #9bceff; }
 .detail-state .feed-skeleton { text-align: left; }
@@ -51,15 +55,16 @@
 .detail-prose .hljs-comment, .detail-prose .hljs-quote { color: #8993a4; }
 .detail-prose .hljs-type, .detail-prose .hljs-params { color: #ffcb6b; }
 
-/* 左侧按钮相对桌面主体定位，窄屏横滚时仍与文章保持相同距离。 */
-.detail-actions { position: absolute; left: -72px; top: 156px; display: flex; flex-direction: column; gap: 16px; width: 48px; }
+/* 等高轨道让操作区在文章范围内吸顶，横滚时仍与文章保持相同距离。 */
+.detail-actions-track { position: absolute; left: -72px; top: 0; bottom: 0; width: 48px; padding-top: 156px; pointer-events: none; }
+.detail-actions { position: sticky; top: calc(var(--detail-top-height) + 156px); display: flex; flex-direction: column; gap: 16px; width: 48px; pointer-events: auto; }
 .detail-actions > div { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .detail-actions button { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid rgb(255 255 255 / 10%); border-radius: 50%; background: #292e35; color: #c4c8d0; }
 .detail-actions button:hover:not(:disabled) { color: #9bceff; background: #334352; }
 .detail-actions button[aria-pressed='true'] { color: #9bceff; background: #334352; border-color: rgb(155 206 255 / 45%); }
 .detail-actions button:disabled { opacity: .55; cursor: not-allowed; }
 .detail-actions > div > span { color: #989ba5; font-size: 12px; line-height: 18px; }
-.detail-sidebar { display: flex; flex-direction: column; gap: 17px; min-height: 0; }
+.detail-sidebar { position: sticky; top: var(--detail-top-height); display: flex; flex-direction: column; gap: 17px; min-height: 0; max-height: var(--detail-content-height); }
 .detail-author { flex: 0 0 auto; min-height: 119px; padding: 19px 18px 17px; }
 .detail-author-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 .detail-author-row .author-entry { flex: 1; gap: 8px; min-width: 0; }
@@ -79,4 +84,7 @@
 .detail-toc-list button[aria-current] { color: #9bceff; background: rgb(155 206 255 / 10%); }
 .detail-toc-list button[aria-current]::before { content: ''; position: absolute; left: 0; top: 8px; width: 3px; height: calc(100% - 16px); border-radius: 2px; background: #9bceff; }
 /* 较矮窗口仍可访问左侧操作，不让按钮超出窗口并产生页面纵向滚动。 */
-@media (max-height: 600px) { .detail-actions { top: 0; gap: 8px; } }
+@media (max-height: 600px) {
+  .detail-actions-track { padding-top: 0; }
+  .detail-actions { top: var(--detail-top-height); gap: 8px; }
+}

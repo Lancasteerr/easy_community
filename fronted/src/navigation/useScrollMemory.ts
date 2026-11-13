@@ -32,6 +32,7 @@ export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>
     const reset = previousRevision.current !== revision;
     previousRevision.current = revision;
     const position = reset ? { top: 0 } : readSnapshot<ReadingPosition>(key, owner) ?? initial ?? { top: 0 };
+    let lastPosition = position;
     let restoring = true;
     let disposed = false;
     const restore = () => {
@@ -43,8 +44,11 @@ export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>
       // 首页通栏同时承接横向浏览；旧快照或显式回顶不改变当前横向位置。
       if (position.left !== undefined) element.scrollLeft = position.left;
     };
-    const save = () => saveSnapshot(key, capturePosition(element, { contentRef, topInset }), owner);
-    const interact = () => { restoring = false; };
+    const save = () => {
+      lastPosition = capturePosition(element, { contentRef, topInset });
+      saveSnapshot(key, lastPosition, owner);
+    };
+    const interact = () => { restoring = false; save(); };
     stopRestoring.current = interact;
     const onKey = (event: KeyboardEvent) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) interact();
@@ -62,7 +66,8 @@ export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>
     element.addEventListener('keydown', onKey);
     void document.fonts?.ready.then(restore);
     return () => {
-      save(); disposed = true; observer?.disconnect();
+      // 祖先节点卸载后正文坐标可能已归零；保留最后有效采集，不能用卸载坐标覆盖锚点。
+      saveSnapshot(key, lastPosition, owner); disposed = true; observer?.disconnect();
       element.removeEventListener('load', restore, true);
       window.removeEventListener('resize', restore);
       element.removeEventListener('scroll', save);

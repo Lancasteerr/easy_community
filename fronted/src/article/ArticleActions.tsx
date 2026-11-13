@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { useCooldown } from '../hooks/useCooldown';
-import { capturePosition } from '../navigation/useScrollMemory';
+import { capturePosition, type ReadingGeometry } from '../navigation/useScrollMemory';
 import { useArticleLike } from './useArticleLike';
 
 /** 按设计稿向下截取一位小数，完整值始终保留在提示和无障碍名称中。 */
@@ -16,11 +16,13 @@ export function compactLikes(value: number) {
 }
 
 /** 左侧操作独立于正文；登录回跳只携带阅读位置，不携带待重放命令。 */
-export function ArticleActions({ article, reader }: { article: ArticleDetailData; reader: RefObject<HTMLElement | null> }) {
+export function ArticleActions({ article, reader, geometry }: {
+  article: ArticleDetailData; reader: RefObject<HTMLElement | null>; geometry?: ReadingGeometry;
+}) {
   const auth = useAuth();
   const navigate = useNavigate();
   const notify = useToast();
-  const login = () => navigate('/login', { state: { returnTo: `/articles/${article.articleId}`, readingPosition: capturePosition(reader.current) } });
+  const login = () => navigate('/login', { state: { returnTo: `/articles/${article.articleId}`, readingPosition: capturePosition(reader.current, geometry) } });
   const like = useArticleLike(article, { enabled: auth.status === 'authenticated' && !auth.refreshing && !auth.error,
     userId: auth.user?.userId, notify, onUnauthorized: () => { auth.expireSession(); login(); } });
   const seconds = useCooldown(like.retryAt);

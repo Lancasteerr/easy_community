@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { capturePosition, useScrollMemory } from './useScrollMemory';
+import { readSnapshot } from './snapshots';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -50,7 +51,11 @@ it('只采集正文可见块，恢复时扣除顶部遮挡并保留横向位置'
   const { unmount } = renderHook(() => useScrollMemory({ current: root }, 'visible-content', true, position, undefined, 0, geometry));
   expect(root.scrollTop).toBe(500);
   expect(root.scrollLeft).toBe(90);
+  root.dispatchEvent(new Event('scroll'));
+  // 模拟祖先卸载导致正文布局归零，清理阶段不能破坏最后有效的阅读锚点。
+  content.children[1].getBoundingClientRect = () => ({ top: 0, bottom: 0 }) as DOMRect;
   unmount();
+  expect(readSnapshot('visible-content')).toEqual(position);
 });
 
 it('找不到锚点时回退数值位置，键盘与滚轮操作均终止布局校正', () => {
