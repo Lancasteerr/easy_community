@@ -59,7 +59,7 @@ function ArticleReader({ article }: { article: ArticleDetailData }) {
   const location = useLocation();
   const unavailable = useUnavailable();
   const content = useMemo(() => prepareContent(article.contentHtml), [article.contentHtml]);
-  const toc = useArticleToc(root, content.entries);
+  const toc = useArticleToc(root, root, content.entries);
   const stopRestoring = useScrollMemory(root, `detail:${location.key}`, true, location.state?.readingPosition as ReadingPosition | undefined);
   return <main className="detail-columns" aria-label="文章详情">
     <ArticleActions article={article} reader={root} />

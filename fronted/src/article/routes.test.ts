@@ -17,3 +17,10 @@ it('仅向详情传回有限阅读位置，不向编辑页传递或接受非数�
   expect(readingReturnState('/articles/1', { top: -1 })).toBeUndefined();
   expect(readingReturnState('/articles/1/edit', { top: 200 })).toBeUndefined();
 });
+
+it('登录回跳保留有效横向位置，忽略负值及非有限值', () => {
+  expect(readingReturnState('/articles/1', { top: 200, left: 80 })).toEqual({ readingPosition: { top: 200, left: 80 } });
+  for (const left of [-1, Infinity, NaN, '80']) {
+    expect(readingReturnState('/articles/1', { top: 200, left })).toEqual({ readingPosition: { top: 200 } });
+  }
+});

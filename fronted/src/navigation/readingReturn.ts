@@ -7,5 +7,7 @@ export function readingReturnState(destination: string, value: unknown): { readi
   if (typeof position.top !== 'number' || !Number.isFinite(position.top) || position.top < 0) return;
   const validAnchor = typeof position.anchor === 'string' && /^\d+$/.test(position.anchor)
     && typeof position.offset === 'number' && Number.isFinite(position.offset);
-  return { readingPosition: { top: position.top, ...(validAnchor ? { anchor: position.anchor, offset: position.offset } : {}) } };
+  const validLeft = typeof position.left === 'number' && Number.isFinite(position.left) && position.left >= 0;
+  return { readingPosition: { top: position.top, ...(validLeft ? { left: position.left } : {}),
+    ...(validAnchor ? { anchor: position.anchor, offset: position.offset } : {}) } };
 }
