@@ -46,6 +46,20 @@ public class UserProfileService {
         });
     }
 
+    /** 文字资料和文件引用分开更新；只在锁内确认实际变化后登记缓存失效。 */
+    public UserProfileView editBio(UserActor actor, String bio) {
+        String normalized = UserProfilePolicy.bio(bio);
+        return transaction.execute(status -> {
+            var current = accounts.profile(actor.userId(), true).orElseThrow(ApiException::unauthorized);
+            requireActive(actor, current);
+            if (!normalized.equals(current.bio())) {
+                accounts.updateBio(actor.userId(), normalized);
+                cache.invalidateAfterCommit(actor.userId());
+            }
+            return view(current, current.avatarMediaId(), normalized);
+        });
+    }
+
     public void clearAvatar(UserActor actor) {
         transaction.executeWithoutResult(status -> {
             var current = accounts.profile(actor.userId(), true).orElseThrow(ApiException::unauthorized);
@@ -65,8 +79,12 @@ public class UserProfileService {
     }
 
     private UserProfileView view(UserProfileSnapshot profile, String mediaId) {
+        return view(profile, mediaId, profile.bio());
+    }
+
+    private UserProfileView view(UserProfileSnapshot profile, String mediaId, String bio) {
         return new UserProfileView(Long.toString(profile.id()), profile.username(), profile.role(), mediaId,
-                mediaId == null ? null : urls.publicUrl(mediaId), profile.bio());
+                mediaId == null ? null : urls.publicUrl(mediaId), bio);
     }
 
     private static void requireActive(UserActor actor, UserProfileSnapshot current) {

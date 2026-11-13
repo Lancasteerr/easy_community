@@ -55,6 +55,12 @@ public class AccountRepository {
                 row.getRole(), row.getStatus(), row.getAuthVersion(), MediaIds.text(row.getAvatarMediaId()), row.getBio()));
     }
 
+    /** 调用者持有用户行锁，只更新简介，避免覆盖并发提交的其他资料。 */
+    public void updateBio(long userId, String bio) {
+        users.update(null, Wrappers.<UserEntity>lambdaUpdate().eq(UserEntity::getId, userId)
+                .set(UserEntity::getBio, bio));
+    }
+
     public void updateAvatar(long userId, String mediaId) {
         // 显式 set 会写入 NULL，不能使用默认忽略空字段的 updateById。
         users.update(null, Wrappers.<UserEntity>lambdaUpdate().eq(UserEntity::getId, userId)
