@@ -16,7 +16,8 @@ public record MediaProperties(String provider, URI endpoint, URI uploadEndpoint,
             throw new IllegalArgumentException("必须配置有效的文件存储提供商、地域、桶、凭证与独立项目前缀");
         }
         validateUrl(endpoint, false);
-        validateUrl(uploadEndpoint, false);
+        // MinIO 开发上传允许 Vite 代理路径；COS 上传入口仍要求无路径。
+        validateUrl(uploadEndpoint, "minio".equals(provider));
         validateUrl(publicBaseUrl, true);
     }
 
