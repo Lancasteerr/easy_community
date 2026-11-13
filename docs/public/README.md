@@ -5,6 +5,7 @@
 | 功能 | 阅读入口 |
 |---|---|
 | 后端整体 | [中文架构](architecture/backend/zh-CN/backend-architecture.md) · [English architecture](architecture/backend/en-US/backend-architecture.md) |
+| 用户资料 | [简介、文字编辑与共享缓存](guides/user/zh-CN/user-profile.md) |
 | 文章 CRUD | [接入与缓存恢复](guides/article/zh-CN/article-crud-implementation.md) · [V2 设计](designs/article/zh-CN/article-crud-v2-design.md) |
 | 文章标签 | [JSON 存储、本地目录与版本校验](guides/article/zh-CN/article-tags.md) |
 | 搜索与推荐 | [接口、配置与索引维护](operations/search/zh-CN/article-search-operations.md) |

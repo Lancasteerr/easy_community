@@ -1,6 +1,6 @@
 # 文章与用户公开展示缓存
 
-本次只改后端。文章详情、推荐流、搜索与本人文章列表继续使用现有接口，增加可空的 `authorAvatarUrl`；前端展示适配留到下一阶段。用户名继续使用 `username`，没有新增昵称或公开用户主页接口。
+本次只改后端。文章详情、推荐流、搜索与本人文章列表继续使用现有接口，作者头像为可空的 `authorAvatarUrl`。用户名继续使用 `username`，没有新增昵称。用户本人资料与登录后查询指定用户资料共享展示缓存，文字资料编辑契约见[用户资料接口](../../docs/public/guides/user/zh-CN/user-profile.md)。
 
 ## 数据边界
 
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 文章详情 | `article:v4:{id}:detail` | 文章字段、作者ID、标签ID、封面媒体ID、正文HTML |
 | 文章简略 | `article:v4:{id}:list` | 文章字段、作者ID、标签ID、封面媒体ID，不含正文 |
-| 用户基础信息 | `user-basic:v1:{id}:data` | 用户ID、username、头像媒体ID |
+| 用户基础信息 | `user-basic:v2:{id}:data` | 用户ID、username、头像媒体ID、bio |
 
 文章缓存只保存标签ID，标签名称在释放文章锁后由本地目录批量组装；目录缺失时通过SQL版本判定是否同步。文章缓存不保存作者名字、作者头像或生成后的媒体URL；用户缓存不保存密码、角色、状态和认证版本。计数、本人点赞状态仅存在于最终响应。每篇文章一个简略投影，不缓存整页推荐、排序或游标。
 
@@ -20,7 +20,7 @@
 
 推荐流和搜索先通过ES取得候选ID，读取文章简略缓存并确定最终页面，再去重最终页面作者ID并批量读取用户缓存。详情读取自身投影后再加载作者和标签目录。业务层在全部缓存锁释放后生成URL、组装作者资料，之后由现有响应组装器补充计数及访问者状态。详情与简略投影独立回填。
 
-`/api/users/me`、会话鉴权及修改时的锁内校验保持主库直读，不使用公开展示缓存。用户缓存不能用于推导用户主页是否可见，主页权限属于下一阶段设计。
+`GET /api/users/me`、`GET /api/users/{userId}`与文章作者展示共享同一用户缓存、操作锁和回源名额；命中时不额外查询资料表。本人角色来自已校验的Session，缓存不保存角色。会话鉴权及修改时的锁内校验仍直读主库，缓存不能授予登录或编辑权限。资料接口要求登录，但目标用户停用或软删除仍可展示，不额外查询目标状态；只有物理不存在才返回404。
 
 一篇文章的详情、简略和隐藏墓碑共用文章操作锁；每个用户另有独立操作锁。锁以随机token加`SET NX`获取，租期5秒，不续租。所有变更及解锁都通过同槽Lua原子校验token。
 
@@ -39,7 +39,7 @@ Redis或SQL失败、竞争超时返回503，不绕过缓存保护直接冲击主
 数据库写事务不竞争缓存操作锁。用户业务入口在事务内登记回调，最外层事务真正提交后才获取用户锁并删除基础信息缓存；事务回滚不执行。内部头像解绑方法不提前删除缓存。
 
 - 创建用户、初始化管理员：删除可能存在的正缓存或负缓存。
-- 设置头像、清空头像、软删除账号：删除该用户缓存，不删除其文章缓存或更新ES。
+- 简介实际变化、设置头像、清空头像、软删除账号：删除该用户缓存，不删除其文章缓存或更新ES。简介未变化不写SQL，也不登记失效。
 - 改密、改角色：展示字段不变，不删除基础信息缓存，认证撤销机制保持原有实现。
 - 创建、修改文章：原有文章提交后维护在同一文章锁下删除详情和简略投影。
 - 隐藏文章：原有维护写永久隐藏墓碑及短期负缓存。
@@ -48,9 +48,13 @@ Redis或SQL失败、竞争超时返回503，不绕过缓存保护直接冲击主
 
 固定TTL与尽力删除同时存在，不增加延迟双删、可靠消息或后台无限重试。数据库提交与缓存删除之间、进程在提交后退出、缓存维护失败及已读取旧数据的在途请求，都可能暂时返回旧资料。TTL从回填时刻计算，不承诺提交后精确五分钟内全局更新。
 
+文字编辑和头像设置响应直接使用写事务中的最新资料，随后读取`/me`或指定用户仍可能短暂读到旧缓存。账号软删除会禁止登录及发布，保留简介与历史署名，同时解除头像引用并清空头像字段。缓存刷新后`avatarMediaId`、`avatarUrl`及文章的`authorAvatarUrl`均为空，由前端展示默认头像；原文件交由既有无引用媒体回收流程处理，不在账号删除事务中同步删除存储对象。
+
 ## 配置、指标和发布
 
-默认 `ARTICLE_CACHE_VERSION=v4`、`USER_BASIC_CACHE_VERSION=v1`。两个版本独立，不能复用旧文章缓存格式。
+默认 `ARTICLE_CACHE_VERSION=v4`、`USER_BASIC_CACHE_VERSION=v2`。两个版本独立；用户v2新增必需的bio，不能复用用户v1数据。若环境显式配置过`USER_BASIC_CACHE_VERSION=v1`，发布时必须改为v2或全新兼容版本。先执行V10数据库迁移，再启用新版用户命名空间，允许冷启动。切换期间停止旧实例，避免不同用户命名空间之间漏失效；回滚使用全新旧格式用户命名空间，保留新增数据库列。
+
+仅发布本次用户功能时沿用已有有效的文章命名空间与重建标记，无需重建文章缓存。下面步骤针对需要同时初始化或切换文章缓存的部署。
 
 指标 `community.cache.events` 只带固定标签：`cache=article|user_basic`、`outcome=hit|negative_hit|miss|source|source_rejected|contention_timeout|token_rejected|invalidation_failed`。`source`按SQL批次计数，命中按缓存读取项计数；同请求二次检查也计入读取。失败日志可带实体ID，指标标签禁止带ID。
 
@@ -68,7 +72,9 @@ Redis或SQL失败、竞争超时返回503，不绕过缓存保护直接冲击主
 沿用仓库的隔离环境脚本，可在仓库根目录执行：
 
 ```powershell
-./infra/test/run-search-tests.ps1 -Tests 'UserBasic*Tests,UserCache*Tests,ArticleDisplayAssemblerTests,ArticleListHydratorTests,ArticleQueryServiceTests,ArticleCacheIntegrationTests,ArticleMysqlIntegrationTests,ArticleHttpIntegrationTests,*Search*Tests'
+./infra/test/run-search-tests.ps1 -Tests 'User*Tests,BackendApplicationTests,ArticleDisplayAssemblerTests,ArticleListHydratorTests,ArticleQueryServiceTests,ArticleCacheIntegrationTests,ArticleMysqlIntegrationTests,ArticleHttpIntegrationTests'
 ```
 
 MySQL专项新增头像更新不改文章缓存、最外层回滚不失效、删除失败后的TTL收敛、软删除保留署名、创建清除负缓存等验证。测试库必须是专用测试库，不能使用业务数据库。
+
+`UserProfileHttpIntegrationTests`验证严格文字编辑、Session/CSRF、资料共享回源、禁用与软删除账号可展示、删除头像并撤销会话、并发局部更新及缓存/主库故障返回503。

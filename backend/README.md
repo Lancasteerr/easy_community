@@ -135,12 +135,18 @@ if (login.ok) csrf = await fetch('/api/auth/csrf').then(r => r.json());
 | GET `/api/auth/csrf` | 返回token、headerName；禁止缓存 | 匿名可访问 |
 | POST `/api/auth/login` | `{username,password}` → `{userId,username,role}` | 匿名可访问，需CSRF |
 | POST `/api/auth/logout` | 无请求体，204 | 已登录，需CSRF |
-| GET `/api/users/me` | `{userId,username,role}` | 已登录 |
+| GET `/api/users/me` | `{userId,username,role,avatarMediaId,avatarUrl,bio}`，资料读取共享展示缓存 | 已登录 |
+| GET `/api/users/{userId}` | `{userId,username,bio,avatarMediaId,avatarUrl}`，停用及软删除目标可展示 | 已登录 |
+| PATCH `/api/users/edit` | `{bio}`，返回更新后的本人资料；仅支持文字资料 | 已登录，需CSRF |
+| PUT `/api/users/me/avatar` | `{mediaId}`，返回更新后的本人资料 | 已登录，需CSRF |
+| DELETE `/api/users/me/avatar` | 无请求体，204 | 已登录，需CSRF |
 | PUT `/api/users/me/password` | `{oldPassword,newPassword}`，204，全部设备失效 | 已登录，需CSRF |
 | POST `/api/admin/users` | `{username,password,role?}`，201返回用户信息 | ADMIN，需CSRF |
 | DELETE `/api/admin/users/{userId}` | 逻辑删除，204，重复删除仍204 | ADMIN，需CSRF |
 
 ADMIN只允许创建/删除USER和PATROLLER；role省略默认USER，不能通过该接口创建或删除ADMIN。
+
+简介最多50个Unicode码点，文字编辑、缓存一致性和发布步骤见[用户资料接口](../docs/public/guides/user/zh-CN/user-profile.md)。账号软删除保留简介及历史署名，同时解除头像关联并清空头像；缓存更新后由前端展示默认头像，原文件按无引用媒体机制回收，不同步删除存储对象。
 PATROLLER目前没有用户管理权限，巡查权限留待内容模块。每用户单角色，不提供修改角色的HTTP接口。
 用户名去首尾空白、保留大小写，必须匹配 `[A-Za-z0-9_]{4,32}`，创建后不可修改；创建判重和登录均区分大小写。
 `Alice_1` 与 `alice_1` 可以是两个独立账号，登录必须匹配实际大小写；删除后原用户名仍不可复用。

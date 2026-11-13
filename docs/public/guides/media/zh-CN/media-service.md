@@ -66,6 +66,10 @@ COS 根据原始 body、路径、query 与约定密钥验证 `x-cos-callback-enc
 
 头像设置和清除保持 `PUT/DELETE /api/users/me/avatar`。设置请求为 `{"mediaId":"标准UUID"}`，只能绑定当前上传者的 READY AVATAR；资料与引用同事务更新，不执行存储操作，不改变 authVersion。
 
+头像不通过文字资料编辑接口`PATCH /api/users/edit`修改。本人和指定用户资料使用共享展示缓存；头像设置响应包含当前简介，直接使用事务中的最新资料，提交后失效用户缓存。
+
+账号软删除会撤销登录及发布等使用能力，保留用户资料和历史内容供展示，同时删除该账号的头像关联并清空头像字段。缓存更新后，资料接口的`avatarMediaId`、`avatarUrl`返回null，文章作者的`authorAvatarUrl`同样为空，由前端展示默认头像。原头像文件按既有无引用媒体回收机制清理，不在删除账号事务中同步删除存储对象；缓存失效失败时允许短暂显示旧头像。
+
 引用必须在显式 READ_COMMITTED 事务中维护，先锁业务实体，再按文件 ID 顺序锁新旧文件。文件归属、用途、状态、可信大小在文件锁内检查。头像唯一靠用户行锁保证，复合主键本身不保证每用户一个头像。
 
 未来文章调用 `MediaReferenceService.syncArticle(articleId, owner, bodyIds, coverId)`：调用者先验证权限并锁定真实文章行，保存正文、封面与引用处于同一事务。正文和封面合并去重，统一 ARTICLE_IMAGE 用途与引用类型；封面额外限制 5 MiB。本次不建立文章表或文章 HTTP 接口。

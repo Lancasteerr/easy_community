@@ -65,6 +65,7 @@ class MediaV2IntegrationTests {
     @Autowired MediaWorkflowProperties flow;
     @Autowired UserService users;
     @Autowired UserProfileService profiles;
+    @Autowired com.febrie.backend.user.infrastructure.persistence.AccountRepository accounts;
     @Autowired PlatformTransactionManager manager;
     @Autowired com.febrie.backend.shared.ratelimit.FixedWindowCounter counter;
     private S3Client s3;
@@ -244,7 +245,7 @@ class MediaV2IntegrationTests {
             var b = executor.submit(() -> { start.await(); return profiles.setAvatar(actor, second); });
             start.countDown(); a.get(5, TimeUnit.SECONDS); b.get(5, TimeUnit.SECONDS);
         }
-        String current = profiles.profile(actor).avatarMediaId();
+        String current = accounts.profile(actor.userId(), false).orElseThrow().avatarMediaId();
         assertEquals(Set.of(current), files.references(ReferenceType.USER_AVATAR, owner));
         assertNull(files.find(current).orElseThrow().nextActionAt());
         assertNotNull(files.find(current.equals(first) ? second : first).orElseThrow().nextActionAt());

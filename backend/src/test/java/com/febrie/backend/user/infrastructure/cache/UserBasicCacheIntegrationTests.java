@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** 真实Redis验证token、负缓存与TTL；只清理本次随机命名空间。 */
 @EnabledIfEnvironmentVariable(named = "IT_REDIS", matches = "true")
 class UserBasicCacheIntegrationTests {
-    private final String namespace = "ec:test:" + UUID.randomUUID() + ":user-basic:v1";
+    private final String namespace = "ec:test:" + UUID.randomUUID() + ":user-basic:v2";
     private LettuceConnectionFactory connections;
     private StringRedisTemplate redis;
     private UserBasicCacheStore cache;
@@ -41,7 +41,7 @@ class UserBasicCacheIntegrationTests {
 
     @Test void preservesNullAvatarDoesNotRenewTtlAndInvalidatesBothDataAndNegative() {
         String token = cache.tryLock(1);
-        var user = new UserBasicData(1, "deleted-author", null);
+        var user = new UserBasicData(1, "deleted-author", null, "简介");
         assertTrue(cache.publish(1, token, user));
         long ttl = redis.getExpire(cache.key(1, "data"), java.util.concurrent.TimeUnit.MILLISECONDS);
         assertTrue(ttl >= 269_000 && ttl <= 300_000);
@@ -61,11 +61,11 @@ class UserBasicCacheIntegrationTests {
         String old = cache.tryLock(1);
         redis.delete(cache.key(1, "cache-lock")); // 可控模拟租期失效，无需sleep。
         String current = cache.tryLock(1);
-        assertFalse(cache.publish(1, old, new UserBasicData(1, "old", null)));
+        assertFalse(cache.publish(1, old, new UserBasicData(1, "old", null, "简介")));
         assertFalse(cache.missing(1, old));
         assertFalse(cache.invalidate(1, old));
         assertFalse(cache.unlock(1, old));
-        assertTrue(cache.publish(1, current, new UserBasicData(1, "current", null)));
+        assertTrue(cache.publish(1, current, new UserBasicData(1, "current", null, "简介")));
         assertEquals("current", cache.get(List.of(1L)).get(1L).data().username());
         assertTrue(cache.unlock(1, current));
     }
@@ -77,6 +77,9 @@ class UserBasicCacheIntegrationTests {
         assertEquals(token, redis.opsForValue().get(cache.key(1, "cache-lock")));
         redis.delete(cache.key(1, "data"));
         redis.opsForValue().set(cache.key(1, "data"), "D{broken");
+        assertThrows(RuntimeException.class, () -> cache.get(List.of(1L)));
+        // v2必须包含简介；误用旧命名空间时不能把旧投影当成完整资料返回。
+        redis.opsForValue().set(cache.key(1, "data"), "D{\"userId\":1,\"username\":\"old\",\"avatarMediaId\":null}");
         assertThrows(RuntimeException.class, () -> cache.get(List.of(1L)));
     }
 }

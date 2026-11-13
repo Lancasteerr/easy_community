@@ -11,7 +11,7 @@ import org.springframework.transaction.*;
 import org.springframework.transaction.annotation.*;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** 当前头像字段和READY文件引用共享事务；头像变化不改变认证版本。 */
+/** 文字资料按字段更新，头像与READY文件引用共享事务；展示资料变化不改变认证版本。 */
 @Service
 public class UserProfileService {
     private final AccountRepository accounts;
@@ -26,12 +26,6 @@ public class UserProfileService {
         this.accounts = accounts; this.urls = urls; this.references = references;
         transaction = new TransactionTemplate(manager);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
-    }
-
-    public UserProfileView profile(UserActor actor) {
-        var current = accounts.profile(actor.userId(), false).orElseThrow(ApiException::unauthorized);
-        requireActive(actor, current);
-        return view(current, current.avatarMediaId());
     }
 
     public UserProfileView setAvatar(UserActor actor, String mediaId) {

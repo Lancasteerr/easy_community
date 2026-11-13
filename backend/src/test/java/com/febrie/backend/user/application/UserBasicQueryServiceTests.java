@@ -53,7 +53,7 @@ class UserBasicQueryServiceTests {
     }
 
     @Test void rejectedPublicationIsNotReturnedAndFailureDoesNotCreateNegative() {
-        var newer = new UserBasicData(1, "updated", "avatar");
+        var newer = new UserBasicData(1, "updated", "avatar", "简介");
         when(cache.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss()), Map.of(1L, CacheValue.miss()),
                 Map.of(1L, CacheValue.hit(newer)));
         when(cache.tryLock(1)).thenReturn("expired");
@@ -125,5 +125,5 @@ class UserBasicQueryServiceTests {
         assertTrue(service.get(6).isPresent());
     }
 
-    private static UserBasicData user(long id) { return new UserBasicData(id, "user" + id, null); }
+    private static UserBasicData user(long id) { return new UserBasicData(id, "user" + id, null, "简介"); }
 }

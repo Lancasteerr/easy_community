@@ -36,9 +36,9 @@ public class AccountRepository {
     /** 历史文章仍保留软删除账号的署名，不能以ACTIVE筛选代替作者存在性。 */
     public Map<Long, UserBasicData> basics(Collection<Long> ids) {
         if (ids.isEmpty()) { return Map.of(); }
-        return users.selectList(Wrappers.<UserEntity>lambdaQuery().select(UserEntity::getId, UserEntity::getUsername, UserEntity::getAvatarMediaId)
+        return users.selectList(Wrappers.<UserEntity>lambdaQuery().select(UserEntity::getId, UserEntity::getUsername, UserEntity::getAvatarMediaId, UserEntity::getBio)
                 .in(UserEntity::getId, ids)).stream().collect(Collectors.toMap(UserEntity::getId,
-                        row -> new UserBasicData(row.getId(), row.getUsername(), MediaIds.text(row.getAvatarMediaId()))));
+                        row -> new UserBasicData(row.getId(), row.getUsername(), MediaIds.text(row.getAvatarMediaId()), row.getBio())));
     }
 
     public Optional<AccountSnapshot> lockById(long userId) {

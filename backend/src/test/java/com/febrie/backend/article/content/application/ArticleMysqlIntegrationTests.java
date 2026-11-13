@@ -453,11 +453,11 @@ class ArticleMysqlIntegrationTests {
             profiles.setAvatar(actor, avatar);
             verify(userCache, never()).tryLock(anyLong());
             assertEquals(before, redis.opsForValue().get(userCache.key(actor.userId(), "data")));
-            // 本人资料直接读取主库，能看到当前事务内的修改，不读取旧展示缓存。
-            assertEquals(avatar, profiles.profile(actor).avatarMediaId());
+            // 锁内校验直接断言主库快照；HTTP本人资料已经统一使用展示缓存。
+            assertEquals(avatar, accounts.profile(actor.userId(), false).orElseThrow().avatarMediaId());
             status.setRollbackOnly();
         });
-        assertNull(profiles.profile(actor).avatarMediaId());
+        assertNull(accounts.profile(actor.userId(), false).orElseThrow().avatarMediaId());
         assertEquals(before, redis.opsForValue().get(userCache.key(actor.userId(), "data")));
         assertTrue(files.references(ReferenceType.USER_AVATAR, actor.userId()).isEmpty());
         verify(userCache, never()).invalidate(anyLong(), anyString());
@@ -470,7 +470,7 @@ class ArticleMysqlIntegrationTests {
                 .when(userCache).invalidate(eq(actor.userId()), anyString());
         double before = metrics.counter("community.cache.events", "cache", "user_basic", "outcome", "invalidation_failed").count();
         assertEquals(avatar, profiles.setAvatar(actor, avatar).avatarMediaId());
-        assertEquals(avatar, profiles.profile(actor).avatarMediaId());
+        assertEquals(avatar, accounts.profile(actor.userId(), false).orElseThrow().avatarMediaId());
         assertNull(basics.get(actor.userId()).orElseThrow().avatarMediaId());
         verify(userCache, times(3)).invalidate(eq(actor.userId()), anyString());
         assertEquals(before + 1, metrics.counter("community.cache.events", "cache", "user_basic", "outcome", "invalidation_failed").count());

@@ -40,7 +40,7 @@ public class UserBasicCacheStore {
             else if (value.equals("M")) { decoded = CacheValue.negative(); }
             else if (value.startsWith("D")) {
                 var data = mapper.readValue(value.substring(1), UserBasicData.class);
-                if (data.userId() != ordered.get(i) || data.username() == null) {
+                if (data.userId() != ordered.get(i) || data.username() == null || data.bio() == null) {
                     throw new IllegalStateException("用户缓存数据与键不一致");
                 }
                 decoded = CacheValue.hit(data);

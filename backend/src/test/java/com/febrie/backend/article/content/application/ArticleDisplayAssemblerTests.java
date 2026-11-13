@@ -21,8 +21,8 @@ class ArticleDisplayAssemblerTests {
 
     @Test void deduplicatesAuthorsAndRefreshesAvatarWithoutChangingArticle() {
         var articles = List.of(brief("1"), brief("2"));
-        when(users.get(List.of(9L))).thenReturn(Map.of(9L, new UserBasicData(9, "author", "old")),
-                Map.of(9L, new UserBasicData(9, "author", "new")));
+        when(users.get(List.of(9L))).thenReturn(Map.of(9L, new UserBasicData(9, "author", "old", "简介")),
+                Map.of(9L, new UserBasicData(9, "author", "new", "简介")));
         when(urls.publicUrl("old")).thenReturn("https://old");
         when(urls.publicUrl("new")).thenReturn("https://new");
         assertEquals("https://old", assembler.lists(articles).getFirst().authorAvatarUrl());
@@ -33,7 +33,7 @@ class ArticleDisplayAssemblerTests {
     }
 
     @Test void nullAvatarIsValidButMissingAuthorIsNotSilentlyDropped() {
-        when(users.get(List.of(9L))).thenReturn(Map.of(9L, new UserBasicData(9, "deleted-author", null)));
+        when(users.get(List.of(9L))).thenReturn(Map.of(9L, new UserBasicData(9, "deleted-author", null, "简介")));
         var response = assembler.lists(List.of(brief("1"))).getFirst();
         assertEquals("deleted-author", response.authorName());
         assertNull(response.authorAvatarUrl());
@@ -54,7 +54,7 @@ class ArticleDisplayAssemblerTests {
 
     @Test void resolvesPageTagsOnceAndDoesNotSilentlyDropMissingNames() {
         var tagged = new ArticleBriefData("1", "title", "9", "summary", null, List.of(3L), Instant.EPOCH, Instant.EPOCH);
-        when(users.get(List.of(9L))).thenReturn(Map.of(9L, new UserBasicData(9, "author", null)));
+        when(users.get(List.of(9L))).thenReturn(Map.of(9L, new UserBasicData(9, "author", null, "简介")));
         when(tags.resolve(List.of(3L))).thenReturn(Map.of(3L, new com.febrie.backend.article.tag.application.dto.TagView("3", "Java")));
         var page = assembler.lists(List.of(tagged, tagged));
         assertEquals("Java", page.getFirst().tags().getFirst().name());
