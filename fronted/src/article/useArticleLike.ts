@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { setArticleLike } from '../api/articles';
 import { ApiError, errorMessage, getCsrf } from '../api/client';
-import type { ArticleDetailData, CsrfToken } from '../api/types';
+import type { ArticleCardData, CsrfToken } from '../api/types';
 
 interface LikeOptions {
   enabled: boolean;
@@ -11,7 +11,7 @@ interface LikeOptions {
 }
 
 /** 成功受理后才更新展示；超时保留原状态，校正留给用户手动刷新页面。 */
-export function useArticleLike(article: ArticleDetailData, options: LikeOptions) {
+export function useArticleLike(article: Pick<ArticleCardData, 'articleId' | 'likeCount' | 'likedByMe'>, options: LikeOptions) {
   const [state, setState] = useState({ liked: article.likedByMe, count: article.likeCount, busy: false, retryAt: 0 });
   const current = useRef(state);
   const pending = useRef<AbortController | null>(null);

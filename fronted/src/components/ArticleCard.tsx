@@ -4,6 +4,7 @@ import type { ArticleCardData } from '../api/types';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { useUnavailable } from './Toast';
+import { ArticleCardLikeButton } from './ArticleCardLikeButton';
 
 const number = new Intl.NumberFormat('en-US');
 
@@ -18,7 +19,7 @@ function relativeTime(value: string) {
   return new Date(value).toLocaleDateString('zh-CN');
 }
 
-export function ArticleCard({ article }: { article: ArticleCardData }) {
+export function ArticleCard({ article, onLogin }: { article: ArticleCardData; onLogin: () => void }) {
   const unavailable = useUnavailable();
   const [brokenCover, setBrokenCover] = useState<string>();
   // 稳定的文章锚点用于返回首页后校正图片加载造成的阅读位置偏移。
@@ -41,10 +42,7 @@ export function ArticleCard({ article }: { article: ArticleCardData }) {
         : <img src={article.coverUrl} alt="" loading="lazy" onError={() => setBrokenCover(article.coverUrl!)} />}
     </Link>}
     <div className="article-interactions">
-      <button className={`interaction-button${article.likedByMe ? ' is-liked' : ''}`} aria-pressed={article.likedByMe}
-        aria-label={`点赞 ${number.format(article.likeCount)}`} onClick={unavailable}>
-        <Icon name="like" /><span>{number.format(article.likeCount)}</span>
-      </button>
+      <ArticleCardLikeButton article={article} onLogin={onLogin} />
       <button className="interaction-button" aria-label="评论暂未开放" onClick={unavailable}><Icon name="comment" /><span>—</span></button>
     </div>
   </article>;

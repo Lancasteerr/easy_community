@@ -169,7 +169,7 @@ for (const viewport of [
     await expect(page.getByText('功能暂未开放')).toBeVisible();
     await expect(page.getByText('封面暂时无法显示')).toHaveCount(1);
     await expect(page.locator('.article-card').nth(3).locator('.article-cover')).toHaveCount(0);
-    await expect(page.locator('.article-card').last().getByRole('button', { name: '点赞 328' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.article-card').last().getByRole('button', { name: '取消点赞 328' })).toHaveAttribute('aria-pressed', 'true');
     const title = page.locator('.article-card').last().locator('h2');
     expect((await title.boundingBox())!.height).toBeLessThanOrEqual(52);
     expect(await page.locator('.home-main').evaluate((element) => element.scrollTop)).toBe(0);
@@ -352,7 +352,7 @@ test('游客头像、CSRF、HttpOnly 会话与登录后刷新推荐形成闭环'
   await expect(page).toHaveURL(/:5175\/$/);
   await expect(page.getByRole('button', { name: `${profile.username} 的个人中心` })).toBeVisible();
   await expect(page.locator('.avatar-entry img')).toHaveAttribute('src', /default-avatar/);
-  await expect(page.getByRole('button', { name: '点赞 328' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '取消点赞 328' })).toHaveAttribute('aria-pressed', 'true');
   expect(feedReads).toBe(2);
   expect(csrfReads).toBe(2);
   expect(loginWrites).toBe(1);

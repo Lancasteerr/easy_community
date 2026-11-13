@@ -14,9 +14,9 @@ export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  // 回跳白名单包含公开详情；仅传回合法阅读位置，不重放登录前的点赞动作。
+  // 首页与公开详情仅传回合法阅读位置和公开列表标识，不重放登录前的点赞动作。
   const destination = loginDestination(location.state?.returnTo);
-  const returnState = readingReturnState(destination, location.state?.readingPosition);
+  const returnState = readingReturnState(destination, location.state?.readingPosition, location.state?.feedSnapshotKey);
   const notify = useToast();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

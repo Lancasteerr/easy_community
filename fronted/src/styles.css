@@ -90,8 +90,10 @@ img { display: block; max-width: 100%; }
 .image-placeholder { display: grid; place-items: center; width: 100%; height: 100%; font-size: 14px; color: #999; }
 .article-interactions { display: flex; gap: 12px; margin-top: 14px; }
 .interaction-button { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 78px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: none; color: #757575; font-size: 14px; }
-.interaction-button:hover { background: rgb(155 206 255 / 8%); color: #9bceff; }
+.interaction-button:hover:not(:disabled) { background: rgb(155 206 255 / 8%); color: #9bceff; }
 .interaction-button.is-liked { border-color: rgb(155 206 255 / 45%); background: rgb(155 206 255 / 12%); color: #9bceff; }
+/* 等待受理或限流期间保留原有点赞状态，禁用反馈不改变按钮尺寸。 */
+.interaction-button:disabled { opacity: .6; cursor: not-allowed; }
 .feed-status { min-height: 100px; padding: 28px 24px; text-align: center; color: #aaa; font-size: 14px; }
 .toast { position: fixed; z-index: 100; left: 50%; bottom: 40px; transform: translate(-50%, 12px); padding: 12px 24px; max-width: calc(100vw - 32px); border: 1px solid #444; border-radius: 8px; background: #242428; color: #fff; box-shadow: 0 8px 32px #0003; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
 .toast-visible { opacity: 1; transform: translate(-50%, 0); }

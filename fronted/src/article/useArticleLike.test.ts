@@ -92,3 +92,17 @@ it('429在重试期限内暂停，401上报身份失效', async () => {
   await act(() => second.result.current.toggle());
   expect(unauthorized).toHaveBeenCalledTimes(1);
 });
+
+it('卸载会取消卡片写入，迟到的未授权响应不能再导航或通知', async () => {
+  const pending = deferred<ArticleLikeAccepted>();
+  write.mockReturnValueOnce(pending.promise);
+  // 最小文章投影即可点赞，不依赖详情正文。
+  const { result, unmount } = renderHook(() => useArticleLike({ articleId: '1', likeCount: 0, likedByMe: false }, options));
+  await act(async () => { void result.current.toggle(); });
+  const signal = write.mock.calls[0][4]!;
+  unmount();
+  expect(signal.aborted).toBe(true);
+  await act(async () => pending.reject(new ApiError(401, 'AUTHENTICATION_REQUIRED', '身份失效')));
+  expect(unauthorized).not.toHaveBeenCalled();
+  expect(notify).not.toHaveBeenCalled();
+});
