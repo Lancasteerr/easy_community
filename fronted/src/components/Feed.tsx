@@ -32,8 +32,9 @@ export function Feed({ scrollContainer }: { scrollContainer: RefObject<HTMLDivEl
 
   const restart = () => {
     // 主动重载终止旧位置校正，让横幅与文章一起回顶，保留窄屏横向位置。
-    stopRestoring();
     scrollContainer.current?.scrollTo({ top: 0, behavior: 'instant' });
+    // 回顶后再保存位置，避免首批替换引起恢复会话重建时取回旧阅读锚点。
+    stopRestoring();
     feed.restart();
   };
   return <section className="feed-list" aria-label="推荐文章" aria-busy={feed.status === 'loading'}>

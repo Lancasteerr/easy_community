@@ -146,7 +146,7 @@ test('删除结果未知，关闭重开保持核对态，作者接口核对不�
   expect(checks).toBe(2);
 });
 
-test('游客由管理作品入口登录回跳，离开重进读取首批', async ({ page }) => {
+test('游客由管理作品入口登录回跳，浏览器后退恢复原列表和位置', async ({ page }) => {
   let authenticated = false;
   let reads = 0;
   await signedIn(page);
@@ -170,8 +170,8 @@ test('游客由管理作品入口登录回跳，离开重进读取首批', async
   await expect(page.locator('.home-columns')).toBeVisible();
   await page.goBack();
   await expect(page.locator('.manage-row')).toHaveCount(12);
-  expect(await list.evaluate((element) => element.scrollTop)).toBe(0);
-  expect(reads).toBe(2);
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(400);
+  expect(reads).toBe(1);
 });
 
 test('首次骨架、失败、重试及窄屏空状态', async ({ page }, info) => {

@@ -223,6 +223,8 @@ test('短视口外层布局不压缩，空白页面视觉截图', async ({ page 
 
 test('其他窗口切换账号后进入显式登录，不恢复原账号编辑内容', async ({ page }) => {
   await setup(page); let other = false;
+  // 此场景会主动提交登录；预览服务没有真实认证接口，必须显式模拟响应。
+  await page.route('**/api/auth/login', (route) => route.fulfill({ json: profile }));
   await page.route('**/api/auth/session', (route) => route.fulfill({ json: other ? { ...profile, userId: '8', username: 'another_user' } : profile }));
   await page.goto('/articles/new'); await fill(page); other = true;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
