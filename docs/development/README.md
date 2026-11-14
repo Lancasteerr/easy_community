@@ -7,7 +7,7 @@
 ## 当前阅读入口
 
 - 当前功能说明以[公开文档](../public/README.md)为入口。
-- 个人主页已实施，结果见[2026-11-15 验收记录](reports/frontend/public-profile-validation-2026-11-15.md)；后端核对与取舍背景保留在[实施审查稿](plans/frontend/public-profile-plan-2026-11-15.md)。
+- 个人主页当前底色与连续收缩修正见[2026-11-15 收缩验收记录](reports/frontend/profile-collapse-validation-2026-11-15.md)；初次交付结果见[个人主页验收记录](reports/frontend/public-profile-validation-2026-11-15.md)，后端核对与取舍背景保留在[实施审查稿](plans/frontend/public-profile-plan-2026-11-15.md)。
 - 文章标签 JSON 元数据、本地目录搜索与按版本校验的实施方案见[2026-11-12 后端计划](plans/article/article-tags-json-local-cache-plan.md)。
 - 内容管理页的本轮前端验收及真实ES联调限制见[2026-11-11验收记录](reports/frontend/content-management-validation-2026-11-11.md)。
 - 文章旧异步 CRUD V1 已被同步短事务 CRUD V2 取代，旧文件名中的 feed 不代表其内容属于当前推荐流。

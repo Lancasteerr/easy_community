@@ -31,7 +31,7 @@ npm run build
 - `/`：主页三栏、顶部与侧栏吸顶、静态横幅、推荐流连续加载。最小宽度 1440px，窄屏横向滚动，背景固定覆盖视口。
 - `/login`：账号密码登录、必填反馈、密码显隐、CSRF、提交锁、限流倒计时与登录后返回首页。小于 1024px 时优先显示表单，短窗口允许纵向滚动。
 - `/manage/articles`：本人公开文章、内部滚动、游标续页、保留旧内容的刷新、删除确认与结果核对。首页“管理作品”进入，游客登录成功后回跳；新历史项读取首批，浏览器后退恢复同一历史项的文档内列表和位置。
-- `/users/:userId`：游客可读的个人主页，真实资料和作者公开文章；整页统一滚动，完整资料卡离开后显示88px简要卡片并在顶栏下吸顶，文章返回恢复当前文档内的列表及锚点。最小宽度1440px，窄屏横滚，右侧信息卡随内容滚走。
+- `/users/:userId`：游客可读的个人主页，真实资料和作者公开文章；整页统一滚动，同一张资料卡固定在顶栏下方并从376px连续收至88px，头像96px渐缩至48px。上下间距保持43px／17px，发布栏承接吸顶，文章返回恢复文档内列表及锚点。最小宽度1440px，窄屏横滚，右侧信息卡随内容滚走。
 - 真实接口：`GET /api/articles/feed`、`GET /api/auth/session`、`GET /api/users/{userId}`、`GET /api/auth/csrf`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/users/me/articles`、`DELETE /api/articles/{id}`及结果核对使用的`GET /api/articles/{id}/edit`。数据类型直接对应后端 DTO，ID 始终使用字符串。
 - 编辑接口：`GET /api/articles/{id}/edit`、`POST /api/articles`、`GET /api/tags?q=…&limit=20`、`POST /api/media/uploads`；所有写操作携带当前会话 CSRF，不自动重发文章或文件上传。
 - `/articles/new`、`/articles/:id/edit`：完整 Tiptap 正文、封面与正文图片上传、标签搜索、发布保存弹窗、离开确认，身份失效直接进入登录且不恢复旧内容。保存成功留在编辑页，新建转为同 ID 编辑。
@@ -53,9 +53,9 @@ npm run build
 
 ## 设计来源
 
-个人主页的实现范围、174项单元测试与82项浏览器检查、真实公开接口及游标续页结果见[个人主页验收记录](../docs/development/reports/frontend/public-profile-validation-2026-11-15.md)。真实登录写操作尚未联调，浏览器认证交互使用模拟接口验收。
+个人主页当前底色和连续收缩交互见[收缩修正验收记录](../docs/development/reports/frontend/profile-collapse-validation-2026-11-15.md)：174项单元测试、10项个人主页浏览器检查通过；本次全站浏览器检查83项通过，1项详情页既有失败在修改前版本同样复现。初次交付及真实公开接口续页结果保留在[个人主页验收记录](../docs/development/reports/frontend/public-profile-validation-2026-11-15.md)。真实登录写操作尚未联调，浏览器认证交互使用模拟接口验收。
 
-个人主页 `/users/:userId` 对应 Figma `84:1052`，本人态 `84:1053`、访客态 `84:1147`，源指纹 `77e5070dc4fa1619`。封面为工具直接导出的2454×422两倍PNG，独立叠加原稿渐变；88px简要资料卡是按使用者确认的森空岛滚动方式补充的设计。
+个人主页 `/users/:userId` 对应 Figma `84:1052`，本人态 `84:1053`、访客态 `84:1147`，源指纹 `77e5070dc4fa1619`。封面为工具直接导出的2454×422两倍PNG，独立叠加原稿渐变。后续按使用者确认改为单DOM连续收缩，卡片底色统一为不透明 `#212121`，文章条目透明继承底色；字体、蓝色强调、封面与桌面尺寸沿用本项目风格。
 
 公开资料读取成功后使用 `GET /api/articles/search?authorId=…&sort=latest&size=20` 读取作品，距整页底部600px续页，按游标结束、去重并在连续三页无新增后暂停。资料404和普通失败分别呈现；追加失败保留条目，失效或重复游标明确重开查询。浏览器刷新读取新资料，不增加跨标签同步。
 
