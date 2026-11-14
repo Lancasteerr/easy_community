@@ -5,6 +5,7 @@ import { article, profile } from '../src/test/fixtures';
 /** 接口只在测试浏览器内拦截；正式页面不带演示文章或模拟登录开关。 */
 async function guest(page: Page) {
   await page.route('**/api/auth/session', (route) => route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
+  await page.route('**/api/articles/search?**', (route) => route.fulfill({ json: { items: [], nextCursor: null } }));
   await page.route('**/test-cover.png', (route) => route.fulfill({ path: 'src/assets/home-banner.png', contentType: 'image/png' }));
 }
 
@@ -166,9 +167,6 @@ for (const viewport of [
     }
     expect(await page.evaluate((x) => [20, 80, 150, 166].every((y) =>
       !document.elementFromPoint(x, y)?.closest('.home-banner, .article-card')), bannerBefore.x + 300)).toBe(true);
-    await page.getByRole('searchbox', { name: '搜索内容' }).fill('滚动后搜索');
-    await page.getByRole('button', { name: '搜索', exact: true }).click();
-    await expect(page.getByText('功能暂未开放')).toBeVisible();
     await expect(page.getByText('封面暂时无法显示')).toHaveCount(1);
     await expect(page.locator('.article-card').nth(3).locator('.article-cover')).toHaveCount(0);
     await expect(page.locator('.article-card').last().getByRole('button', { name: '取消点赞 328' })).toHaveAttribute('aria-pressed', 'true');
@@ -177,6 +175,11 @@ for (const viewport of [
     expect(await page.locator('.home-main').evaluate((element) => element.scrollTop)).toBe(0);
     expect(await feed.evaluate((element) => element.scrollTop)).toBe(0);
     await page.screenshot({ path: testInfo.outputPath(`home-${viewport.name}-scrolled.png`) });
+    // 搜索已开放；先完成主页原有断言，再检查导航，避免在新页面继续查主页元素。
+    await page.getByRole('searchbox', { name: '搜索内容' }).fill('滚动后搜索');
+    await page.getByRole('button', { name: '搜索', exact: true }).click();
+    await expect(page).toHaveURL((url) => url.pathname === '/search' && url.searchParams.get('q') === '滚动后搜索');
+    await expect(page.getByText('暂未找到相关文章')).toBeVisible();
   });
 }
 
@@ -328,6 +331,7 @@ test('游客头像、CSRF、HttpOnly 会话与登录后刷新推荐形成闭环'
   let csrfReads = 0;
   let loginWrites = 0;
   const businessPaths = new Set<string>();
+  await page.route('**/api/articles/search?**', (route) => route.fulfill({ json: { items: [], nextCursor: null } }));
   page.on('request', (request) => { const path = new URL(request.url()).pathname; if (path.startsWith('/api/')) businessPaths.add(path); });
   await page.route('**/api/auth/session', (route) => route.fulfill(signedIn ? { json: { ...profile, avatarUrl: '/missing-avatar.png' } } : { status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
   await page.route('**/api/articles/feed?**', (route) => {
@@ -360,11 +364,13 @@ test('游客头像、CSRF、HttpOnly 会话与登录后刷新推荐形成闭环'
   expect(loginWrites).toBe(1);
   expect((await context.cookies()).find((cookie) => cookie.name === 'SESSION')?.httpOnly).toBe(true);
   expect(await page.evaluate(() => document.cookie)).not.toContain('SESSION');
+  await page.getByRole('button', { name: '热门', exact: true }).click();
+  await expect(page.getByText('功能暂未开放')).toBeVisible();
   await page.getByRole('searchbox', { name: '搜索内容' }).fill('设计');
   await page.getByRole('button', { name: '搜索', exact: true }).click();
-  await expect(page.getByText('功能暂未开放')).toBeVisible();
-  await page.getByRole('button', { name: '热门', exact: true }).click();
-  expect(businessPaths).toEqual(new Set(['/api/auth/session', `/api/users/${profile.userId}`, '/api/articles/feed', '/api/auth/csrf', '/api/auth/login']));
+  await expect(page).toHaveURL((url) => url.pathname === '/search' && url.searchParams.get('q') === '设计');
+  await expect(page.getByText('暂未找到相关文章')).toBeVisible();
+  expect(businessPaths).toEqual(new Set(['/api/auth/session', `/api/users/${profile.userId}`, '/api/articles/feed', '/api/articles/search', '/api/auth/csrf', '/api/auth/login']));
   await page.goto('/login');
   await expect(page).toHaveURL(/:5175\/$/);
 });

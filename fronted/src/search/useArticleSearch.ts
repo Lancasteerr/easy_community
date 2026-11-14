@@ -77,12 +77,15 @@ export function useArticleSearch(q: string, sort: SearchSort, snapshotKey: strin
     hasLoaded.current = saved?.hasLoaded ?? false;
     emptyPages.current = saved?.emptyPages ?? 0;
     publish(saved?.state ?? initial());
-    if (!saved) void loadMore();
+    if (!saved?.hasLoaded) void loadMore();
     return () => {
       // 续页取消后恢复为可读状态；错误和失效状态保留，不能自动重复请求。
-      if (hasLoaded.current) saveSnapshot<SearchSnapshot>(snapshotKey, {
-        state: { ...current.current, status: current.current.status === 'loading' ? 'ready' : current.current.status },
-        hasLoaded: true, emptyPages: emptyPages.current,
+      // 重开首屏尚未完成也要覆盖旧快照，否则返回时可能重新使用已经失效的游标。
+      saveSnapshot<SearchSnapshot>(snapshotKey, {
+        state: hasLoaded.current
+          ? { ...current.current, status: current.current.status === 'loading' ? 'ready' : current.current.status }
+          : { ...initial(), status: 'ready' },
+        hasLoaded: hasLoaded.current, emptyPages: emptyPages.current,
       });
       generation.current++; pending.current?.abort(); pending.current = null;
     };

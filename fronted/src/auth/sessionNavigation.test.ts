@@ -4,7 +4,7 @@ import { recoveryKey } from '../editor/recovery';
 import { capturePage } from './pageLifetime';
 import { enterAfterLogin, leaveAfterSessionChange, protectedDestination } from './sessionNavigation';
 
-it.each(['/', '/users/9007199254740995', '/articles/9007199254740995?from=feed#section'])('公开页身份变化保留当前地址 %s，且只刷新一次', (path) => {
+it.each(['/', '/search?q=社区&sort=latest', '/users/9007199254740995', '/articles/9007199254740995?from=feed#section'])('公开页身份变化保留当前地址 %s，且只刷新一次', (path) => {
   window.history.replaceState(null, '', path);
   const before = window.location.href;
   const active = capturePage();
