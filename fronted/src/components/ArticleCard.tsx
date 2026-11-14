@@ -19,20 +19,21 @@ function relativeTime(value: string) {
   return new Date(value).toLocaleDateString('zh-CN');
 }
 
-export function ArticleCard({ article, onLogin }: { article: ArticleCardData; onLogin: () => void }) {
+export function ArticleCard({ article, onLogin, context = 'feed' }: { article: ArticleCardData; onLogin: () => void; context?: 'feed' | 'profile' }) {
   const unavailable = useUnavailable();
   const [brokenCover, setBrokenCover] = useState<string>();
   // 稳定的文章锚点用于返回首页后校正图片加载造成的阅读位置偏移。
-  return <article className="article-card" data-read-block={article.articleId} aria-labelledby={`article-${article.articleId}`}>
-    <div className="article-author-row">
+  const metadata = <><time dateTime={article.publishedAt} title={new Date(article.publishedAt).toLocaleString('zh-CN')}>
+    {relativeTime(article.publishedAt)}</time><span> · 阅读 {number.format(article.viewCount)}</span></>;
+  return <article className={`article-card${context === 'profile' ? ' profile-article-card' : ''}`} data-read-block={article.articleId} aria-labelledby={`article-${article.articleId}`}>
+    {context === 'profile' ? <div className="article-meta">{metadata}</div> : <div className="article-author-row">
       <button className="author-entry" aria-label={`查看作者 ${article.authorName}`} onClick={unavailable}>
         <Avatar src={article.authorAvatarUrl} /><span className="author-details"><span className="author-name">{article.authorName}</span>
-          <span className="article-meta"><time dateTime={article.publishedAt} title={new Date(article.publishedAt).toLocaleString('zh-CN')}>
-            {relativeTime(article.publishedAt)}</time><span> · 阅读 {number.format(article.viewCount)}</span></span>
+          <span className="article-meta">{metadata}</span>
         </span>
       </button>
       <button className="follow-button" onClick={unavailable}>+ 关注</button>
-    </div>
+    </div>}
     <div className="article-copy">
       <h2 id={`article-${article.articleId}`}><Link to={`/articles/${article.articleId}`}>{article.title}</Link></h2>
       <p>{article.summary}</p>
