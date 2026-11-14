@@ -89,6 +89,13 @@ export function postLogin(username: string, password: string, csrf: CsrfToken, s
   });
 }
 
+/** 登出只撤销当前浏览器会话，令牌与 Cookie 继续走统一请求边界。 */
+export function postLogout(csrf: CsrfToken, signal?: AbortSignal) {
+  return request<void>('/api/auth/logout', {
+    method: 'POST', headers: { [csrf.headerName]: csrf.token }, signal,
+  });
+}
+
 export function errorMessage(error: unknown) {
   if (!(error instanceof ApiError)) return '暂时无法加载，请重试';
   if (error.status === 429) return '请求过于频繁，请稍后重试';

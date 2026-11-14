@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Header } from '../components/Header';
@@ -19,7 +19,9 @@ function MyArticles({ userId }: { userId: string }) {
   const [recoveringAuth, setRecoveringAuth] = useState(false);
   const enabled = !auth.refreshing && !auth.error;
   const location = useLocation();
-  const list = useMyArticles(userId, enabled, auth.expireSession, `manage:${location.key}`);
+  // 列表初始化及后台读取失效属于被动复核，不强迫游客立即登录。
+  const expireRead = useCallback(() => auth.expireSession('verification'), [auth.expireSession]);
+  const list = useMyArticles(userId, enabled, expireRead, `manage:${location.key}`);
   const deletion = useArticleDeletion(enabled, auth.expireSession, (id, message) => {
     const controls = Array.from(document.querySelectorAll<HTMLButtonElement>('.manage-row [data-delete-id]'));
     const index = controls.findIndex((element) => element.dataset.deleteId === id);
@@ -59,17 +61,16 @@ function MyArticles({ userId }: { userId: string }) {
 
 export function ManageArticlesPage() {
   const auth = useAuth();
-  const notify = useToast();
   const unavailable = useUnavailable();
   const seconds = useCooldown(auth.error instanceof ApiError ? auth.error.retryAt : 0);
   useEffect(() => {
     document.title = '内容管理 · Easy Community';
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, []);
-  if (auth.status === 'guest') return <Navigate to="/login" state={{ returnTo: '/manage/articles' }} replace />;
+  if (auth.status === 'guest') return auth.endReason === 'action'
+    ? <Navigate to="/login" state={{ returnTo: '/manage/articles' }} replace /> : <Navigate to="/" replace />;
   return <div className="manage-page">
-    <Header avatarUrl={auth.user?.avatarUrl} avatarLabel={auth.user ? `${auth.user.username} 的个人中心` : '重新检查登录状态'}
-      onAvatarClick={() => { if (auth.user) notify('个人中心暂未开放'); else void auth.refresh(); }} />
+    <Header />
     <div className="manage-columns"><aside className="manage-sidebar" aria-label="发布管理">
       <h2 className="manage-heading">发布管理<span>MANAGE</span></h2><nav className="manage-nav" aria-label="内容管理分类">
         <button aria-current="page">管理文章</button><button onClick={unavailable}>管理视频</button><button onClick={unavailable}>管理合集</button>

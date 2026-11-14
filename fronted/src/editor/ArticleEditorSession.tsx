@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Editor } from '@tiptap/react';
 import { useAuth } from '../auth/AuthContext';
@@ -11,7 +11,7 @@ import { useArticleDocument } from './useArticleDocument';
 import { useArticleSave } from './useArticleSave';
 import { codePoints, validateForm } from './model';
 import { EditorReadState } from './EditorReadState';
-import { useEditorLeaveGuard } from './useEditorLeaveGuard';
+import { useEditorLeaveGuard, type EditorLogoutGuard } from './useEditorLeaveGuard';
 import { useEditorRecovery } from './useEditorRecovery';
 import { clearRecovery } from './recovery';
 import { EditorDialog } from './EditorDialog';
@@ -20,10 +20,13 @@ import { EditorDialog } from './EditorDialog';
 const ArticleBodyEditor = lazy(() => import('./ArticleBodyEditor').then((module) => ({ default: module.ArticleBodyEditor })));
 
 /** 表单、上传与保存的编排入口，文档协议和请求生命周期由专用模块负责。 */
-export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; ownerId: string }) {
+export function ArticleEditorSession({ routeId, ownerId, registerLogoutGuard }: {
+  routeId?: string; ownerId: string; registerLogoutGuard: (guard: EditorLogoutGuard | null) => void;
+}) {
   const auth = useAuth();
   const navigate = useNavigate();
-  const document = useArticleDocument(routeId, auth.expireSession);
+  const expireRead = useCallback(() => auth.expireSession('verification'), [auth.expireSession]);
+  const document = useArticleDocument(routeId, expireRead);
   const { form, setForm } = document;
   const allowNavigation = useRef<() => void>(() => {});
   const save = useArticleSave((id, submitted) => {
@@ -38,6 +41,10 @@ export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; o
   const blocked = disabled || coverBlocked || uploads.blocked || readyBodyKey !== document.bodyKey;
   const guard = useEditorLeaveGuard(document.dirty || coverBlocked || uploads.blocked, save.busy);
   allowNavigation.current = guard.allowNextNavigation;
+  useEffect(() => {
+    registerLogoutGuard({ confirm: guard.confirmLogout, complete: guard.allowNextNavigation });
+    return () => registerLogoutGuard(null);
+  }, [registerLogoutGuard, guard.confirmLogout, guard.allowNextNavigation]);
   const recovery = useEditorRecovery({ ownerId, articleId: document.state === 'loading' ? routeId : document.articleId, ready: document.state === 'ready', form, baseline: document.baseline,
     allowNavigation: guard.allowNextNavigation, restore: document.restore });
   // 切换文章或恢复登录快照后，旧文档的本地上传任务不能流入新文档。
@@ -55,7 +62,7 @@ export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; o
     <div className="article-editor-heading"><h1>{document.articleId ? '编辑文章' : '发布文章'}</h1><Link to="/">返回首页</Link></div>
     {recovery.error && <p role="alert" className="editor-error">{recovery.error} {recovery.mismatched
       ? <button type="button" onClick={() => { void auth.refresh(); }}>重新检查登录状态</button>
-      : <button type="button" onClick={recovery.goLogin}>重试保存并登录</button>}</p>}
+      : <button type="button" onClick={recovery.continueAfterExpiry}>{auth.endReason === 'action' ? '重试保存并登录' : '重试保存并返回首页'}</button>}</p>}
     <div hidden={!recovery.accountMatches && auth.status === 'authenticated'}>
     <form noValidate onSubmit={(event) => { event.preventDefault(); void save.submit(form, document.articleId, blocked); }}>
       <div className="article-title-field"><div className={`article-title${save.errors.title ? ' has-error' : ''}`}><textarea ref={title} aria-label="文章标题" value={form.title} rows={1} placeholder="请输入文章标题"
@@ -84,10 +91,17 @@ export function ArticleEditorSession({ routeId, ownerId }: { routeId?: string; o
     </form>
     </div>
     <SaveArticleDialog state={save.dialog} blocked={blocked} onClose={save.close} onRetry={() => { void save.submit(form, document.articleId, blocked); }} />
-    {guard.blocker.state === 'blocked' && !save.busy && <EditorDialog title="离开编辑页？" onClose={() => guard.blocker.reset?.()}>
+    {(guard.blocker.state === 'blocked' || guard.confirmingLogout) && !save.busy && <EditorDialog title="离开编辑页？" onClose={() => {
+      if (guard.confirmingLogout) guard.resolveLogout(false); else guard.blocker.reset?.();
+    }}>
       <p>修改尚未提交，离开后将丢失</p><div className="editor-dialog-actions">
-        <button type="button" onClick={() => { clearRecovery(); guard.blocker.proceed?.(); }}>放弃修改</button>
-        <button type="button" className="editor-primary" data-autofocus onClick={() => guard.blocker.reset?.()}>继续编辑</button>
+        <button type="button" onClick={() => {
+          if (guard.confirmingLogout) guard.resolveLogout(true);
+          else { clearRecovery(); guard.blocker.proceed?.(); }
+        }}>放弃修改</button>
+        <button type="button" className="editor-primary" data-autofocus onClick={() => {
+          if (guard.confirmingLogout) guard.resolveLogout(false); else guard.blocker.reset?.();
+        }}>继续编辑</button>
       </div></EditorDialog>}
   </div>;
 }

@@ -97,6 +97,8 @@ img { display: block; max-width: 100%; }
 .feed-status { min-height: 100px; padding: 28px 24px; text-align: center; color: #aaa; font-size: 14px; }
 .toast { position: fixed; z-index: 100; left: 50%; bottom: 40px; transform: translate(-50%, 12px); padding: 12px 24px; max-width: calc(100vw - 32px); border: 1px solid #444; border-radius: 8px; background: #242428; color: #fff; box-shadow: 0 8px 32px #0003; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
 .toast-visible { opacity: 1; transform: translate(-50%, 0); }
+/* 资料页复用全局反馈通道，只覆盖显式选择顶部位置的提示。 */
+.toast.toast-top { top: 140px; bottom: auto; display: flex; align-items: center; justify-content: center; width: 300px; height: 44px; padding: 0 16px; border-color: #45454d; background: #2c2c31; color: #eeeef2; font-size: 14px; line-height: 22px; box-shadow: none; }
 .feed-status p { margin: 0 0 14px; }
 .feed-status p:last-child { margin-bottom: 0; }
 .feed-action { padding: 8px 20px; background: rgb(155 206 255 / 8%); color: #9bceff; border: 1px solid rgb(155 206 255 / 30%); border-radius: 6px; font-size: 14px; }

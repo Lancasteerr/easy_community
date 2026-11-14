@@ -27,8 +27,8 @@ function renderCards() {
 }
 
 beforeEach(() => {
-  vi.mocked(useAuth).mockReturnValue({ status: 'authenticated', user: profile, error: null, refreshing: false,
-    refresh: vi.fn(), expireSession });
+  vi.mocked(useAuth).mockReturnValue({ status: 'authenticated', user: profile, error: null, refreshing: false, endReason: null,
+    refresh: vi.fn(), expireSession, updateProfile: vi.fn() });
   credentials.mockReset().mockResolvedValue({ token: 'token', headerName: 'X-CSRF-TOKEN' });
   write.mockReset().mockImplementation(async (_id, liked, operationId) => ({ accepted: true, liked, operationId, version: '1' }));
   login.mockReset(); expireSession.mockReset();

@@ -15,8 +15,13 @@ import favorite from '../assets/manage-favorite.svg';
 import document from '../assets/manage-document.svg';
 import manageLike from '../assets/manage-like.svg';
 import manageComment from '../assets/manage-comment.svg';
+import menuHome from '../assets/menu-home.svg';
+import menuContent from '../assets/menu-content.svg';
+import menuSettings from '../assets/menu-settings.svg';
+import menuLogout from '../assets/menu-logout.svg';
 
-const sources = { search, edit, like, comment, terminal, trending, compass, publish, inbox, eye, eyeOff, manageView, favorite, document, manageLike, manageComment };
+const sources = { search, edit, like, comment, terminal, trending, compass, publish, inbox, eye, eyeOff, manageView, favorite, document, manageLike, manageComment,
+  menuHome, menuContent, menuSettings, menuLogout };
 
 /** 用原稿 SVG 轮廓作遮罩，使悬停、点赞和聚焦颜色随组件状态继承。 */
 export function Icon({ name, size = 20 }: { name: keyof typeof sources; size?: number }) {

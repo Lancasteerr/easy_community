@@ -4,6 +4,7 @@ import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { AuthProvider } from './auth/AuthContext';
 import { ManageArticlesPage } from './pages/ManageArticlesPage';
+import { ProfileSettingsPage } from './pages/ProfileSettingsPage';
 import { lazy, Suspense } from 'react';
 
 // 编辑器按路由加载，主页和登录页不承担正文编辑依赖的下载成本。
@@ -17,6 +18,7 @@ export function App() {
     <Route path="/" element={<HomePage />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/manage/articles" element={<ManageArticlesPage />} />
+    <Route path="/settings/profile" element={<ProfileSettingsPage />} />
     <Route path="/articles/new" element={<Suspense fallback={<p role="status">正在加载编辑器…</p>}><ArticleEditorPage /></Suspense>} />
     <Route path="/articles/:id/edit" element={<Suspense fallback={<p role="status">正在加载编辑器…</p>}><ArticleEditorPage /></Suspense>} />
     <Route path="/articles/:id" element={<Suspense fallback={<p role="status">正在加载文章…</p>}><ArticleDetailPage /></Suspense>} />

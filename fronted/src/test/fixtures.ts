@@ -7,7 +7,7 @@ export const article = (id = '9007199254740993'): ArticleCardData => ({
   publishedAt: '2026-11-09T00:00:00Z', updatedAt: '2026-11-09T00:00:00Z', viewCount: 1280, likeCount: 328, likedByMe: false,
 });
 
-export const profile: UserProfile = { userId: '9007199254740995', username: 'community_user', role: 'USER', avatarMediaId: null, avatarUrl: null };
+export const profile: UserProfile = { userId: '9007199254740995', username: 'community_user', role: 'USER', avatarMediaId: null, avatarUrl: null, bio: '' };
 
 export function deferred<T>() {
   let resolve!: (value: T) => void;

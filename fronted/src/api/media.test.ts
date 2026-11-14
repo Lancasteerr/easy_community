@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { imageFileError, uploadToStorage, type UploadGrant } from './media';
+import { imageFileError, uploadAvatarImage, uploadToStorage, type UploadGrant } from './media';
 
 const grant: UploadGrant = { mediaId: 'id', publicUrl: '/image', upload: { method: 'POST', url: 'https://storage.example', fields: { policy: 'signed', key: 'object' }, expiresAt: '' } };
 class FakeXhr {
@@ -13,6 +13,26 @@ class FakeXhr {
   abort() { this.onabort?.(); }
 }
 afterEach(() => vi.unstubAllGlobals());
+it('头像上传声明AVATAR用途并遵循2 MiB边界，不额外等待或查询状态', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeXhr);
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ token: 'masked', headerName: 'CUSTOM-CSRF' })))
+    .mockResolvedValueOnce(new Response(JSON.stringify(grant)));
+  vi.stubGlobal('fetch', fetcher);
+  const file = new File(['png'], 'avatar.png', { type: 'image/png' });
+  const pending = uploadAvatarImage(file, new AbortController().signal);
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+  expect(fetcher.mock.calls[1]).toEqual(['/api/media/uploads', expect.objectContaining({
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'CUSTOM-CSRF': 'masked' },
+    body: JSON.stringify({ purpose: 'AVATAR', filename: 'avatar.png', contentType: 'image/png', size: 3 }),
+  })]);
+  await vi.waitFor(() => expect(FakeXhr.current.body).toBeDefined());
+  FakeXhr.current.responseText = '{"success":true}'; FakeXhr.current.onload?.();
+  await expect(pending).resolves.toEqual({ mediaId: grant.mediaId, publicUrl: grant.publicUrl });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const invalid = new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'large.png', { type: 'image/png' });
+  await expect(uploadAvatarImage(invalid, new AbortController().signal)).rejects.toThrow();
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
 it('直传签名字段和文件顺序正确，凭证关闭且成功立即返回，无额外延迟', async () => {
   vi.stubGlobal('XMLHttpRequest', FakeXhr);
   const file = new File(['png'], 'x.png', { type: 'image/png' });

@@ -115,7 +115,8 @@ for (const viewport of [
     const header = await page.locator('.home-header').boundingBox();
     const headerX = (viewport.width - 1227) / 2;
     expect(header).toMatchObject({ x: headerX, y: 34, width: 1227, height: 90 });
-    expect((await page.locator('.search-form').boundingBox())?.x).toBe(headerX + 630);
+    // 游客使用 64px 登录按钮替代 40px 头像，导航右对齐时搜索框相应左移 24px。
+    expect((await page.locator('.search-form').boundingBox())?.x).toBe(headerX + 606);
     expect((await page.locator('.home-main').boundingBox())?.x).toBe(headerX + 242);
     const feed = page.getByRole('region', { name: '推荐文章' });
     const scroller = page.getByRole('region', { name: '首页滚动区域' });

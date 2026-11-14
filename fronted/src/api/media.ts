@@ -38,14 +38,25 @@ export function uploadToStorage(grant: UploadGrant, file: File, signal: AbortSig
     xhr.send(body);
   });
 }
-export async function uploadArticleImage(file: File, maximum: number, signal: AbortSignal, progress: (value: number) => void) {
+/** 授权和直传共用实现，媒体用途只由对应的业务入口指定。 */
+async function uploadImage(file: File, maximum: number, purpose: 'ARTICLE_IMAGE' | 'AVATAR', signal: AbortSignal, progress: (value: number) => void) {
   const invalid = imageFileError(file, maximum);
   if (invalid) throw new Error(invalid);
   const csrf = await getCsrf(signal);
   const grant = await request<UploadGrant>('/api/media/uploads', { method: 'POST', signal,
     headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-    body: JSON.stringify({ purpose: 'ARTICLE_IMAGE', filename: file.name, contentType: file.type, size: file.size }) });
+    body: JSON.stringify({ purpose, filename: file.name, contentType: file.type, size: file.size }) });
   return uploadToStorage(grant, file, signal, progress);
+}
+
+/** 保留文章图片入口和进度回调，避免改变编辑器现有上传行为。 */
+export function uploadArticleImage(file: File, maximum: number, signal: AbortSignal, progress: (value: number) => void) {
+  return uploadImage(file, maximum, 'ARTICLE_IMAGE', signal, progress);
+}
+
+/** 头像遵循后端2 MiB上限，上传成功后仍需由资料接口确认绑定。 */
+export function uploadAvatarImage(file: File, signal: AbortSignal) {
+  return uploadImage(file, 2 * 1024 * 1024, 'AVATAR', signal, () => {});
 }
 export function uploadError(error: unknown) {
   if (error instanceof ApiError) {

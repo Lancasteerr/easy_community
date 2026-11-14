@@ -4,10 +4,9 @@ import { errorMessage } from '../api/client';
 import type { ArticleDetailData } from '../api/types';
 import { useArticleDetail } from '../article/useArticleDetail';
 import { useCooldown } from '../hooks/useCooldown';
-import { useAuth } from '../auth/AuthContext';
 import { Header } from '../components/Header';
 import { Avatar } from '../components/Avatar';
-import { useToast, useUnavailable } from '../components/Toast';
+import { useUnavailable } from '../components/Toast';
 import { ArticleHero } from '../article/ArticleHero';
 import { ArticleBody } from '../article/ArticleBody';
 import { ArticleToc } from '../article/ArticleToc';
@@ -32,24 +31,17 @@ function DetailSession({ id }: { id: string | undefined }) {
   const geometry = { contentRef: body, topInset };
   const detail = useArticleDetail(id);
   const seconds = useCooldown(detail.retryAt);
-  const auth = useAuth();
   const navigate = useNavigate();
-  const notify = useToast();
   useEffect(() => { document.title = `${detail.article?.title ?? '文章详情'} · Easy Community`; }, [detail.article?.title]);
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); }, []);
-  const avatarClick = () => {
-    if (auth.status === 'guest') navigate('/login', { state: { returnTo: `/articles/${id}`,
-      readingPosition: capturePosition(scroll.current, geometry) } });
-    else if (auth.status === 'authenticated') notify('个人中心暂未开放');
-    else { notify('正在确认登录状态，请稍后重试'); void auth.refresh(); }
-  };
+  const login = () => navigate('/login', { state: { returnTo: `/articles/${id}`,
+    readingPosition: capturePosition(scroll.current, geometry) } });
   return <div className="detail-page">
     <div className="detail-scroll" ref={scroll} tabIndex={0} role="region" aria-label="文章详情滚动区域">
       <div className="detail-scroll-canvas">
         {/* 与主页保持相同的吸顶遮挡边界，卡片整体从导航背景下方经过。 */}
         <div className="detail-top-frame" ref={top}>
-          <Header avatarUrl={auth.user?.avatarUrl} onAvatarClick={avatarClick}
-            avatarLabel={auth.user ? `${auth.user.username} 的个人中心` : auth.status === 'guest' ? '登录' : '重新检查登录状态'} />
+          <Header onLogin={login} />
         </div>
         {detail.article ? <ArticleReader article={detail.article} scroll={scroll} body={body} topInset={topInset} />
           : <main className="detail-columns" aria-label="文章详情" aria-busy={detail.status === 'loading'}>

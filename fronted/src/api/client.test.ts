@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, checkDeletion, deleteArticle, getFeed, getMyArticles, postLogin, request } from './client';
+import { ApiError, checkDeletion, deleteArticle, getFeed, getMyArticles, postLogin, postLogout, request } from './client';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('同源请求边界', () => {
+  it('登出以 POST 携带动态 CSRF 与同源 Cookie，204 不读取 JSON', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(postLogout({ token: 'masked', headerName: 'CUSTOM-CSRF' })).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST',
+      credentials: 'same-origin', cache: 'no-store', headers: { 'CUSTOM-CSRF': 'masked' } }));
+  });
   it('删除携带动态CSRF并接受204，核对只调用作者接口且不保留正文', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(new Response('{"contentJson":{"large":"body"}}'))

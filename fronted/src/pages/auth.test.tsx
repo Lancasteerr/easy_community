@@ -36,15 +36,12 @@ beforeEach(() => {
 });
 
 describe('登录页', () => {
-  it('管理页游客跳登录，成功后回到管理页并读取本人文章', async () => {
-    readProfile.mockRejectedValueOnce(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客')).mockResolvedValue(profile);
-    const user = mount('/manage/articles');
-    await screen.findByRole('heading', { name: '账号密码登录' });
-    await fill(user);
-    await user.click(screen.getByRole('button', { name: /^登录$/ }));
-    await screen.findByText('暂无已发布内容');
-    expect(screen.getByLabelText('当前路由')).toHaveTextContent('/manage/articles');
-    expect(getMyArticles).toHaveBeenCalledWith(null, expect.any(AbortSignal));
+  it.each(['/manage/articles', '/articles/new', '/articles/12/edit'])('游客直接访问受保护页面 %s 返回首页，不强制登录', async (path) => {
+    mount(path);
+    await screen.findByRole('button', { name: /^登录$/ });
+    expect(screen.getByLabelText('当前路由')).toHaveTextContent(/^\/$/);
+    expect(screen.queryByRole('heading', { name: '账号密码登录' })).toBeNull();
+    expect(getMyArticles).not.toHaveBeenCalled();
   });
 
   it('外部地址及不支持的回跳目标均返回首页', async () => {
@@ -180,11 +177,11 @@ describe('主页登录态', () => {
     expect(screen.getByLabelText('当前路由')).toHaveTextContent('/login');
   });
 
-  it('已登录点击头像提示个人中心未开放，直接访问登录页返回主页', async () => {
+  it('已登录点击头像显示菜单，直接访问登录页返回主页', async () => {
     readProfile.mockResolvedValue(profile);
     const user = mount();
     await user.click(await screen.findByRole('button', { name: `${profile.username} 的个人中心` }));
-    expect(screen.getByText('个人中心暂未开放')).toBeVisible();
+    expect(screen.getByRole('menu', { name: '用户菜单' })).toBeVisible();
     expect(readCsrf).not.toHaveBeenCalled();
   });
 

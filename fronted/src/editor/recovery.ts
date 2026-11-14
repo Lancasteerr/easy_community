@@ -3,7 +3,7 @@ import { mediaIdPattern, type ArticleForm } from './model';
 export const recoveryKey = 'ec:article-editor:recovery:v1';
 export interface EditorRecovery { version: 1; ownerId: string; articleId: string | null; form: ArticleForm; baseline: ArticleForm; savedAt: number }
 
-/** 只为登录跳转保存一次快照，不承担自动保存或草稿箱职责。 */
+/** 只在会话失效离页前保存一次快照，不承担自动保存或草稿箱职责。 */
 export function saveRecovery(ownerId: string, articleId: string | undefined, form: ArticleForm, baseline: ArticleForm) {
   const value: EditorRecovery = { version: 1, ownerId, articleId: articleId ?? null, form, baseline, savedAt: Date.now() };
   sessionStorage.setItem(recoveryKey, JSON.stringify(value));

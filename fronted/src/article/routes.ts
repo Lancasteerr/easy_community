@@ -6,7 +6,7 @@ export function validArticleId(value: string | undefined): value is string {
 
 /** 登录回跳只开放已知站内入口，拒绝外链、查询串和越界文章标识。 */
 export function loginDestination(value: unknown) {
-  if (value === '/manage/articles' || value === '/articles/new') return value;
+  if (value === '/manage/articles' || value === '/articles/new' || value === '/settings/profile') return value;
   if (typeof value !== 'string') return '/';
   const match = /^\/articles\/([^/]+)(\/edit)?$/.exec(value);
   return match && validArticleId(match[1]) ? value : '/';

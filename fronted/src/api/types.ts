@@ -8,6 +8,8 @@ export interface UserIdentity {
 export interface UserProfile extends UserIdentity {
   avatarMediaId: string | null;
   avatarUrl: string | null;
+  /** 后端已规范化的单行简介，未填写时为空字符串。 */
+  bio: string;
 }
 
 export interface ArticleCardData {
