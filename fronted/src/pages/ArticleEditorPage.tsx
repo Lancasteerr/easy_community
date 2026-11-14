@@ -14,8 +14,8 @@ export function ArticleEditorPage() {
   const logoutGuard = useRef<EditorLogoutGuard | null>(null);
   const registerLogoutGuard = useCallback((guard: EditorLogoutGuard | null) => { logoutGuard.current = guard; }, []);
   // 失效后继续挂载原作者会话，由会话先完成暂存再导航；不能直接因 user=null 卸载。
-  const owner = useRef(auth.user);
-  if (!owner.current && auth.user) owner.current = auth.user;
+  const owner = useRef(auth.identity);
+  if (!owner.current && auth.identity) owner.current = auth.identity;
   useEffect(() => { document.title = `${id ? '编辑文章' : '发布文章'} · Easy Community`; }, [id]);
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, []);
   if (auth.status === 'guest' && !owner.current) return <Navigate to="/" replace />;

@@ -1,4 +1,4 @@
-import type { CsrfToken, FeedPage, ProblemDetail, UserIdentity, UserProfile } from './types';
+import type { CsrfToken, FeedPage, ProblemDetail, LoginResponse, PublicUserProfile, SessionIdentity } from './types';
 
 /** 所有错误经此边界转换；界面不直接展示服务端连接或索引诊断信息。 */
 export class ApiError extends Error {
@@ -36,8 +36,14 @@ export async function request<T>(url: string, options: RequestInit = {}): Promis
   }
 }
 
-export function getProfile(signal?: AbortSignal) {
-  return request<UserProfile>('/api/users/me', { signal });
+/** 身份查询不依赖展示资料。 */
+export function getSession(signal?: AbortSignal) {
+  return request<SessionIdentity>('/api/auth/session', { signal });
+}
+
+/** 每个页面独立读取公开资料，不建立共享缓存。 */
+export function getPublicProfile(userId: string, signal?: AbortSignal) {
+  return request<PublicUserProfile>(`/api/users/${encodeURIComponent(userId)}`, { signal });
 }
 
 export async function getFeed(cursor: string | null, signal?: AbortSignal) {
@@ -82,7 +88,7 @@ export async function checkDeletion(id: string, signal?: AbortSignal): Promise<'
 }
 
 export function postLogin(username: string, password: string, csrf: CsrfToken, signal?: AbortSignal) {
-  return request<UserIdentity>('/api/auth/login', {
+  return request<LoginResponse>('/api/auth/login', {
     method: 'POST', signal,
     headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
     body: JSON.stringify({ username, password }),

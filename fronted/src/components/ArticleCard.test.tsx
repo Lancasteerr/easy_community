@@ -27,8 +27,8 @@ function renderCards() {
 }
 
 beforeEach(() => {
-  vi.mocked(useAuth).mockReturnValue({ status: 'authenticated', user: profile, error: null, refreshing: false, endReason: null,
-    refresh: vi.fn(), expireSession, updateProfile: vi.fn() });
+  vi.mocked(useAuth).mockReturnValue({ status: 'authenticated', identity: profile, error: null, refreshing: false, endReason: null,
+    refresh: vi.fn(), expireSession, acceptSession: vi.fn() });
   credentials.mockReset().mockResolvedValue({ token: 'token', headerName: 'X-CSRF-TOKEN' });
   write.mockReset().mockImplementation(async (_id, liked, operationId) => ({ accepted: true, liked, operationId, version: '1' }));
   login.mockReset(); expireSession.mockReset();
@@ -68,7 +68,7 @@ it('卡片只在受理后高亮和更新数量，写入期间阻止重复点击�
 });
 
 it('游客点击只进入登录，不获取凭证或发送点赞', () => {
-  vi.mocked(useAuth).mockReturnValue({ ...useAuth(), status: 'guest', user: null });
+  vi.mocked(useAuth).mockReturnValue({ ...useAuth(), status: 'guest', identity: null });
   renderCards();
   fireEvent.click(screen.getByRole('button', { name: '点赞 328' }));
   expect(login).toHaveBeenCalledTimes(1);

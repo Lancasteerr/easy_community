@@ -3,12 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { App } from '../App';
-import { ApiError, getCsrf, getProfile, postLogin } from '../api/client';
+import { ApiError, getCsrf, getSession, getPublicProfile, postLogin } from '../api/client';
 import { getArticleDetail, setArticleLike } from '../api/articles';
 import { article, profile } from '../test/fixtures';
 
 vi.mock('../api/client', async (original) => ({ ...await original<typeof import('../api/client')>(),
-  getProfile: vi.fn(), getCsrf: vi.fn(), postLogin: vi.fn() }));
+  getSession: vi.fn(), getPublicProfile: vi.fn(), getCsrf: vi.fn(), postLogin: vi.fn() }));
 vi.mock('../api/articles', () => ({ getArticleDetail: vi.fn(), setArticleLike: vi.fn() }));
 
 function LocationProbe() {
@@ -17,7 +17,8 @@ function LocationProbe() {
 }
 
 beforeEach(() => {
-  vi.mocked(getProfile).mockReset().mockRejectedValue(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客'));
+  vi.mocked(getPublicProfile).mockReset().mockResolvedValue(profile);
+  vi.mocked(getSession).mockReset().mockRejectedValue(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客'));
   vi.mocked(getCsrf).mockReset().mockResolvedValue({ token: 'masked', headerName: 'X-CSRF-TOKEN' });
   vi.mocked(postLogin).mockReset().mockResolvedValue(profile);
   vi.mocked(getArticleDetail).mockReset().mockResolvedValue({ ...article('9007199254740995'), coverMediaId: null, contentHtml: '<p>真实正文</p>' });
@@ -36,7 +37,7 @@ it('游客可以阅读，无标题不渲染目录，评论按钮只提示未开�
 });
 
 it('游客点赞登录后回原文章重新读取状态，不自动补发点赞', async () => {
-  vi.mocked(getProfile).mockRejectedValueOnce(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客')).mockResolvedValue(profile);
+  vi.mocked(getSession).mockRejectedValueOnce(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客')).mockResolvedValue(profile);
   const user = userEvent.setup();
   render(<MemoryRouter initialEntries={['/articles/9007199254740995']}><App /><LocationProbe /></MemoryRouter>);
   const like = await screen.findByRole('button', { name: /^点赞 / });

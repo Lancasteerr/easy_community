@@ -1,4 +1,4 @@
-import type { ArticleCardData, UserProfile } from '../api/types';
+import type { ArticleCardData, ProfileWriteResponse } from '../api/types';
 
 /** 测试卡片刻意使用超出 JS 安全整数范围的字符串 ID。 */
 export const article = (id = '9007199254740993'): ArticleCardData => ({
@@ -7,7 +7,7 @@ export const article = (id = '9007199254740993'): ArticleCardData => ({
   publishedAt: '2026-11-09T00:00:00Z', updatedAt: '2026-11-09T00:00:00Z', viewCount: 1280, likeCount: 328, likedByMe: false,
 });
 
-export const profile: UserProfile = { userId: '9007199254740995', username: 'community_user', role: 'USER', avatarMediaId: null, avatarUrl: null, bio: '' };
+export const profile: ProfileWriteResponse = { userId: '9007199254740995', username: 'community_user', role: 'USER', avatarMediaId: null, avatarUrl: null, bio: '', createdAt: '2026-11-01T00:00:00Z' };
 
 export function deferred<T>() {
   let resolve!: (value: T) => void;

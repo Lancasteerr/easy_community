@@ -1,21 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
-import { ApiError } from '../api/client';
-import type { UserProfile } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Header } from '../components/Header';
 import { Icon } from '../components/Icon';
-import { useCooldown } from '../hooks/useCooldown';
+import { usePublicProfile } from '../profile/usePublicProfile';
 import { ProfileSettingsForm } from '../profile/ProfileSettingsForm';
 import './profile-settings.css';
 
-/** 设置页沿用桌面画布，整页滚动；初次确认资料后才建立该账号的表单。 */
+/** 设置页沿用桌面画布，整页滚动；页面独立读取资料，离页后不保留输入。 */
 export function ProfileSettingsPage() {
   const auth = useAuth();
-  const owner = useRef<UserProfile | null>(null);
-  const seconds = useCooldown(auth.error instanceof ApiError ? auth.error.retryAt : 0);
-  if (auth.user && !auth.refreshing && !auth.error && owner.current?.userId !== auth.user.userId) owner.current = auth.user;
-  const hasProfile = auth.user && owner.current?.userId === auth.user.userId;
+  const { profile, failed } = usePublicProfile(auth.identity?.userId);
 
   useEffect(() => {
     document.title = '编辑资料 · Easy Community';
@@ -36,11 +31,10 @@ export function ProfileSettingsPage() {
       </aside>
       <main className="profile-settings-panel glass-panel" aria-labelledby="profile-settings-heading">
         <h1 id="profile-settings-heading">编辑资料</h1>
-        {hasProfile && auth.user && <ProfileSettingsForm key={auth.user.userId} profile={auth.user} />}
-        {auth.error ? <div className="profile-settings-read-state" role="status">
-          <p>资料暂时无法加载</p>
-          <button type="button" disabled={auth.refreshing || seconds > 0} onClick={() => { void auth.refresh(); }}>重新加载</button>
-        </div> : !hasProfile && <p className="profile-settings-read-state" role="status">正在加载资料…</p>}
+        {profile && <ProfileSettingsForm key={profile.userId} profile={profile} />}
+        {(failed || auth.error) ? <p className="profile-settings-read-state" role="status">加载失败，请稍后重试</p>
+          : !profile && <p className="profile-settings-read-state" role="status">正在加载资料…</p>}
+
       </main>
     </div>
   </div>;

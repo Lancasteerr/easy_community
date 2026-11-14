@@ -1,10 +1,10 @@
 import { useId, useRef } from 'react';
-import type { UserProfile } from '../api/types';
+import type { PublicUserProfile } from '../api/types';
 import { Avatar } from '../components/Avatar';
 import { useProfileEditor } from './useProfileEditor';
 
 /** 资料输入与头像选择共用提交锁，界面只展示计数和必要的结果反馈。 */
-export function ProfileSettingsForm({ profile }: { profile: UserProfile }) {
+export function ProfileSettingsForm({ profile }: { profile: PublicUserProfile }) {
   const editor = useProfileEditor(profile);
   const fileInput = useRef<HTMLInputElement>(null);
   const composing = useRef(false);

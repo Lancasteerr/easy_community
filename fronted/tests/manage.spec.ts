@@ -1,9 +1,10 @@
+import { mockPublicProfiles } from './public-profile-mock';
 import { expect, test, type Page } from '@playwright/test';
 import { article, profile } from '../src/test/fixtures';
 
 /** 所有演示数据只存在于浏览器拦截中；真实联调另行记录。 */
 async function signedIn(page: Page) {
-  await page.route('**/api/users/me', (route) => route.fulfill({ json: profile }));
+  await page.route('**/api/auth/session', (route) => route.fulfill({ json: profile }));
   await page.route('**/api/auth/csrf', (route) => route.fulfill({ json: { token: 'masked', headerName: 'X-CSRF-TOKEN' } }));
   await page.route('**/api/articles/feed?**', (route) => route.fulfill({ json: { items: [], nextCursor: null } }));
   await page.route('**/test-cover.png', (route) => route.fulfill({ path: 'src/assets/home-banner.png', contentType: 'image/png' }));
@@ -149,8 +150,8 @@ test('游客由管理作品入口登录回跳，离开重进读取首批', async
   let authenticated = false;
   let reads = 0;
   await signedIn(page);
-  await page.unroute('**/api/users/me');
-  await page.route('**/api/users/me', (route) => route.fulfill(authenticated ? { json: profile } : { status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
+  await page.unroute('**/api/auth/session');
+  await page.route('**/api/auth/session', (route) => route.fulfill(authenticated ? { json: profile } : { status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
   await page.route('**/api/auth/login', (route) => { authenticated = true; return route.fulfill({ json: profile }); });
   await page.route('**/api/users/me/articles?**', (route) => { reads++; return route.fulfill({ json: { items: rows, nextCursor: null } }); });
   await page.goto('/');
@@ -204,8 +205,8 @@ test('身份复核静默，失败复用原稿加载失败且恢复原位置，40
   let reads = 0;
   let release: (() => void) | undefined;
   const held = new Promise<void>((resolve) => { release = resolve; });
-  await page.unroute('**/api/users/me');
-  await page.route('**/api/users/me', async (route) => {
+  await page.unroute('**/api/auth/session');
+  await page.route('**/api/auth/session', async (route) => {
     if (mode === 'checking') await held;
     return route.fulfill(mode === 'ok' ? { json: profile }
       : { status: mode === 'expired' ? 401 : 503, json: { code: mode === 'expired' ? 'AUTHENTICATION_REQUIRED' : 'DEPENDENCY_UNAVAILABLE' } });
@@ -347,3 +348,6 @@ test('无观察器时空页仍可手动续读，空页不等于结束', async ({
   await page.getByRole('button', { name: '继续加载' }).click();
   await expect(page.locator('.manage-row')).toHaveCount(1);
 });
+
+// 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
+test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });

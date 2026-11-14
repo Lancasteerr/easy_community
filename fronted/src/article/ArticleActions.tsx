@@ -24,7 +24,7 @@ export function ArticleActions({ article, reader, geometry }: {
   const notify = useToast();
   const login = () => navigate('/login', { state: { returnTo: `/articles/${article.articleId}`, readingPosition: capturePosition(reader.current, geometry) } });
   const like = useArticleLike(article, { enabled: auth.status === 'authenticated' && !auth.refreshing && !auth.error,
-    userId: auth.user?.userId, notify, onUnauthorized: () => { auth.expireSession(); login(); } });
+    userId: auth.identity?.userId, notify, onUnauthorized: () => { auth.expireSession(); login(); } });
   const seconds = useCooldown(like.retryAt);
   const blocked = auth.status === 'loading' || auth.status === 'error' || auth.refreshing || !!auth.error;
   const label = `${like.liked ? '取消点赞' : '点赞'} ${new Intl.NumberFormat('en-US').format(like.count)}`;

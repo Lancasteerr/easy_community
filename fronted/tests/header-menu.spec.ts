@@ -1,3 +1,4 @@
+import { mockPublicProfiles } from './public-profile-mock';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { article, profile } from '../src/test/fixtures';
 import { emptyForm } from '../src/editor/model';
@@ -5,7 +6,7 @@ import { emptyForm } from '../src/editor/model';
 /** 同一浏览器上下文共享测试会话，覆盖新标签打开及随后刷新复核。 */
 async function setup(context: BrowserContext) {
   const session = { authenticated: true };
-  await context.route('**/api/users/me', (route) => route.fulfill(session.authenticated
+  await context.route('**/api/auth/session', (route) => route.fulfill(session.authenticated
     ? { json: profile } : { status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
   await context.route('**/api/auth/csrf', (route) => route.fulfill({ json: { token: 'masked', headerName: 'X-CSRF-TOKEN' } }));
   await context.route('**/api/articles/feed?**', (route) => route.fulfill({ json: {
@@ -170,3 +171,6 @@ test('管理页被动读取 401 回首页，主动删除收到 401 才进入登�
   await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/); await expect(page.getByRole('heading', { name: '账号密码登录' })).toBeVisible();
 });
+
+// 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
+test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });

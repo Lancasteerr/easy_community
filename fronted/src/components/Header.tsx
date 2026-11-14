@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 import { useToast, useUnavailable } from './Toast';
 import { useAuth } from '../auth/AuthContext';
 import { errorMessage } from '../api/client';
+import { usePublicProfile } from '../profile/usePublicProfile';
 import { AvatarMenu } from './AvatarMenu';
 import type { LogoutOptions } from '../auth/useLogout';
 
@@ -13,6 +14,7 @@ export function Header({ onLogin, hideSearch = false, ...logoutOptions }: Logout
   const notify = useToast();
   const auth = useAuth();
   const navigate = useNavigate();
+  const { profile } = usePublicProfile(auth.identity?.userId);
   const login = () => { if (onLogin) onLogin(); else navigate('/login'); };
   const checkIdentity = () => { notify(auth.status === 'error' ? errorMessage(auth.error) : '正在确认登录状态，请稍后重试'); void auth.refresh(); };
   return <header className="home-header glass-panel">
@@ -27,7 +29,7 @@ export function Header({ onLogin, hideSearch = false, ...logoutOptions }: Logout
           if (auth.status === 'guest') navigate('/login', { state: { returnTo: '/articles/new' } });
           else if (auth.status === 'authenticated') navigate('/articles/new'); else checkIdentity();
         }}><Icon name="edit" size={25} /></button>
-        {auth.status === 'authenticated' && auth.user ? <AvatarMenu avatarUrl={auth.user.avatarUrl} label={`${auth.user.username} 的个人中心`} {...logoutOptions} />
+        {auth.status === 'authenticated' && auth.identity ? <AvatarMenu avatarUrl={profile?.avatarUrl} label={profile ? `${profile.username} 的个人中心` : '个人中心'} {...logoutOptions} />
           : auth.status === 'guest' ? <button type="button" className="header-login" onClick={login}>登录</button>
           : <button type="button" className="avatar-entry icon-button" aria-label={auth.status === 'loading' ? '正在确认登录状态' : '重新检查登录状态'}
             aria-busy={auth.status === 'loading'} onClick={checkIdentity}><Avatar size={40} /></button>}

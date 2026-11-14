@@ -76,7 +76,7 @@ export function ManageArticlesPage() {
         <button aria-current="page">管理文章</button><button onClick={unavailable}>管理视频</button><button onClick={unavailable}>管理合集</button>
       </nav></aside>
       <main className="manage-panel" aria-label="文章管理">
-        {auth.user ? <MyArticles key={auth.user.userId} userId={auth.user.userId} /> : <>
+        {auth.identity ? <MyArticles key={auth.identity.userId} userId={auth.identity.userId} /> : <>
           <div className="manage-toolbar"><h1>已发布</h1></div><div className="manage-list">
             {auth.status === 'error' ? <ManageError seconds={seconds} onRetry={() => { void auth.refresh(); }} /> : <ManageSkeleton />}
           </div></>}

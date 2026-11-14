@@ -1,10 +1,11 @@
+import { mockPublicProfiles } from './public-profile-mock';
 import { expect, test, type Page } from '@playwright/test';
 import { profile } from '../src/test/fixtures';
 import { emptyForm } from '../src/editor/model';
 
 /** 外观和编辑操作使用真实编辑器；接口仅在浏览器测试夹具中替换。 */
 async function setup(page: Page, doc = emptyForm().content.doc) {
-  await page.route('**/api/users/me', (route) => route.fulfill({ json: profile }));
+  await page.route('**/api/auth/session', (route) => route.fulfill({ json: profile }));
   await page.route('**/api/auth/csrf', (route) => route.fulfill({ json: { token: 'masked', headerName: 'X-CSRF-TOKEN' } }));
   await page.route('**/api/articles/12/edit', (route) => route.fulfill({ json: { ...emptyForm(), articleId: '12', title: '写作与日常', content: { schemaVersion: 1, doc } } }));
 }
@@ -144,3 +145,6 @@ test('未知代码语言原样保存，自动识别不回写语言，显示操�
   await body.click(); await body.press('ArrowLeft'); await page.getByRole('button', { name: '链接', exact: true }).click(); await page.keyboard.press('Escape');
   await page.getByRole('link', { name: '返回首页' }).click(); await expect(page).toHaveURL('http://127.0.0.1:5175/'); await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+// 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
+test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });

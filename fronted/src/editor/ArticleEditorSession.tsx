@@ -36,7 +36,7 @@ export function ArticleEditorSession({ routeId, ownerId, registerLogoutGuard }: 
   const editor = useRef<Editor | null>(null);
   const [readyBodyKey, setReadyBodyKey] = useState<number | null>(null);
   const [coverBlocked, setCoverBlocked] = useState(false);
-  const disabled = auth.status !== 'authenticated' || auth.user?.userId !== ownerId || auth.refreshing || !!auth.error || save.busy;
+  const disabled = auth.status !== 'authenticated' || auth.identity?.userId !== ownerId || auth.refreshing || !!auth.error || save.busy;
   const uploads = useBodyImages(editor, disabled, auth.expireSession);
   const blocked = disabled || coverBlocked || uploads.blocked || readyBodyKey !== document.bodyKey;
   const guard = useEditorLeaveGuard(document.dirty || coverBlocked || uploads.blocked, save.busy);

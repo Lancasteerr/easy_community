@@ -1,3 +1,4 @@
+import { mockPublicProfiles } from './public-profile-mock';
 import { expect, test, type Page } from '@playwright/test';
 import { profile } from '../src/test/fixtures';
 import { emptyForm } from '../src/editor/model';
@@ -6,7 +7,7 @@ const imageId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
 const content = { schemaVersion: 1, doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '已有正文' }] }] } };
 const edit = { ...emptyForm(), articleId: '12', title: '已有标题', content, createdAt: '', updatedAt: '', publishedAt: '' };
 async function setup(page: Page) {
-  await page.route('**/api/users/me', (route) => route.fulfill({ json: profile }));
+  await page.route('**/api/auth/session', (route) => route.fulfill({ json: profile }));
   await page.route('**/api/auth/csrf', (route) => route.fulfill({ json: { token: 'masked', headerName: 'X-CSRF-TOKEN' } }));
   await page.route('**/api/articles/feed?**', (route) => route.fulfill({ json: { items: [], nextCursor: null } }));
   await page.route('**/api/articles/12/edit', (route) => route.fulfill({ json: edit }));
@@ -79,7 +80,7 @@ test('返回和浏览器后退受保护，取消恢复焦点，未修改直接�
 
 test('会话过期先暂存，同账号登录后恢复原文且不自动发布', async ({ page }) => {
   await setup(page); let expired = false, writes = 0;
-  await page.route('**/api/users/me', (route) => expired ? route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }) : route.fulfill({ json: profile }));
+  await page.route('**/api/auth/session', (route) => expired ? route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }) : route.fulfill({ json: profile }));
   await page.route('**/api/articles', (route) => { writes++; expired = true; return route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }); });
   await page.route('**/api/auth/login', (route) => { expired = false; return route.fulfill({ json: profile }); });
   await page.goto('/articles/new'); await fill(page); await page.getByRole('button', { name: '发布文章', exact: true }).click();
@@ -223,10 +224,13 @@ test('短视口外层布局不压缩，空白页面视觉截图', async ({ page 
 
 test('其他窗口切换账号后隐藏旧内容，恢复原账号才继续原编辑会话', async ({ page }) => {
   await setup(page); let other = false;
-  await page.route('**/api/users/me', (route) => route.fulfill({ json: other ? { ...profile, userId: '8', username: 'another_user' } : profile }));
+  await page.route('**/api/auth/session', (route) => route.fulfill({ json: other ? { ...profile, userId: '8', username: 'another_user' } : profile }));
   await page.goto('/articles/new'); await fill(page); other = true;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByText(/账号已切换/)).toBeVisible(); await expect(page.getByRole('textbox', { name: '文章正文' })).toHaveCount(0);
   other = false; await page.getByRole('button', { name: '重新检查登录状态' }).click();
   await expect(page.getByRole('textbox', { name: '文章正文' })).toContainText('正文内容'); await expect(page.getByRole('textbox', { name: '文章标题' })).toHaveValue('新文章');
 });
+
+// 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
+test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });

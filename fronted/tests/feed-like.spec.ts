@@ -1,8 +1,9 @@
+import { mockPublicProfiles } from './public-profile-mock';
 import { expect, test } from '@playwright/test';
 import { article, profile } from '../src/test/fixtures';
 
 test('主页点赞使用受理接口，防止重复写入并支持独立取消', async ({ page }) => {
-  await page.route('**/api/users/me', (route) => route.fulfill({ json: profile }));
+  await page.route('**/api/auth/session', (route) => route.fulfill({ json: profile }));
   await page.route('**/api/auth/csrf', (route) => route.fulfill({ json: { token: 'masked', headerName: 'X-CSRF-TOKEN' } }));
   await page.route('**/api/articles/feed?**', (route) => route.fulfill({ json: { items: [article('1'), article('2')], nextCursor: null } }));
   const commands: { id: string; method: string; operation: string }[] = [];
@@ -46,7 +47,7 @@ test('游客点赞登录后恢复深层卡片、纵横位置和续页游标，�
   let signedIn = false;
   let likes = 0;
   const cursors: (string | null)[] = [];
-  await page.route('**/api/users/me', (route) => route.fulfill(signedIn ? { json: profile }
+  await page.route('**/api/auth/session', (route) => route.fulfill(signedIn ? { json: profile }
     : { status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
   await page.route('**/api/auth/csrf', (route) => route.fulfill({ json: { token: 'masked', headerName: 'X-CSRF-TOKEN' } }));
   await page.route('**/api/auth/login', (route) => { signedIn = true; return route.fulfill({ json: profile }); });
@@ -100,3 +101,6 @@ test('游客点赞登录后恢复深层卡片、纵横位置和续页游标，�
   await expect(page.locator('.article-card')).toHaveCount(9);
   expect(cursors).toEqual([null, 'second-page', 'third-page']);
 });
+
+// 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
+test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });

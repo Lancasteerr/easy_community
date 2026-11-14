@@ -1,16 +1,24 @@
-/** 对齐后端公开 DTO；BIGINT 标识始终保留字符串，避免浏览器精度丢失。 */
-export interface UserIdentity {
+/** 会话仅保存身份；BIGINT标识始终使用字符串。 */
+export interface SessionIdentity {
   userId: string;
-  username: string;
   role: 'USER' | 'PATROLLER' | 'ADMIN';
 }
 
-export interface UserProfile extends UserIdentity {
+/** 登录协议保留用户名，但身份状态只提取userId与role。 */
+export interface LoginResponse extends SessionIdentity { username: string }
+
+/** 公开资料仅用于页面展示，不包含权限或认证字段。 */
+export interface PublicUserProfile {
+  userId: string;
+  username: string;
   avatarMediaId: string | null;
   avatarUrl: string | null;
-  /** 后端已规范化的单行简介，未填写时为空字符串。 */
   bio: string;
+  createdAt: string;
 }
+
+/** 兼容现有本人资料写入响应，不将角色写入页面资料状态。 */
+export interface ProfileWriteResponse extends PublicUserProfile { role: SessionIdentity['role'] }
 
 export interface ArticleCardData {
   articleId: string;

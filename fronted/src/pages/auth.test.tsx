@@ -2,18 +2,18 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getCsrf, getMyArticles, getProfile, postLogin } from '../api/client';
+import { ApiError, getCsrf, getMyArticles, getSession, getPublicProfile, postLogin } from '../api/client';
 import { App } from '../App';
 import { deferred, profile } from '../test/fixtures';
-import type { UserIdentity } from '../api/types';
+import type { LoginResponse } from '../api/types';
 
 vi.mock('../api/client', async (original) => ({
-  ...await original<typeof import('../api/client')>(), getProfile: vi.fn(), getCsrf: vi.fn(), postLogin: vi.fn(), getMyArticles: vi.fn(),
+  ...await original<typeof import('../api/client')>(), getSession: vi.fn(), getPublicProfile: vi.fn(), getCsrf: vi.fn(), postLogin: vi.fn(), getMyArticles: vi.fn(),
 }));
 // 分页逻辑已单独测试，此处只关注真实路由、登录态与表单的协作。
 vi.mock('../components/Feed', () => ({ Feed: () => <section aria-label="推荐文章" /> }));
 
-const readProfile = vi.mocked(getProfile);
+const readProfile = vi.mocked(getSession);
 const readCsrf = vi.mocked(getCsrf);
 const login = vi.mocked(postLogin);
 const token = { token: 'masked-token', headerName: 'X-CSRF-TOKEN' };
@@ -29,6 +29,7 @@ async function fill(user: ReturnType<typeof userEvent.setup>) {
 }
 
 beforeEach(() => {
+  vi.mocked(getPublicProfile).mockReset().mockResolvedValue(profile);
   readProfile.mockReset().mockRejectedValue(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客'));
   readCsrf.mockReset().mockResolvedValue(token);
   login.mockReset().mockResolvedValue(profile);
@@ -93,7 +94,7 @@ describe('登录页', () => {
   });
 
   it('提交中锁定表单，重复点击和回车不重复提交', async () => {
-    const pending = deferred<UserIdentity>();
+    const pending = deferred<LoginResponse>();
     login.mockReturnValue(pending.promise);
     const user = mount();
     await fill(user);
@@ -135,7 +136,7 @@ describe('登录页', () => {
     expect(login).toHaveBeenCalledTimes(1);
   });
 
-  it('登录成功刷新 CSRF 与资料，替换路由返回主页', async () => {
+  it('登录成功刷新 CSRF 并独立读取资料，替换路由返回主页', async () => {
     readProfile.mockRejectedValueOnce(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客')).mockResolvedValue(profile);
     const user = mount();
     await fill(user);
@@ -143,18 +144,18 @@ describe('登录页', () => {
     await screen.findByRole('button', { name: `${profile.username} 的个人中心` });
     expect(screen.getByLabelText('当前路由')).toHaveTextContent(/^\/$/);
     expect(readCsrf).toHaveBeenCalledTimes(2);
-    expect(readProfile).toHaveBeenCalledTimes(2);
+    expect(readProfile).toHaveBeenCalledTimes(1);
     expect(login).toHaveBeenCalledTimes(1);
   });
 
-  it('登录后资料和 CSRF 刷新失败不撤销成功、不重复认证', async () => {
+  it('登录后 CSRF 刷新失败不撤销成功、不重复认证', async () => {
     readProfile.mockRejectedValueOnce(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客')).mockRejectedValue(new ApiError(503, 'DEPENDENCY_UNAVAILABLE', '失败'));
     readCsrf.mockResolvedValueOnce(token).mockRejectedValue(new ApiError(503, 'DEPENDENCY_UNAVAILABLE', '失败'));
     const user = mount();
     await fill(user);
     await user.click(screen.getByRole('button', { name: '登录' }));
     await screen.findByRole('button', { name: `${profile.username} 的个人中心` });
-    expect(screen.getByText('登录成功，部分资料暂时无法刷新')).toBeVisible();
+    expect(screen.getByText('登录成功，部分功能暂时不可用，请稍后刷新')).toBeVisible();
     expect(login).toHaveBeenCalledTimes(1);
   });
 

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ApiError, getCsrf, getProfile, postLogout } from '../api/client';
+import { ApiError, getCsrf, getSession, getPublicProfile, postLogout } from '../api/client';
 import { AuthProvider } from '../auth/AuthContext';
 import type { LogoutOptions } from '../auth/useLogout';
 import { deferred, profile } from '../test/fixtures';
@@ -11,7 +11,7 @@ import { Header } from './Header';
 import { ToastProvider } from './Toast';
 
 vi.mock('../api/client', async (original) => ({ ...await original<typeof import('../api/client')>(),
-  getProfile: vi.fn(), getCsrf: vi.fn(), postLogout: vi.fn() }));
+  getSession: vi.fn(), getPublicProfile: vi.fn(), getCsrf: vi.fn(), postLogout: vi.fn() }));
 const credentials = { token: 'masked', headerName: 'X-CSRF-TOKEN' };
 function LocationProbe() { return <output aria-label="当前路由">{useLocation().pathname}</output>; }
 /** 使用真实导航、认证和菜单，只替换接口；StrictMode 同时检查订阅清理。 */
@@ -26,7 +26,8 @@ async function open(user: ReturnType<typeof userEvent.setup>) {
   return screen.findByRole('menu', { name: '用户菜单' });
 }
 beforeEach(() => {
-  vi.mocked(getProfile).mockReset().mockResolvedValue(profile);
+  vi.mocked(getPublicProfile).mockReset().mockResolvedValue(profile);
+  vi.mocked(getSession).mockReset().mockResolvedValue(profile);
   vi.mocked(getCsrf).mockReset().mockResolvedValue(credentials);
   vi.mocked(postLogout).mockReset().mockResolvedValue(undefined);
 });
@@ -94,7 +95,7 @@ it('头像点击第一次保持悬停菜单，第二次点击关闭', async () =
 });
 
 it('身份未知不显示游客按钮，确认游客后蓝色登录入口仍执行页面登录回调', async () => {
-  const pending = deferred<typeof profile>(); vi.mocked(getProfile).mockReturnValue(pending.promise);
+  const pending = deferred<typeof profile>(); vi.mocked(getSession).mockReturnValue(pending.promise);
   const onLogin = vi.fn();
   render(<MemoryRouter><ToastProvider><AuthProvider><Header onLogin={onLogin} /></AuthProvider></ToastProvider></MemoryRouter>);
   expect(screen.getByRole('button', { name: '正在确认登录状态' })).toBeVisible();

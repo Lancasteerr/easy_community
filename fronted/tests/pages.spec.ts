@@ -1,9 +1,10 @@
+import { mockPublicProfiles } from './public-profile-mock';
 import { expect, test, type Page } from '@playwright/test';
 import { article, profile } from '../src/test/fixtures';
 
 /** 接口只在测试浏览器内拦截；正式页面不带演示文章或模拟登录开关。 */
 async function guest(page: Page) {
-  await page.route('**/api/users/me', (route) => route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
+  await page.route('**/api/auth/session', (route) => route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
   await page.route('**/test-cover.png', (route) => route.fulfill({ path: 'src/assets/home-banner.png', contentType: 'image/png' }));
 }
 
@@ -91,7 +92,7 @@ test('主页作者头像支持真实加载、空地址及加载失败回退', as
   await expect(page.locator('.article-card h2')).toHaveText(['文章 1', '文章 2', '文章 3']);
   await expect(page.getByText('已经到底了')).toBeVisible();
   // 除既有登录态读取外，不能为信息流作者额外查询用户资料。
-  expect(userRequests.filter((path) => path !== '/api/users/me')).toEqual([]);
+  expect(userRequests.filter((path) => path !== '/api/auth/session')).toEqual([]);
 });
 
 for (const viewport of [
@@ -328,7 +329,7 @@ test('游客头像、CSRF、HttpOnly 会话与登录后刷新推荐形成闭环'
   let loginWrites = 0;
   const businessPaths = new Set<string>();
   page.on('request', (request) => { const path = new URL(request.url()).pathname; if (path.startsWith('/api/')) businessPaths.add(path); });
-  await page.route('**/api/users/me', (route) => route.fulfill(signedIn ? { json: { ...profile, avatarUrl: '/missing-avatar.png' } } : { status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
+  await page.route('**/api/auth/session', (route) => route.fulfill(signedIn ? { json: { ...profile, avatarUrl: '/missing-avatar.png' } } : { status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
   await page.route('**/api/articles/feed?**', (route) => {
     feedReads++;
     return route.fulfill({ json: { items: [{ ...article(), likedByMe: signedIn }], nextCursor: null } });
@@ -363,7 +364,7 @@ test('游客头像、CSRF、HttpOnly 会话与登录后刷新推荐形成闭环'
   await page.getByRole('button', { name: '搜索', exact: true }).click();
   await expect(page.getByText('功能暂未开放')).toBeVisible();
   await page.getByRole('button', { name: '热门', exact: true }).click();
-  expect(businessPaths).toEqual(new Set(['/api/users/me', '/api/articles/feed', '/api/auth/csrf', '/api/auth/login']));
+  expect(businessPaths).toEqual(new Set(['/api/auth/session', `/api/users/${profile.userId}`, '/api/articles/feed', '/api/auth/csrf', '/api/auth/login']));
   await page.goto('/login');
   await expect(page).toHaveURL(/:5175\/$/);
 });
@@ -434,3 +435,6 @@ test('无效游标可通过重新加载恢复，保持键盘焦点可见', async
   await button.press('Enter');
   await expect(page.getByText('已经到底了')).toBeVisible();
 });
+
+// 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
+test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });

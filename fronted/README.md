@@ -31,7 +31,7 @@ npm run build
 - `/`：主页三栏、顶部与侧栏吸顶、静态横幅、推荐流连续加载。最小宽度 1440px，窄屏横向滚动，背景固定覆盖视口。
 - `/login`：账号密码登录、必填反馈、密码显隐、CSRF、提交锁、限流倒计时与登录后返回首页。小于 1024px 时优先显示表单，短窗口允许纵向滚动。
 - `/manage/articles`：本人公开文章、内部滚动、游标续页、保留旧内容的刷新、删除确认与结果核对。首页“管理作品”进入，游客登录成功后回跳；离开后重进读取首批，不缓存跨路由列表。
-- 真实接口：`GET /api/articles/feed`、`GET /api/users/me`、`GET /api/auth/csrf`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/users/me/articles`、`DELETE /api/articles/{id}`及结果核对使用的`GET /api/articles/{id}/edit`。数据类型直接对应后端 DTO，ID 始终使用字符串。
+- 真实接口：`GET /api/articles/feed`、`GET /api/auth/session`、`GET /api/users/{userId}`、`GET /api/auth/csrf`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/users/me/articles`、`DELETE /api/articles/{id}`及结果核对使用的`GET /api/articles/{id}/edit`。数据类型直接对应后端 DTO，ID 始终使用字符串。
 - 编辑接口：`GET /api/articles/{id}/edit`、`POST /api/articles`、`GET /api/tags?q=…&limit=20`、`POST /api/media/uploads`；所有写操作携带当前会话 CSRF，不自动重发文章或文件上传。
 - `/articles/new`、`/articles/:id/edit`：完整 Tiptap 正文、封面与正文图片上传、标签搜索、发布保存弹窗、离开确认和登录失效后的临时恢复。保存成功留在编辑页，新建转为同 ID 编辑。
 - 共用 Banner：登录后头像悬停或点击展开菜单，支持方向键和 Esc。内容管理与设置在新标签页打开；个人主页保留无操作入口。登出成功清理当前身份并回首页，游客显示浅蓝底黑字的登录按钮。编辑器未保存时先确认放弃，取消不发送登出；失败保留原文。
@@ -112,3 +112,5 @@ Figma 文档 `Community`，页面 `community`。主页节点 `84:673`（状态�
 新增清除格式、Unicode 码点正文计数、代码语言选择、语法高亮及代码块 Tab/Shift+Tab 缩进。自动识别只影响显示；未列出的已有语言标识保留并按纯文本显示。清除格式保留文字和图片，可一次撤销。高亮、计数和浮层状态不写入正文协议，也不触发未保存提醒。正文编辑器及其高亮依赖按需加载。
 
 本轮不调整后端、`schemaVersion=1` 或上传策略。91项单元测试、50项 Chromium 浏览器测试、类型检查及生产构建通过，真实后端验证了完整正文格式、代码语言、封面及正文图片属性的保存往返。详细范围与证据见[白色编辑页验收记录](../docs/development/reports/frontend/article-editor-white-style-validation-2026-11-13.md)。
+
+会话只保存`userId、role`；导航与资料设置页独立读取公开资料，失败统一提示，不共享缓存或保留草稿。资料保存成功后整页刷新，重新读取服务端结果。

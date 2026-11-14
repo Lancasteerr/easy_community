@@ -60,11 +60,11 @@ export function LoginPage() {
       // POST 已成功，后续读取失败只能影响资料更新，不能重发密码或报告认证失败。
       const results = await Promise.allSettled([
         getCsrf(signal).then((token) => { csrf.current = token; }),
-        auth.refresh(identity),
+        Promise.resolve(auth.acceptSession(identity)),
       ]);
       if (signal.aborted) return;
-      if (results.some((result) => result.status === 'rejected') || (results[1].status === 'fulfilled' && results[1].value?.error)) {
-        notify('登录成功，部分资料暂时无法刷新');
+      if (results.some((result) => result.status === 'rejected')) {
+        notify('登录成功，部分功能暂时不可用，请稍后刷新');
       }
       navigate(destination, { replace: true, state: returnState });
     } catch (error) {
@@ -92,7 +92,7 @@ export function LoginPage() {
     }
   }
 
-  // 登录过程先更新全局身份，等待后续读取完成后再统一导航。
+  // 登录过程先更新全局身份，等待CSRF处理完成后再统一导航。
   if (auth.status === 'authenticated' && !busy) return <Navigate to={destination} state={returnState} replace />;
   const editField = () => { setInvalid(null); setMessage(''); };
   return <main className="login-page">

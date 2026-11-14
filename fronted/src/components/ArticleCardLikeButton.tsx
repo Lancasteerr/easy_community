@@ -12,7 +12,7 @@ export function ArticleCardLikeButton({ article, onLogin }: { article: ArticleCa
   const auth = useAuth();
   const notify = useToast();
   const like = useArticleLike(article, { enabled: auth.status === 'authenticated' && !auth.refreshing && !auth.error,
-    userId: auth.user?.userId, notify, onUnauthorized: () => { auth.expireSession(); onLogin(); } });
+    userId: auth.identity?.userId, notify, onUnauthorized: () => { auth.expireSession(); onLogin(); } });
   const seconds = useCooldown(like.retryAt);
   const blocked = auth.status === 'loading' || auth.status === 'error' || auth.refreshing || !!auth.error;
   const label = `${like.liked ? '取消点赞' : '点赞'} ${number.format(like.count)}`;

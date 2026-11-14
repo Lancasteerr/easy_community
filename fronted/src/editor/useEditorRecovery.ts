@@ -15,7 +15,7 @@ export function useEditorRecovery(options: {
   const redirecting = useRef(false);
   const restored = useRef(false);
   const [error, setError] = useState('');
-  const accountMatches = auth.status === 'authenticated' && auth.user?.userId === options.ownerId;
+  const accountMatches = auth.status === 'authenticated' && auth.identity?.userId === options.ownerId;
   const returnTo = options.articleId ? `/articles/${options.articleId}/edit` : '/articles/new';
   function continueAfterExpiry() {
     if (redirecting.current) return;
@@ -33,7 +33,7 @@ export function useEditorRecovery(options: {
     else if (auth.status === 'authenticated' && !accountMatches) {
       clearRecovery(); setError('账号已切换，当前内容属于原账号。请重新登录原账号后继续。');
     } else if (accountMatches) setError('');
-  }, [auth.status, auth.user?.userId, auth.endReason]);
+  }, [auth.status, auth.identity?.userId, auth.endReason]);
   useEffect(() => {
     if (!accountMatches || !options.ready || restored.current) return;
     restored.current = true;

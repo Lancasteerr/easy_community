@@ -1,3 +1,4 @@
+import { mockPublicProfiles } from './public-profile-mock';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { article, profile } from '../src/test/fixtures';
 
@@ -14,7 +15,7 @@ async function clickSticky(page: Page, target: Locator) {
 }
 
 async function openArticle(page: Page, html = contentHtml, cover = true) {
-  await page.route('**/api/users/me', (route) => route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
+  await page.route('**/api/auth/session', (route) => route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
   await page.route('**/detail-cover.png', (route) => route.fulfill({ path: 'src/assets/home-banner.png', contentType: 'image/png' }));
   await page.route('**/api/articles/2', (route) => route.fulfill({ json: {
     ...article('2'), coverMediaId: null, coverUrl: cover ? '/detail-cover.png' : null, contentHtml: html,
@@ -120,7 +121,7 @@ for (const entry of ['avatar', 'like']) {
     await page.setViewportSize({ width: 1280, height: 844 });
     await openArticle(page);
     let authenticated = false;
-    await page.route('**/api/users/me', (route) => authenticated ? route.fulfill({ json: profile })
+    await page.route('**/api/auth/session', (route) => authenticated ? route.fulfill({ json: profile })
       : route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
     await page.route('**/api/auth/csrf', (route) => route.fulfill({ json: { token: 'masked', headerName: 'X-CSRF-TOKEN' } }));
     await page.route('**/api/auth/login', (route) => { authenticated = true; return route.fulfill({ json: profile }); });
@@ -199,3 +200,6 @@ test('短文章与加载、错误、不存在状态共用视口框架', async ({
   await expect(page.getByRole('status', { name: '正在加载文章' })).toBeVisible();
   expect((await scroll.boundingBox())!.height).toBe(1024);
 });
+
+// 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
+test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });
