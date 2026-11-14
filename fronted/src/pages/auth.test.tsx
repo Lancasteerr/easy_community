@@ -1,3 +1,4 @@
+import { documentNavigation } from '../navigation/documentNavigation';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
@@ -20,6 +21,7 @@ const token = { token: 'masked-token', headerName: 'X-CSRF-TOKEN' };
 
 function LocationProbe() { return <output aria-label="当前路由">{useLocation().pathname}</output>; }
 function mount(path: string | { pathname: string; state: unknown } = '/login') {
+  window.history.replaceState(null, '', typeof path === 'string' ? path : path.pathname);
   render(<MemoryRouter initialEntries={[path]}><App /><LocationProbe /></MemoryRouter>);
   return userEvent.setup();
 }
@@ -37,11 +39,9 @@ beforeEach(() => {
 });
 
 describe('登录页', () => {
-  it.each(['/manage/articles', '/articles/new', '/articles/12/edit'])('游客直接访问受保护页面 %s 返回首页，不强制登录', async (path) => {
+  it.each(['/manage/articles', '/articles/new', '/articles/12/edit'])('游客直接访问受保护页面 %s 进入显式登录并携带返回地址', async (path) => {
     mount(path);
-    await screen.findByRole('button', { name: /^登录$/ });
-    expect(screen.getByLabelText('当前路由')).toHaveTextContent(/^\/$/);
-    expect(screen.queryByRole('heading', { name: '账号密码登录' })).toBeNull();
+    await waitFor(() => expect(documentNavigation.replace).toHaveBeenCalledWith(`/login?${new URLSearchParams({ returnTo: path, reauth: '1' })}`));
     expect(getMyArticles).not.toHaveBeenCalled();
   });
 
@@ -121,7 +121,7 @@ describe('登录页', () => {
     expect(login).toHaveBeenCalledTimes(1);
     expect(readCsrf).toHaveBeenCalledTimes(2);
     await user.click(screen.getByRole('button', { name: '登录' }));
-    await waitFor(() => expect(screen.getByLabelText('当前路由')).toHaveTextContent(/^\/$/));
+    await waitFor(() => expect(documentNavigation.replace).toHaveBeenCalledWith('/'));
     expect(login).toHaveBeenLastCalledWith('Alice_1', '  passWord123  ', { ...token, token: 'fresh' }, expect.any(AbortSignal));
   });
 
@@ -136,26 +136,25 @@ describe('登录页', () => {
     expect(login).toHaveBeenCalledTimes(1);
   });
 
-  it('登录成功刷新 CSRF 并独立读取资料，替换路由返回主页', async () => {
-    readProfile.mockRejectedValueOnce(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客')).mockResolvedValue(profile);
-    const user = mount();
+  it('登录成功不等待资料，刷新CSRF后整页返回目标', async () => {
+    const user = mount({ pathname: '/login', state: { returnTo: '/manage/articles' } });
     await fill(user);
     await user.click(screen.getByRole('button', { name: '登录' }));
-    await screen.findByRole('button', { name: `${profile.username} 的个人中心` });
-    expect(screen.getByLabelText('当前路由')).toHaveTextContent(/^\/$/);
+    await waitFor(() => expect(documentNavigation.replace).toHaveBeenCalledWith('/manage/articles'));
     expect(readCsrf).toHaveBeenCalledTimes(2);
     expect(readProfile).toHaveBeenCalledTimes(1);
+    expect(getPublicProfile).not.toHaveBeenCalled();
     expect(login).toHaveBeenCalledTimes(1);
   });
 
-  it('登录后 CSRF 刷新失败不撤销成功、不重复认证', async () => {
-    readProfile.mockRejectedValueOnce(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客')).mockRejectedValue(new ApiError(503, 'DEPENDENCY_UNAVAILABLE', '失败'));
-    readCsrf.mockResolvedValueOnce(token).mockRejectedValue(new ApiError(503, 'DEPENDENCY_UNAVAILABLE', '失败'));
+  it('登录后CSRF失败仍跳转，不撤销成功或重复认证', async () => {
+    readCsrf.mockResolvedValueOnce(token).mockRejectedValue(new ApiError(503, 'DEPENDENCY_UNAVAILABLE', '内部错误'));
     const user = mount();
     await fill(user);
     await user.click(screen.getByRole('button', { name: '登录' }));
-    await screen.findByRole('button', { name: `${profile.username} 的个人中心` });
+    await waitFor(() => expect(documentNavigation.replace).toHaveBeenCalledWith('/'));
     expect(screen.getByText('登录成功，部分功能暂时不可用，请稍后刷新')).toBeVisible();
+    expect(screen.queryByText('内部错误')).toBeNull();
     expect(login).toHaveBeenCalledTimes(1);
   });
 
@@ -195,4 +194,13 @@ describe('主页登录态', () => {
     await screen.findByRole('button', { name: '登录' });
     expect(readProfile).toHaveBeenCalledTimes(2);
   });
+});
+
+it('显式登录入口不会被另一有效账号自动跳过', async () => {
+  readProfile.mockResolvedValue(profile);
+  mount('/login?returnTo=%2Fmanage%2Farticles&reauth=1');
+  await screen.findByRole('heading', { name: '账号密码登录' });
+  await waitFor(() => expect(readProfile).toHaveBeenCalledTimes(1));
+  expect(screen.getByRole('textbox', { name: '账号' })).toBeEnabled();
+  expect(documentNavigation.replace).not.toHaveBeenCalled();
 });

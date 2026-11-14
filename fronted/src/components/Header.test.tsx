@@ -1,3 +1,4 @@
+import { documentNavigation } from '../navigation/documentNavigation';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
@@ -16,6 +17,7 @@ const credentials = { token: 'masked', headerName: 'X-CSRF-TOKEN' };
 function LocationProbe() { return <output aria-label="当前路由">{useLocation().pathname}</output>; }
 /** 使用真实导航、认证和菜单，只替换接口；StrictMode 同时检查订阅清理。 */
 function mount(options: LogoutOptions = {}, path = '/manage/articles') {
+  window.history.replaceState(null, '', path);
   const view = render(<StrictMode><MemoryRouter initialEntries={[path]}><ToastProvider><AuthProvider>
     <Header {...options} /><LocationProbe />
   </AuthProvider></ToastProvider></MemoryRouter></StrictMode>);
@@ -113,7 +115,7 @@ it('取消编辑器确认不读取凭据、不登出、不导航', async () => {
   expect(screen.getByLabelText('当前路由')).toHaveTextContent('/manage/articles');
 });
 
-it('登出提交互斥，成功后才执行页面放行并回首页显示登录按钮', async () => {
+it('登出提交互斥，成功后放行并进入当前受保护页面的登录入口', async () => {
   const pending = deferred<void>(); vi.mocked(postLogout).mockReturnValue(pending.promise);
   const onLogoutSuccess = vi.fn(); const beforeLogout = vi.fn().mockResolvedValue(true);
   const { user } = mount({ beforeLogout, onLogoutSuccess }); await open(user);
@@ -124,7 +126,7 @@ it('登出提交互斥，成功后才执行页面放行并回首页显示登录�
   expect(postLogout).toHaveBeenCalledWith(credentials, expect.any(AbortSignal));
   await act(async () => pending.resolve());
   await screen.findByRole('button', { name: /^登录$/ });
-  expect(onLogoutSuccess).toHaveBeenCalledOnce(); expect(screen.getByLabelText('当前路由')).toHaveTextContent(/^\/$/);
+  expect(onLogoutSuccess).toHaveBeenCalledOnce(); expect(documentNavigation.replace).toHaveBeenCalledWith('/login?returnTo=%2Fmanage%2Farticles&reauth=1');
 });
 
 it('登出失败保留身份和页面，手动重试成功才放行', async () => {
@@ -152,8 +154,9 @@ it('429 限流期间禁止重复登出，401 则视为已退出', async () => {
   vi.mocked(postLogout).mockRejectedValue(new ApiError(429, 'RATE_LIMITED', '限流', Date.now() + 30_000));
   const { user, unmount } = mount(); await open(user); await user.click(screen.getByRole('menuitem', { name: '退出登录' }));
   await screen.findByText('请求过于频繁，请稍后重试');
+  await open(user);
   expect(screen.getByRole('menuitem', { name: /秒后重试/ })).toBeDisabled(); expect(postLogout).toHaveBeenCalledTimes(1);
   unmount(); vi.mocked(postLogout).mockRejectedValue(new ApiError(401, 'AUTHENTICATION_REQUIRED', '失效'));
   const next = mount(); await open(next.user); await next.user.click(screen.getByRole('menuitem', { name: '退出登录' }));
-  await screen.findByRole('button', { name: /^登录$/ }); expect(screen.getByLabelText('当前路由')).toHaveTextContent(/^\/$/);
+  await screen.findByRole('button', { name: /^登录$/ }); expect(documentNavigation.replace).toHaveBeenCalledWith('/login?returnTo=%2Fmanage%2Farticles&reauth=1');
 });

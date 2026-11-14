@@ -147,4 +147,4 @@ test('未知代码语言原样保存，自动识别不回写语言，显示操�
 });
 
 // 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
-test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });
+test.beforeEach(async ({ context }) => { await mockPublicProfiles(context); });

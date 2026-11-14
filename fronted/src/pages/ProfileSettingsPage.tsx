@@ -1,5 +1,5 @@
+import { SessionLoginRedirect } from '../auth/SessionLoginRedirect';
 import { useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Header } from '../components/Header';
 import { Icon } from '../components/Icon';
@@ -17,8 +17,7 @@ export function ProfileSettingsPage() {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, []);
 
-  if (auth.status === 'guest') return auth.endReason === 'action'
-    ? <Navigate to="/login" state={{ returnTo: '/settings/profile' }} replace /> : <Navigate to="/" replace />;
+  if (auth.status === 'guest') return <SessionLoginRedirect returnTo="/settings/profile" />;
 
   return <div className="profile-settings-page">
     <Header />

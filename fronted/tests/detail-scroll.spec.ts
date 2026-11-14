@@ -117,7 +117,7 @@ test('目录跳转扣除导航高度，保持横向位置且高亮对应章节',
 });
 
 for (const entry of ['avatar', 'like']) {
-  test(`游客通过 ${entry} 登录后恢复纵横位置与阅读锚点`, async ({ page }) => {
+  test(`游客通过 ${entry} 登录后整页返回文章且不补发点赞`, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 844 });
     await openArticle(page);
     let authenticated = false;
@@ -141,8 +141,7 @@ for (const entry of ['avatar', 'like']) {
     await page.getByLabel('密码', { exact: true }).fill('password');
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page).toHaveURL(/\/articles\/2$/);
-    await expect.poll(() => scroll.evaluate((element) => ({ top: element.scrollTop, left: element.scrollLeft }))).toEqual({ top: 900, left: 24 });
-    expect((await anchor.boundingBox())!.y).toBeCloseTo(anchorTop, 0);
+    await expect.poll(() => scroll.evaluate((element) => ({ top: element.scrollTop, left: element.scrollLeft }))).toEqual({ top: 0, left: 0 });
     expect(likes).toBe(0);
   });
 }
@@ -202,4 +201,4 @@ test('短文章与加载、错误、不存在状态共用视口框架', async ({
 });
 
 // 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
-test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });
+test.beforeEach(async ({ context }) => { await mockPublicProfiles(context); });

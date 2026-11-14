@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { capturePage } from '../auth/pageLifetime';
 import { ApiError } from '../api/client';
 import { getArticleDetail } from '../api/articles';
 import type { ArticleDetailData } from '../api/types';
@@ -14,6 +15,7 @@ const initial = (): DetailState => ({ status: 'loading', article: null, error: n
 
 /** 详情只随文章切换或手动重试读取，登录态复核及目录操作不会额外产生 PV。 */
 export function useArticleDetail(id: string | undefined) {
+  const pageActive = capturePage();
   const [state, setState] = useState<DetailState>(initial);
   const pending = useRef<AbortController | null>(null);
   const generation = useRef(0);
@@ -30,10 +32,10 @@ export function useArticleDetail(id: string | undefined) {
     setState(initial());
     try {
       const article = await getArticleDetail(id, controller.signal);
-      if (version !== generation.current || controller.signal.aborted) return;
+      if (version !== generation.current || !pageActive() || controller.signal.aborted) return;
       setState({ status: 'ready', article, error: null, retryAt: 0 });
     } catch (error) {
-      if (version !== generation.current || controller.signal.aborted) return;
+      if (version !== generation.current || !pageActive() || controller.signal.aborted) return;
       retryAt.current = error instanceof ApiError ? error.retryAt : 0;
       setState({ status: error instanceof ApiError && error.status === 404 ? 'missing' : 'error',
         article: null, error, retryAt: retryAt.current });

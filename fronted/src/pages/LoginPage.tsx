@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { ApiError, errorMessage, getCsrf, postLogin } from '../api/client';
 import type { CsrfToken } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
@@ -7,16 +7,17 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { useCooldown } from '../hooks/useCooldown';
 import { loginDestination } from '../article/routes';
-import { readingReturnState } from '../navigation/readingReturn';
+import { enterAfterLogin } from '../auth/sessionNavigation';
+import { capturePage } from '../auth/pageLifetime';
 
 /** 只做登录所必需的前端校验，凭证规范与认证结果由后端决定。 */
 export function LoginPage() {
   const auth = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
-  // 首页与公开详情仅传回合法阅读位置和公开列表标识，不重放登录前的点赞动作。
-  const destination = loginDestination(location.state?.returnTo);
-  const returnState = readingReturnState(destination, location.state?.readingPosition, location.state?.feedSnapshotKey);
+  // 回跳地址仅接受站内白名单；整页返回时不复用旧列表或重放登录前动作。
+  const query = new URLSearchParams(location.search);
+  const destination = loginDestination(query.get('returnTo') ?? location.state?.returnTo);
+  const explicitLogin = query.get('reauth') === '1';
   const notify = useToast();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -49,6 +50,7 @@ export function LoginPage() {
       (!account ? usernameInput : passwordInput).current?.focus();
       return;
     }
+    let active = capturePage();
     submitting.current = true;
     setBusy(true); setInvalid(null); setMessage('');
     const operation = new AbortController();
@@ -56,26 +58,25 @@ export function LoginPage() {
     const signal = operation.signal;
     try {
       csrf.current ??= await getCsrf(signal);
+      if (!active() || signal.aborted) return;
       const identity = await postLogin(account, password, csrf.current, signal);
-      // POST 已成功，后续读取失败只能影响资料更新，不能重发密码或报告认证失败。
-      const results = await Promise.allSettled([
-        getCsrf(signal).then((token) => { csrf.current = token; }),
-        Promise.resolve(auth.acceptSession(identity)),
-      ]);
-      if (signal.aborted) return;
-      if (results.some((result) => result.status === 'rejected')) {
-        notify('登录成功，部分功能暂时不可用，请稍后刷新');
-      }
-      navigate(destination, { replace: true, state: returnState });
+      if (!active() || signal.aborted) return;
+      // 登录成功先隔离旧请求，再获取新CSRF；资料读取不在跳转前置条件中。
+      auth.acceptSession(identity);
+      active = capturePage();
+      try { csrf.current = await getCsrf(signal); }
+      catch { if (active() && !signal.aborted) notify('登录成功，部分功能暂时不可用，请稍后刷新'); }
+      if (!active() || signal.aborted) return;
+      enterAfterLogin(destination);
     } catch (error) {
-      if (signal.aborted) return;
+      if (!active() || signal.aborted) return;
       if (error instanceof ApiError && error.status === 403) {
         csrf.current = null;
         try {
           csrf.current = await getCsrf(signal);
-          if (!signal.aborted) setMessage('登录凭据已刷新，请再次点击登录');
+          if (active() && !signal.aborted) setMessage('登录凭据已刷新，请再次点击登录');
         } catch (refreshError) {
-          if (!signal.aborted) {
+          if (active() && !signal.aborted) {
             setMessage(errorMessage(refreshError));
             if (refreshError instanceof ApiError) setRetryAt(refreshError.retryAt);
           }
@@ -88,12 +89,12 @@ export function LoginPage() {
         if (error instanceof ApiError) setRetryAt(error.retryAt);
       }
     } finally {
-      if (!signal.aborted) { submitting.current = false; setBusy(false); }
+      if (active() && !signal.aborted) { submitting.current = false; setBusy(false); }
     }
   }
 
   // 登录过程先更新全局身份，等待CSRF处理完成后再统一导航。
-  if (auth.status === 'authenticated' && !busy) return <Navigate to={destination} state={returnState} replace />;
+  if (auth.status === 'authenticated' && !busy && !explicitLogin) return <Navigate to={destination} replace />;
   const editField = () => { setInvalid(null); setMessage(''); };
   return <main className="login-page">
     <div className="login-decoration" aria-hidden="true" />

@@ -1,17 +1,18 @@
+import { isPageActive } from '../auth/pageLifetime';
 interface Snapshot { value: unknown; owner?: string }
 const snapshots = new Map<string, Snapshot>();
 let currentOwner: string | null = null;
 
 /** 标签页内最多保留二十个历史位置及列表会话；整页刷新自然清空，不存正文。 */
 export function saveSnapshot<T>(key: string | undefined, value: T, owner?: string) {
-  if (!key || (owner !== undefined && owner !== currentOwner)) return;
+  if (!isPageActive() || !key || (owner !== undefined && owner !== currentOwner)) return;
   snapshots.delete(key);
   snapshots.set(key, { value, owner });
   if (snapshots.size > 20) snapshots.delete(snapshots.keys().next().value!);
 }
 
 export function readSnapshot<T>(key: string | undefined, owner?: string): T | undefined {
-  if (!key || (owner !== undefined && owner !== currentOwner)) return;
+  if (!isPageActive() || !key || (owner !== undefined && owner !== currentOwner)) return;
   const entry = snapshots.get(key);
   return entry && entry.owner === owner ? entry.value as T : undefined;
 }

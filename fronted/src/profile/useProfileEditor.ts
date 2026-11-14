@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError } from '../api/client';
+import { capturePage } from '../auth/pageLifetime';
+import { isAuthenticationFailure, ApiError } from '../api/client';
 import { updateProfileAvatar, updateProfileBio } from '../api/profile';
 import type { PublicUserProfile } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
@@ -12,6 +13,7 @@ const forbiddenBioCharacters = /[\u0000-\u001F\u007F-\u009F\u2028\u2029]/u;
 
 /** 仅保存当前表单输入；写入成功整页刷新，不维护资料缓存或草稿。 */
 export function useProfileEditor(profile: PublicUserProfile) {
+  const pageActive = capturePage();
   const auth = useAuth();
   const notify = useToast();
   const [bio, setBio] = useState(profile.bio);
@@ -45,7 +47,7 @@ export function useProfileEditor(profile: PublicUserProfile) {
   }
 
   function begin() {
-    if (pending.current || !enabled || cooldown.current > Date.now()) return null;
+    if (!pageActive() || pending.current || !enabled || cooldown.current > Date.now()) return null;
     const controller = new AbortController();
     pending.current = controller; setBusy(true);
     return controller;
@@ -53,7 +55,7 @@ export function useProfileEditor(profile: PublicUserProfile) {
 
   function isCurrent(controller: AbortController) {
     const latest = current.current;
-    return pending.current === controller && !controller.signal.aborted
+    return pageActive() && pending.current === controller && !controller.signal.aborted
       && latest.status === 'authenticated' && latest.identity?.userId === profile.userId;
   }
 
@@ -62,7 +64,7 @@ export function useProfileEditor(profile: PublicUserProfile) {
     const deadline = error instanceof ApiError ? error.retryAt : 0;
     cooldown.current = deadline; setRetryAt(deadline);
     feedback('更新失败，请稍后重试');
-    if (error instanceof ApiError && error.status === 401 && error.code !== 'STORAGE_UPLOAD_FAILED') {
+    if (isAuthenticationFailure(error)) {
       current.current.expireSession('action');
     }
   }
@@ -70,7 +72,7 @@ export function useProfileEditor(profile: PublicUserProfile) {
   function finish(controller: AbortController) {
     if (pending.current !== controller) return;
     pending.current = null;
-    if (!controller.signal.aborted) setBusy(false);
+    if (pageActive() && !controller.signal.aborted) setBusy(false);
   }
 
   async function saveBio() {

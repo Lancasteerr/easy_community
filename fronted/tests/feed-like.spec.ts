@@ -42,7 +42,7 @@ test('主页点赞使用受理接口，防止重复写入并支持独立取消',
   expect(new Set(commands.map((command) => command.operation)).size).toBe(3);
 });
 
-test('游客点赞登录后恢复深层卡片、纵横位置和续页游标，不补发点赞', async ({ page }) => {
+test('游客点赞登录后重新读取首批列表，不补发点赞', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 844 });
   let signedIn = false;
   let likes = 0;
@@ -88,19 +88,15 @@ test('游客点赞登录后恢复深层卡片、纵横位置和续页游标，�
   await page.getByLabel('密码', { exact: true }).fill('secret123');
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await expect(page).toHaveURL(/:5175\/$/);
-  await expect(page.locator('.article-card')).toHaveCount(6);
-  await expect.poll(() => scroller.evaluate((element) => ({ top: element.scrollTop, left: element.scrollLeft }))).toEqual(position);
-  expect((await card.boundingBox())!.y).toBeCloseTo(cardTop, 1);
-  expect(cursors).toEqual([null, 'second-page']);
+  await expect(page.locator('.article-card')).toHaveCount(3);
+  expect(cursors).toEqual([null, 'second-page', null]);
   expect(likes).toBe(0);
-  await like.click();
-  await expect(card.getByRole('button', { name: '取消点赞 329' })).toBeEnabled();
+  const first = page.getByRole('article', { name: '文章 1', exact: true });
+  await first.getByRole('button', { name: '点赞 328' }).click();
+  await expect(first.getByRole('button', { name: '取消点赞 329' })).toBeEnabled();
   expect(likes).toBe(1);
-  // 滚到列表尾部验证原游标续页；直接点击会与自动加载争抢已被移除的按钮。
-  await scroller.evaluate((element) => element.scrollTo({ top: element.scrollHeight, behavior: 'instant' }));
-  await expect(page.locator('.article-card')).toHaveCount(9);
-  expect(cursors).toEqual([null, 'second-page', 'third-page']);
+
 });
 
 // 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
-test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });
+test.beforeEach(async ({ context }) => { await mockPublicProfiles(context); });

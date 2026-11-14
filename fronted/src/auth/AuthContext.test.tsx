@@ -1,3 +1,4 @@
+import { documentNavigation } from '../navigation/documentNavigation';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,8 +61,49 @@ describe('后台身份复核', () => {
     act(() => result.current.expireSession('logout'));
     await act(async () => pending.resolve(profile));
     expect(result.current.status).toBe('guest'); expect(result.current.endReason).toBe('logout');
-    read.mockRejectedValue(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客'));
     await act(async () => { await result.current.refresh(); });
-    expect(result.current.endReason).toBe('verification');
+    expect(result.current.endReason).toBe('logout');
   });
+});
+
+it('首次游客不会触发整页刷新，身份服务失败也不会冒充游客', async () => {
+  read.mockRejectedValue(new ApiError(401, 'AUTHENTICATION_REQUIRED', '游客'));
+  const first = renderHook(useAuth, { wrapper });
+  await waitFor(() => expect(first.result.current.status).toBe('guest'));
+  expect(documentNavigation.reload).not.toHaveBeenCalled();
+  first.unmount();
+  read.mockRejectedValue(new ApiError(503, 'DEPENDENCY_UNAVAILABLE', '内部错误'));
+  const next = renderHook(useAuth, { wrapper });
+  await waitFor(() => expect(next.result.current.status).toBe('error'));
+  expect(next.result.current.identity).toBeNull();
+  expect(documentNavigation.reload).not.toHaveBeenCalled();
+});
+
+it('后台识别另一账号后进入显式登录', async () => {
+  window.history.replaceState(null, '', '/manage/articles');
+  read.mockResolvedValueOnce(profile).mockResolvedValueOnce({ userId: '8', role: 'USER' });
+  const { result, unmount } = renderHook(useAuth, { wrapper });
+  await waitFor(() => expect(result.current.status).toBe('authenticated'));
+  await act(async () => { await result.current.refresh(); });
+  expect(result.current.resetting).toBe(true);
+  expect(documentNavigation.replace).toHaveBeenCalledExactlyOnceWith('/login?returnTo=%2Fmanage%2Farticles&reauth=1');
+  unmount();
+});
+
+it('组件卸载后丢弃迟到会话响应，不执行导航', async () => {
+  const pending = deferred<SessionIdentity>();
+  read.mockReturnValue(pending.promise);
+  const { unmount } = renderHook(useAuth, { wrapper });
+  unmount();
+  await act(async () => pending.resolve(profile));
+  expect(documentNavigation.replace).not.toHaveBeenCalled();
+  expect(documentNavigation.reload).not.toHaveBeenCalled();
+});
+
+it('浏览器往返缓存恢复旧文档时重新加载，不复用原账号画面', async () => {
+  read.mockResolvedValue(profile);
+  renderHook(useAuth, { wrapper });
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  act(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+  expect(documentNavigation.reload).toHaveBeenCalledTimes(1);
 });

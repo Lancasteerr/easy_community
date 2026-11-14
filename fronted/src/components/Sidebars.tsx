@@ -19,7 +19,7 @@ export function Sidebar() {
 export function PublishPanel() {
   const auth = useAuth();
   const notify = useToast();
-  // 主动使用受保护入口可以去登录；与游客直接访问受保护 URL 回首页分开。
+  // 身份未知时先确认会话；游客使用受保护入口进入登录并保留返回地址。
   const checkIdentity = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (auth.status === 'loading' || auth.status === 'error') {
       event.preventDefault(); notify('正在确认登录状态，请稍后重试'); void auth.refresh();

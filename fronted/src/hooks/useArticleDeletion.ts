@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, checkDeletion, deleteArticle, errorMessage, getCsrf } from '../api/client';
+import { capturePage } from '../auth/pageLifetime';
+import { isAuthenticationFailure, ApiError, checkDeletion, deleteArticle, errorMessage, getCsrf } from '../api/client';
 import type { ArticleCardData, CsrfToken } from '../api/types';
 import type { DeleteDialogState } from '../components/manage/DeleteArticleDialog';
 
@@ -7,6 +8,7 @@ const initial = (): DeleteDialogState => ({ article: null, busy: null, unknown: 
 
 /** 写入与结果核对独立于列表请求；关闭弹窗仍保留本页尚未核实的文章ID。 */
 export function useArticleDeletion(enabled: boolean, onUnauthorized: () => void, onRemoved: (id: string, message: string) => void) {
+  const pageActive = capturePage();
   const [state, setState] = useState<DeleteDialogState>(initial);
   const current = useRef(state);
   const options = useRef({ enabled, onUnauthorized, onRemoved });
@@ -42,7 +44,7 @@ export function useArticleDeletion(enabled: boolean, onUnauthorized: () => void,
     pending.current = controller;
     publish({ ...before, busy: kind, message: '', retryAt: 0 });
     let sent = false;
-    const active = () => !controller.signal.aborted && version === generation.current;
+    const active = () => pageActive() && !controller.signal.aborted && version === generation.current;
     const finish = (message: string) => {
       mark(article.articleId, false);
       publish(initial());
@@ -69,7 +71,7 @@ export function useArticleDeletion(enabled: boolean, onUnauthorized: () => void,
       }
     } catch (error) {
       if (!active()) return;
-      if (error instanceof ApiError && error.status === 401) { options.current.onUnauthorized(); return; }
+      if (isAuthenticationFailure(error)) { options.current.onUnauthorized(); return; }
       retryAt.current = error instanceof ApiError ? error.retryAt : 0;
       if (kind === 'check') {
         publish({ ...current.current, busy: null, message: `暂时无法核对：${errorMessage(error)}`, retryAt: retryAt.current });
@@ -82,7 +84,7 @@ export function useArticleDeletion(enabled: boolean, onUnauthorized: () => void,
           if (active()) publish({ ...current.current, busy: null, message: '操作凭证已刷新，请再次确认删除。' });
         } catch (refreshError) {
           if (!active()) return;
-          if (refreshError instanceof ApiError && refreshError.status === 401) { options.current.onUnauthorized(); return; }
+          if (isAuthenticationFailure(refreshError)) { options.current.onUnauthorized(); return; }
           retryAt.current = refreshError instanceof ApiError ? refreshError.retryAt : 0;
           publish({ ...current.current, busy: null, message: '操作凭证暂时无法刷新，请稍后重试。', retryAt: retryAt.current });
         }

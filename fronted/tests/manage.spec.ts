@@ -243,7 +243,7 @@ test('身份复核静默，失败复用原稿加载失败且恢复原位置，40
   expect(reads).toBe(1);
   mode = 'expired';
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page).toHaveURL('http://127.0.0.1:5175/');
+  await expect(page).toHaveURL(/\/login\?/);
   await expect(page.locator('.manage-row')).toHaveCount(0);
 });
 
@@ -350,4 +350,4 @@ test('无观察器时空页仍可手动续读，空页不等于结束', async ({
 });
 
 // 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
-test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });
+test.beforeEach(async ({ context }) => { await mockPublicProfiles(context); });

@@ -1,12 +1,14 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { capturePage } from '../auth/pageLifetime';
 import { searchTags } from '../api/articles';
-import { ApiError } from '../api/client';
+import { isAuthenticationFailure } from '../api/client';
 import { codePoints, type Tag } from './model';
 
 /** 仅消费关键词搜索，不把空结果误认为完整目录；每个查询拥有独立取消信号。 */
 export function TagSelector({ value, disabled, onChange, onUnauthorized }: {
   value: Tag[]; disabled: boolean; onChange: (tags: Tag[]) => void; onUnauthorized: () => void;
 }) {
+  const pageActive = capturePage();
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<Tag[]>([]);
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -26,10 +28,10 @@ export function TagSelector({ value, disabled, onChange, onUnauthorized }: {
     setState('loading');
     const timer = setTimeout(() => {
       searchTags(query, controller.signal).then((result) => {
-        if (!controller.signal.aborted) { setItems(result); setState('ready'); }
+        if (pageActive() && !controller.signal.aborted) { setItems(result); setState('ready'); }
       }).catch((error) => {
-        if (controller.signal.aborted) return;
-        if (error instanceof ApiError && error.status === 401) callbacks.current.onUnauthorized();
+        if (!pageActive() || controller.signal.aborted) return;
+        if (isAuthenticationFailure(error)) callbacks.current.onUnauthorized();
         setState('error');
       });
     }, 300);

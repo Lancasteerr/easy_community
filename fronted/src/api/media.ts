@@ -1,3 +1,4 @@
+import { pageLifetime } from '../auth/pageLifetime';
 import { ApiError, getCsrf, request } from './client';
 
 export interface UploadedMedia { mediaId: string; publicUrl: string }
@@ -13,6 +14,8 @@ export function imageFileError(file: File, maximum: number) {
 
 /** XHR 仅用于直传进度；不自动重试授权或上传，也不额外等待媒体发布。 */
 export function uploadToStorage(grant: UploadGrant, file: File, signal: AbortSignal, progress: (value: number) => void): Promise<UploadedMedia> {
+  // 外部上传同样随页面结束取消，但其401只表示存储失败，不重置本站身份。
+  signal = AbortSignal.any([signal, pageLifetime.controller.signal]);
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(new DOMException('上传已取消', 'AbortError')); return; }
     const xhr = new XMLHttpRequest();
@@ -27,7 +30,7 @@ export function uploadToStorage(grant: UploadGrant, file: File, signal: AbortSig
       let result: { success?: boolean; stage?: string; code?: string } = {};
       try { result = JSON.parse(xhr.responseText); } catch { /* XML、空响应均不能当成成功。 */ }
       if (xhr.status === 200 && result.success === true) resolve({ mediaId: grant.mediaId, publicUrl: grant.publicUrl });
-      else reject(new ApiError(xhr.status, result.code ?? 'STORAGE_UPLOAD_FAILED', '图片上传失败，请重试'));
+      else reject(new ApiError(xhr.status, xhr.status === 401 ? 'STORAGE_UPLOAD_FAILED' : result.code ?? 'STORAGE_UPLOAD_FAILED', '图片上传失败，请重试'));
     };
     xhr.onerror = xhr.ontimeout = () => { finish(); reject(new ApiError(0, 'STORAGE_UPLOAD_FAILED', '图片上传失败，请检查网络后重试')); };
     xhr.onabort = () => { finish(); reject(new DOMException('上传已取消', 'AbortError')); };

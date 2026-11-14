@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { capturePage } from '../auth/pageLifetime';
 import type { Editor } from '@tiptap/react';
-import { ApiError } from '../api/client';
+import { isAuthenticationFailure } from '../api/client';
 import { imageFileError, uploadArticleImage, uploadError } from '../api/media';
 import { imageCount } from './model';
 import { uploadAnchorKey } from './uploadAnchors';
@@ -8,6 +9,7 @@ import { uploadAnchorKey } from './uploadAnchors';
 interface ImageTask { id: string; file: File; status: 'queued' | 'uploading' | 'failed'; percent: number; error: string }
 /** 顺序上传控制授权频率；失败任务保留原文件，只有用户操作才重新申请媒体 ID。 */
 export function useBodyImages(editor: RefObject<Editor | null>, disabled: boolean, onUnauthorized: () => void) {
+  const pageActive = capturePage();
   const [tasks, setTasks] = useState<ImageTask[]>([]);
   const [message, setMessage] = useState('');
   const current = useRef(tasks); current.current = tasks;
@@ -18,10 +20,13 @@ export function useBodyImages(editor: RefObject<Editor | null>, disabled: boolea
     const task = tasks.find((item) => item.status === 'queued');
     if (disabled || active.current || !task) return;
     const controller = new AbortController(); active.current = { id: task.id, controller };
-    const update = (patch: Partial<ImageTask>) => setTasks((items) => items.map((item) => item.id === task.id ? { ...item, ...patch } : item));
+    const update = (patch: Partial<ImageTask>) => {
+      if (!pageActive() || controller.signal.aborted) return;
+      setTasks((items) => items.map((item) => item.id === task.id ? { ...item, ...patch } : item));
+    };
     update({ status: 'uploading' });
     uploadArticleImage(task.file, 10 * 1024 * 1024, controller.signal, (percent) => update({ percent })).then((uploaded) => {
-      if (controller.signal.aborted || !editor.current || editor.current.isDestroyed) return;
+      if (!pageActive() || controller.signal.aborted || !editor.current || editor.current.isDestroyed) return;
       const instance = editor.current;
       const anchor = uploadAnchorKey.getState(instance.state)?.find(undefined, undefined, (spec) => spec.id === task.id)[0];
       if (anchor) instance.chain().insertContentAt(anchor.from, { type: 'image', attrs: { fileId: uploaded.mediaId, src: uploaded.publicUrl, alt: '', title: '' } }).run();
@@ -29,11 +34,11 @@ export function useBodyImages(editor: RefObject<Editor | null>, disabled: boolea
       instance.view.dispatch(instance.state.tr.setMeta(uploadAnchorKey, { remove: task.id }));
       setTasks((items) => items.filter((item) => item.id !== task.id));
     }).catch((error) => {
-      if (controller.signal.aborted) return;
-      if (error instanceof ApiError && error.status === 401) callbacks.current.onUnauthorized();
+      if (!pageActive() || controller.signal.aborted) return;
+      if (isAuthenticationFailure(error)) callbacks.current.onUnauthorized();
       update({ status: 'failed', error: uploadError(error) });
     }).finally(() => {
-      if (active.current?.controller === controller) { active.current = null; setTasks((items) => [...items]); }
+      if (pageActive() && active.current?.controller === controller) { active.current = null; setTasks((items) => [...items]); }
     });
   }, [tasks, disabled, editor]);
   function add(files: File[], position: number) {

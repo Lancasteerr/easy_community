@@ -27,7 +27,7 @@ function renderCards() {
 }
 
 beforeEach(() => {
-  vi.mocked(useAuth).mockReturnValue({ status: 'authenticated', identity: profile, error: null, refreshing: false, endReason: null,
+  vi.mocked(useAuth).mockReturnValue({ resetting: false, status: 'authenticated', identity: profile, error: null, refreshing: false, endReason: null,
     refresh: vi.fn(), expireSession, acceptSession: vi.fn() });
   credentials.mockReset().mockResolvedValue({ token: 'token', headerName: 'X-CSRF-TOKEN' });
   write.mockReset().mockImplementation(async (_id, liked, operationId) => ({ accepted: true, liked, operationId, version: '1' }));
@@ -91,7 +91,7 @@ it.each([
   expect(login).not.toHaveBeenCalled();
 });
 
-it('401 清理会话并回登录，403 只刷新凭证且等待用户再次点击', async () => {
+it('401 交给会话边界重置，403 只刷新凭证且等待用户再次点击', async () => {
   write.mockRejectedValueOnce(new ApiError(403, 'ACCESS_OR_CSRF_DENIED', '凭证失效'));
   renderCards();
   const like = screen.getByRole('button', { name: '点赞 328' });
@@ -102,8 +102,8 @@ it('401 清理会话并回登录，403 只刷新凭证且等待用户再次点�
   expect(like).toBeEnabled();
   write.mockRejectedValueOnce(new ApiError(401, 'AUTHENTICATION_REQUIRED', '身份失效'));
   fireEvent.click(like);
-  await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
-  expect(expireSession).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(expireSession).toHaveBeenCalledTimes(1));
+  expect(login).not.toHaveBeenCalled();
 });
 
 it('限流期间禁用并显示剩余时间，到期后恢复操作', async () => {

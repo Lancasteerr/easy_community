@@ -1,5 +1,6 @@
+import { SessionLoginRedirect } from '../auth/SessionLoginRedirect';
 import { useCallback, useEffect, useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Header } from '../components/Header';
 import { useToast, useUnavailable } from '../components/Toast';
@@ -67,8 +68,7 @@ export function ManageArticlesPage() {
     document.title = '内容管理 · Easy Community';
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, []);
-  if (auth.status === 'guest') return auth.endReason === 'action'
-    ? <Navigate to="/login" state={{ returnTo: '/manage/articles' }} replace /> : <Navigate to="/" replace />;
+  if (auth.status === 'guest') return <SessionLoginRedirect returnTo="/manage/articles" />;
   return <div className="manage-page">
     <Header />
     <div className="manage-columns"><aside className="manage-sidebar" aria-label="发布管理">

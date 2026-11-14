@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isPageActive } from '../auth/pageLifetime';
 import { useBeforeUnload, useBlocker } from 'react-router-dom';
 
 export interface EditorLogoutGuard {
@@ -6,7 +7,7 @@ export interface EditorLogoutGuard {
   complete: () => void;
 }
 
-/** 放行标记只用于保存、暂存后跳转，以及已确认成功的登出。 */
+/** 放行标记只用于保存后跳转，以及已确认成功的登出。 */
 export function useEditorLeaveGuard(dirty: boolean, busy: boolean) {
   const allow = useRef(false);
   const current = useRef({ dirty, busy }); current.current = { dirty, busy };
@@ -30,7 +31,7 @@ export function useEditorLeaveGuard(dirty: boolean, busy: boolean) {
     if (allow.current) { allow.current = false; return false; }
     return (dirty || busy) && (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search);
   });
-  useBeforeUnload((event) => { if (dirty || busy) { event.preventDefault(); event.returnValue = ''; } });
+  useBeforeUnload((event) => { if (isPageActive() && (dirty || busy)) { event.preventDefault(); event.returnValue = ''; } });
   useEffect(() => { if (busy && blocker.state === 'blocked') blocker.reset(); }, [busy, blocker]);
   return { blocker, allowNextNavigation, confirmLogout, confirmingLogout, resolveLogout };
 }

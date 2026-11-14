@@ -1,3 +1,4 @@
+import { capturePage, pageLifetime } from '../auth/pageLifetime';
 import type { CsrfToken, FeedPage, ProblemDetail, LoginResponse, PublicUserProfile, SessionIdentity } from './types';
 
 /** 所有错误经此边界转换；界面不直接展示服务端连接或索引诊断信息。 */
@@ -8,6 +9,11 @@ export class ApiError extends Error {
   }
 }
 
+/** 只有本站明确确认的认证失效可以重置会话，存储等外部错误不参与判断。 */
+export function isAuthenticationFailure(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 401 && error.code === 'AUTHENTICATION_REQUIRED';
+}
+
 function retryTime(value: string | null, status: number) {
   if (status !== 429) return 0;
   const seconds = value === null || value.trim() === '' ? NaN : Number(value);
@@ -16,20 +22,30 @@ function retryTime(value: string | null, status: number) {
 }
 
 export async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const active = capturePage();
   const timeout = AbortSignal.timeout(10_000);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  const signal = AbortSignal.any([pageLifetime.controller.signal, timeout, ...(options.signal ? [options.signal] : [])]);
   try {
+    if (!active() || options.signal?.aborted) throw new DOMException('请求已取消', 'AbortError');
     const response = await fetch(url, { ...options, signal, credentials: 'same-origin', cache: 'no-store' });
+    if (!active() || options.signal?.aborted) throw new DOMException('请求已取消', 'AbortError');
     if (!response.ok) {
       const problem: ProblemDetail = await response.json().catch(() => ({}));
+      if (!active() || options.signal?.aborted) throw new DOMException('请求已取消', 'AbortError');
+      // 仅本站认证失效触发重置，登录凭证错误与外部存储错误不走此入口。
+      if (response.status === 401 && problem.code === 'AUTHENTICATION_REQUIRED' && url !== '/api/auth/session' && url !== '/api/auth/login') {
+        pageLifetime.onUnauthorized?.();
+      }
       throw new ApiError(response.status, problem.code ?? 'HTTP_ERROR', '请求失败', retryTime(response.headers.get('Retry-After'), response.status));
     }
     // DELETE成功不带响应体；不能将204误判成JSON读取失败或写入结果未知。
     if (response.status === 204) return undefined as T;
-    return await response.json() as T;
+    const data = await response.json() as T;
+    if (!active() || options.signal?.aborted) throw new DOMException('请求已取消', 'AbortError');
+    return data;
   } catch (error) {
     // 页面主动取消与读取超时语义不同：前者静默清理，后者允许用户重试。
-    if (options.signal?.aborted) throw new DOMException('请求已取消', 'AbortError');
+    if (!active() || options.signal?.aborted) throw new DOMException('请求已取消', 'AbortError');
     if (error instanceof ApiError) throw error;
     if (timeout.aborted) throw new ApiError(0, 'REQUEST_TIMEOUT', '请求超时，请重试');
     throw new ApiError(0, 'NETWORK_ERROR', '网络连接失败，请检查网络后重试');
@@ -49,13 +65,7 @@ export function getPublicProfile(userId: string, signal?: AbortSignal) {
 export async function getFeed(cursor: string | null, signal?: AbortSignal) {
   const query = new URLSearchParams({ size: '20' });
   if (cursor !== null) query.set('cursor', cursor);
-  const read = () => request<FeedPage>(`/api/articles/feed?${query}`, { signal });
-  try { return await read(); }
-  catch (error) {
-    // 过期的登录 Cookie 会被后端清除，公开读取允许再以游客身份尝试一次。
-    if (error instanceof ApiError && error.status === 401 && !signal?.aborted) return read();
-    throw error;
-  }
+  return request<FeedPage>(`/api/articles/feed?${query}`, { signal });
 }
 
 export function getCsrf(signal?: AbortSignal) {

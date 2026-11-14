@@ -12,7 +12,6 @@ import { useArticleSave } from './useArticleSave';
 import { codePoints, validateForm } from './model';
 import { EditorReadState } from './EditorReadState';
 import { useEditorLeaveGuard, type EditorLogoutGuard } from './useEditorLeaveGuard';
-import { useEditorRecovery } from './useEditorRecovery';
 import { clearRecovery } from './recovery';
 import { EditorDialog } from './EditorDialog';
 
@@ -45,9 +44,7 @@ export function ArticleEditorSession({ routeId, ownerId, registerLogoutGuard }: 
     registerLogoutGuard({ confirm: guard.confirmLogout, complete: guard.allowNextNavigation });
     return () => registerLogoutGuard(null);
   }, [registerLogoutGuard, guard.confirmLogout, guard.allowNextNavigation]);
-  const recovery = useEditorRecovery({ ownerId, articleId: document.state === 'loading' ? routeId : document.articleId, ready: document.state === 'ready', form, baseline: document.baseline,
-    allowNavigation: guard.allowNextNavigation, restore: document.restore });
-  // 切换文章或恢复登录快照后，旧文档的本地上传任务不能流入新文档。
+  // 切换文章后，旧文档的本地上传任务不能流入新文档。
   useEffect(() => { uploads.clear(); setCoverBlocked(false); save.close(); save.setErrors({}); }, [document.bodyKey]);
   const title = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
@@ -60,10 +57,6 @@ export function ArticleEditorSession({ routeId, ownerId, registerLogoutGuard }: 
   if (document.state !== 'ready') return <EditorReadState state={document.state} onRetry={document.retry} />;
   return <div className="article-editor-inner">
     <div className="article-editor-heading"><h1>{document.articleId ? '编辑文章' : '发布文章'}</h1><Link to="/">返回首页</Link></div>
-    {recovery.error && <p role="alert" className="editor-error">{recovery.error} {recovery.mismatched
-      ? <button type="button" onClick={() => { void auth.refresh(); }}>重新检查登录状态</button>
-      : <button type="button" onClick={recovery.continueAfterExpiry}>{auth.endReason === 'action' ? '重试保存并登录' : '重试保存并返回首页'}</button>}</p>}
-    <div hidden={!recovery.accountMatches && auth.status === 'authenticated'}>
     <form noValidate onSubmit={(event) => { event.preventDefault(); void save.submit(form, document.articleId, blocked); }}>
       <div className="article-title-field"><div className={`article-title${save.errors.title ? ' has-error' : ''}`}><textarea ref={title} aria-label="文章标题" value={form.title} rows={1} placeholder="请输入文章标题"
         disabled={disabled} aria-invalid={!!save.errors.title} aria-describedby="article-title-error"
@@ -89,7 +82,6 @@ export function ArticleEditorSession({ routeId, ownerId, registerLogoutGuard }: 
       {!!auth.error && <p className="editor-error" role="status">登录状态暂时无法确认 <button type="button" onClick={() => { void auth.refresh(); }}>重新检查</button></p>}
       <div className="article-submit-row"><button className="editor-primary" disabled={blocked} type="submit">{document.articleId ? '保存修改' : '发布文章'}</button></div>
     </form>
-    </div>
     <SaveArticleDialog state={save.dialog} blocked={blocked} onClose={save.close} onRetry={() => { void save.submit(form, document.articleId, blocked); }} />
     {(guard.blocker.state === 'blocked' || guard.confirmingLogout) && !save.busy && <EditorDialog title="离开编辑页？" onClose={() => {
       if (guard.confirmingLogout) guard.resolveLogout(false); else guard.blocker.reset?.();

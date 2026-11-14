@@ -78,16 +78,16 @@ test('返回和浏览器后退受保护，取消恢复焦点，未修改直接�
   await page.getByRole('button', { name: '发布中心' }).click(); await page.getByRole('link', { name: '返回首页' }).click(); await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('会话过期先暂存，同账号登录后恢复原文且不自动发布', async ({ page }) => {
+test('会话过期清理内容，同账号登录后重新建立编辑页且不自动发布', async ({ page }) => {
   await setup(page); let expired = false, writes = 0;
   await page.route('**/api/auth/session', (route) => expired ? route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }) : route.fulfill({ json: profile }));
   await page.route('**/api/articles', (route) => { writes++; expired = true; return route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }); });
   await page.route('**/api/auth/login', (route) => { expired = false; return route.fulfill({ json: profile }); });
   await page.goto('/articles/new'); await fill(page); await page.getByRole('button', { name: '发布文章', exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/); expect(await page.evaluate(() => !!sessionStorage.getItem('ec:article-editor:recovery:v1'))).toBe(true);
+  await expect(page).toHaveURL(/\/login(?:\?.*)?$/); expect(await page.evaluate(() => sessionStorage.getItem('ec:article-editor:recovery:v1'))).toBeNull();
   await page.getByLabel('账号', { exact: true }).fill('Alice_1'); await page.getByLabel('密码', { exact: true }).fill('password123'); await page.getByRole('button', { name: '登录', exact: true }).click();
-  await expect(page).toHaveURL(/\/articles\/new$/); await expect(page.getByRole('textbox', { name: '文章标题' })).toHaveValue('新文章');
-  await expect(page.getByRole('textbox', { name: '文章正文' })).toContainText('正文内容'); expect(writes).toBe(1);
+  await expect(page).toHaveURL(/\/articles\/new$/); await expect(page.getByRole('textbox', { name: '文章标题' })).toHaveValue('');
+  await expect(page.getByRole('textbox', { name: '文章正文' })).not.toContainText('正文内容'); expect(writes).toBe(1);
   expect(await page.evaluate(() => sessionStorage.getItem('ec:article-editor:recovery:v1'))).toBeNull();
 });
 
@@ -148,15 +148,14 @@ test('长文自然增高，标题和标签换行，标准桌面几何与底部�
   await page.screenshot({ path: info.outputPath('editor-long-bottom.png') });
 });
 
-test('临时存储不可写时保留原页及正文，不提前跳转登录', async ({ page }) => {
+test('临时存储不可写也不阻止失效会话进入登录', async ({ page }) => {
   await setup(page);
   await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new DOMException('quota', 'QuotaExceededError'); }; });
   await page.route('**/api/articles', (route) => route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
   await page.goto('/articles/new'); await fill(page); await page.getByRole('button', { name: '发布文章', exact: true }).click();
-  await page.getByRole('button', { name: '继续编辑', exact: true }).click();
-  await expect(page.getByText(/暂时无法保存编辑内容/)).toBeVisible(); await expect(page).toHaveURL(/\/articles\/new$/);
-  await expect(page.getByRole('textbox', { name: '文章正文' })).toContainText('正文内容');
-  await expect(page.getByRole('button', { name: '发布文章', exact: true })).toBeDisabled();
+  await expect(page).toHaveURL(/\/login\?/);
+  await expect(page.getByRole('heading', { name: '账号密码登录' })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('ec:article-editor:recovery:v1'))).toBeNull();
 });
 
 test('异账号登录不恢复原账号暂存，已有文章无权限时不恢复内容', async ({ page }) => {
@@ -222,15 +221,20 @@ test('短视口外层布局不压缩，空白页面视觉截图', async ({ page 
     height: document.documentElement.scrollHeight }))).toEqual({ x: 0, y: 0, width: 1280, height: 768 });
 });
 
-test('其他窗口切换账号后隐藏旧内容，恢复原账号才继续原编辑会话', async ({ page }) => {
+test('其他窗口切换账号后进入显式登录，不恢复原账号编辑内容', async ({ page }) => {
   await setup(page); let other = false;
   await page.route('**/api/auth/session', (route) => route.fulfill({ json: other ? { ...profile, userId: '8', username: 'another_user' } : profile }));
   await page.goto('/articles/new'); await fill(page); other = true;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByText(/账号已切换/)).toBeVisible(); await expect(page.getByRole('textbox', { name: '文章正文' })).toHaveCount(0);
-  other = false; await page.getByRole('button', { name: '重新检查登录状态' }).click();
-  await expect(page.getByRole('textbox', { name: '文章正文' })).toContainText('正文内容'); await expect(page.getByRole('textbox', { name: '文章标题' })).toHaveValue('新文章');
+  await expect(page).toHaveURL(/\/login\?/);
+  await expect(page.getByRole('heading', { name: '账号密码登录' })).toBeVisible();
+  other = false;
+  await page.getByLabel('账号', { exact: true }).fill('Alice_1');
+  await page.getByLabel('密码', { exact: true }).fill('password123');
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await expect(page).toHaveURL(/\/articles\/new$/);
+  await expect(page.getByRole('textbox', { name: '文章标题' })).toHaveValue('');
 });
 
 // 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
-test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });
+test.beforeEach(async ({ context }) => { await mockPublicProfiles(context); });

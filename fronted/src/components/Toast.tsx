@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { isPageActive } from '../auth/pageLifetime';
 
 interface ToastOptions { placement?: 'bottom' | 'top'; durationMs?: number }
 const ToastContext = createContext<(message: string, options?: ToastOptions) => void>(() => {});
@@ -8,6 +9,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState({ message: '', placement: 'bottom' });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const notify = useCallback((text: string, options?: ToastOptions) => {
+    if (!isPageActive()) return;
     clearTimeout(timer.current);
     // 新调用独立选择位置和时长，旧入口仍使用原有底部三秒反馈。
     setToast({ message: text, placement: options?.placement ?? 'bottom' });

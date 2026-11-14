@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, getMyArticles } from '../api/client';
+import { capturePage } from '../auth/pageLifetime';
+import { isAuthenticationFailure, ApiError, getMyArticles } from '../api/client';
 import type { ArticleCardData } from '../api/types';
 import { readSnapshot, saveSnapshot } from '../navigation/snapshots';
 
@@ -17,6 +18,7 @@ const initial = (): MyArticlesState => ({ items: [], nextCursor: null, status: '
 
 /** 页面内的游标会话：刷新保留旧展示，删除排除集合独立于读取代次。 */
 export function useMyArticles(userId: string, enabled: boolean, onUnauthorized: () => void, snapshotKey?: string) {
+  const pageActive = capturePage();
   const [state, setState] = useState<MyArticlesState>(initial);
   const current = useRef(state);
   const permitted = useRef(enabled);
@@ -44,7 +46,7 @@ export function useMyArticles(userId: string, enabled: boolean, onUnauthorized: 
     publish({ ...previous, status: kind === 'append' ? 'loadingMore' : kind === 'refresh' ? 'refreshing' : 'initialLoading', error: null, retryAt: 0 });
     try {
       const page = await getMyArticles(cursor, controller.signal);
-      if (version !== generation.current || controller.signal.aborted) return;
+      if (version !== generation.current || !pageActive() || controller.signal.aborted) return;
       // 读取期间允许删除完成；合并必须以最新展示和排除集合为准，不能恢复请求前的旧数组。
       const latest = current.current;
       const base = kind === 'append' ? latest.items : [];
@@ -60,8 +62,8 @@ export function useMyArticles(userId: string, enabled: boolean, onUnauthorized: 
         paused: page.nextCursor !== null && emptyPages.current >= 3, retryAt: 0,
         revision: latest.revision + (kind === 'refresh' ? 1 : 0) });
     } catch (error) {
-      if (version !== generation.current || controller.signal.aborted) return;
-      if (error instanceof ApiError && error.status === 401) { onUnauthorized(); return; }
+      if (version !== generation.current || !pageActive() || controller.signal.aborted) return;
+      if (isAuthenticationFailure(error)) { onUnauthorized(); return; }
       const reset = error instanceof ApiError && ['ARTICLE_CURSOR_EXPIRED', 'ARTICLE_SEARCH_INVALID'].includes(error.code);
       publish({ ...current.current, status: reset ? 'resetRequired' : kind === 'append' ? 'appendError' : kind === 'refresh' ? 'refreshError' : 'initialError',
         error, retryAt: error instanceof ApiError ? error.retryAt : 0 });

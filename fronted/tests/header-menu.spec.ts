@@ -81,7 +81,7 @@ for (const [path, scrollSelector] of [['/', '.home-scroll'], ['/manage/articles'
   });
 }
 
-test('内容管理在新标签页打开，原标签页保留位置；登出后其他标签刷新回首页', async ({ page, context }) => {
+test('内容管理在新标签页打开，原标签页保留位置；登出进入登录，其他公开标签刷新为游客', async ({ page, context }) => {
   const session = await setup(context); await page.goto('/');
   let writes = 0;
   await context.route('**/api/auth/logout', (route) => {
@@ -101,28 +101,29 @@ test('内容管理在新标签页打开，原标签页保留位置；登出后�
   await expect(page).toHaveURL('http://127.0.0.1:5175/');
   expect(await page.locator('.home-scroll').evaluate((element) => element.scrollTop)).toBe(originalTop);
   await openMenu(popup); await popup.getByRole('menuitem', { name: '退出登录' }).click();
-  await expect(popup).toHaveURL('http://127.0.0.1:5175/'); await expect(popup.locator('.header-login')).toBeVisible(); expect(writes).toBe(1);
+  await expect(popup).toHaveURL(/\/login\?/); await expect(popup.getByRole('heading', { name: '账号密码登录' })).toBeVisible(); expect(writes).toBe(1);
   await page.reload(); await expect(page.locator('.header-login')).toBeVisible();
-  await popup.goto('/manage/articles'); await expect(popup).toHaveURL('http://127.0.0.1:5175/');
+  await popup.goto('/manage/articles'); await expect(popup).toHaveURL(/\/login\?/);
 });
 
-test('游客直接访问受保护页面回首页，主动发布和点赞才去登录', async ({ page, context }) => {
+test('游客直接访问受保护页面及主动发布、点赞均可进入登录', async ({ page, context }) => {
   const session = await setup(context); session.authenticated = false;
   for (const path of ['/manage/articles', '/articles/new', '/articles/12/edit']) {
-    await page.goto(path); await expect(page.locator('.header-login')).toBeVisible();
-    await expect(page).toHaveURL('http://127.0.0.1:5175/');
+    await page.goto(path); await expect(page.getByRole('heading', { name: '账号密码登录' })).toBeVisible();
+    await expect(page).toHaveURL(/\/login\?/);
   }
+  await page.goto('/');
   await expect(page.locator('.header-login')).toHaveCSS('width', '64px');
   await expect(page.locator('.header-login')).toHaveCSS('height', '40px');
   await expect(page.locator('.header-login')).toHaveCSS('background-color', 'rgb(152, 204, 255)');
   await expect(page.locator('.header-login')).toHaveCSS('color', 'rgb(23, 23, 25)');
-  await page.getByRole('button', { name: '发布中心' }).click(); await expect(page).toHaveURL(/\/login$/);
+  await page.getByRole('button', { name: '发布中心' }).click(); await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
   await page.goto('/articles/12'); await expect(page.getByText('公开正文').first()).toBeVisible();
   await expect(page.locator('.header-login')).toBeVisible();
-  await page.getByRole('button', { name: /^点赞 / }).click(); await expect(page).toHaveURL(/\/login$/);
+  await page.getByRole('button', { name: /^点赞 / }).click(); await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
 });
 
-test('编辑器登出先确认，取消不发送，失败保留内容和离开拦截，重试成功回首页', async ({ page, context }) => {
+test('编辑器登出先确认，取消不发送，失败保留内容和离开拦截，重试成功进入登录', async ({ page, context }) => {
   const session = await setup(context); let writes = 0;
   await context.route('**/api/auth/logout', (route) => {
     writes++;
@@ -144,33 +145,33 @@ test('编辑器登出先确认，取消不发送，失败保留内容和离开�
   await expect(dialog).toBeHidden();
   await openMenu(page); await page.getByRole('menuitem', { name: '退出登录' }).click();
   await dialog.getByRole('button', { name: '放弃修改' }).click();
-  await expect(page).toHaveURL('http://127.0.0.1:5175/'); await expect(page.locator('.header-login')).toBeVisible(); expect(writes).toBe(2);
+  await expect(page).toHaveURL(/\/login\?/); await expect(page.getByRole('heading', { name: '账号密码登录' })).toBeVisible(); expect(writes).toBe(2);
   expect(await page.evaluate(() => sessionStorage.getItem('ec:article-editor:recovery:v1'))).toBeNull();
 });
 
-test('编辑页后台复核过期先保护输入并回首页，不自动送去登录', async ({ page, context }) => {
+test('编辑页后台复核过期清理输入并进入登录', async ({ page, context }) => {
   const session = await setup(context); await page.goto('/articles/new');
   await page.getByRole('textbox', { name: '文章标题' }).fill('复核前的标题');
   session.authenticated = false;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page).toHaveURL('http://127.0.0.1:5175/'); await expect(page.locator('.header-login')).toBeVisible();
-  expect(await page.evaluate(() => sessionStorage.getItem('ec:article-editor:recovery:v1'))).toContain('复核前的标题');
+  await expect(page).toHaveURL(/\/login\?/); await expect(page.getByRole('heading', { name: '账号密码登录' })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('ec:article-editor:recovery:v1'))).toBeNull();
 });
 
-test('管理页被动读取 401 回首页，主动删除收到 401 才进入登录', async ({ page, context }) => {
+test('管理页读取或删除收到401均进入显式登录', async ({ page, context }) => {
   await setup(context); let expiredRead = true;
   await context.route('**/api/users/me/articles?**', (route) => route.fulfill(expiredRead
     ? { status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }
     : { json: { items: [article('1')], nextCursor: null } }));
-  await page.goto('/manage/articles'); await expect(page.locator('.header-login')).toBeVisible();
-  await expect(page).toHaveURL('http://127.0.0.1:5175/');
+  await page.goto('/manage/articles'); await expect(page.getByRole('heading', { name: '账号密码登录' })).toBeVisible();
+  await expect(page).toHaveURL(/\/login\?/);
   expiredRead = false;
   await context.route('**/api/articles/1', (route) => route.fulfill({ status: 401, json: { code: 'AUTHENTICATION_REQUIRED' } }));
   await page.goto('/manage/articles'); await expect(page.locator('.manage-row')).toHaveCount(1);
   await page.locator('.manage-row').getByRole('button', { name: '删除' }).click();
   await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/); await expect(page.getByRole('heading', { name: '账号密码登录' })).toBeVisible();
+  await expect(page).toHaveURL(/\/login(?:\?.*)?$/); await expect(page.getByRole('heading', { name: '账号密码登录' })).toBeVisible();
 });
 
 // 资料按页面读取；这里只迁移接口mock，交互场景由人工验收。
-test.beforeEach(async ({ page }) => { await mockPublicProfiles(page); });
+test.beforeEach(async ({ context }) => { await mockPublicProfiles(context); });

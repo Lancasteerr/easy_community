@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError } from '../api/client';
+import { capturePage } from '../auth/pageLifetime';
+import { isAuthenticationFailure } from '../api/client';
 import { imageFileError, uploadArticleImage, uploadError, type UploadedMedia } from '../api/media';
 
 /** 更换成功前不覆盖原封面；失败项显式移除后才允许以无封面提交。 */
@@ -7,6 +8,7 @@ export function CoverUpload({ value, disabled, onChange, onBlocked, onUnauthoriz
   value: UploadedMedia | null; disabled: boolean; onChange: (value: UploadedMedia | null) => void;
   onBlocked: (blocked: boolean) => void; onUnauthorized: () => void;
 }) {
+  const pageActive = capturePage();
   const [busy, setBusy] = useState(false);
   const [percent, setPercent] = useState(0);
   const [message, setMessage] = useState('');
@@ -25,14 +27,14 @@ export function CoverUpload({ value, disabled, onChange, onBlocked, onUnauthoriz
     const controller = new AbortController(); pending.current = controller;
     setBusy(true); setPercent(0); setMessage(''); options.current.onBlocked(true);
     try {
-      const uploaded = await uploadArticleImage(file, 5 * 1024 * 1024, controller.signal, setPercent);
-      if (!controller.signal.aborted) { onChange(uploaded); options.current.onBlocked(false); previousFile.current = null; }
+      const uploaded = await uploadArticleImage(file, 5 * 1024 * 1024, controller.signal, (percent) => { if (pageActive() && !controller.signal.aborted) setPercent(percent); });
+      if (pageActive() && !controller.signal.aborted) { onChange(uploaded); options.current.onBlocked(false); previousFile.current = null; }
     } catch (failure) {
-      if (controller.signal.aborted) return;
-      if (failure instanceof ApiError && failure.status === 401) options.current.onUnauthorized();
+      if (!pageActive() || controller.signal.aborted) return;
+      if (isAuthenticationFailure(failure)) { options.current.onUnauthorized(); return; }
       setMessage(`${value ? '更换失败，保留原封面。' : ''}${uploadError(failure)}`);
       options.current.onBlocked(!value);
-    } finally { if (!controller.signal.aborted) { pending.current = null; setBusy(false); } }
+    } finally { if (pageActive() && !controller.signal.aborted) { pending.current = null; setBusy(false); } }
   }
   return <div className="editor-cover-field">
     <h3>封面 <small>选填</small></h3>

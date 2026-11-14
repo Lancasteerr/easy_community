@@ -1,3 +1,4 @@
+import { documentNavigation } from '../navigation/documentNavigation';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
@@ -47,8 +48,8 @@ it('游客点赞登录后回原文章重新读取状态，不自动补发点赞'
   await user.type(screen.getByLabelText('账号'), 'Alice_1');
   await user.type(screen.getByLabelText('密码', { exact: true }), 'password');
   await user.click(screen.getByRole('button', { name: /^登录$/ }));
-  await screen.findByText('真实正文');
-  expect(screen.getByLabelText('当前位置')).toHaveTextContent('/articles/9007199254740995');
+  await waitFor(() => expect(documentNavigation.replace).toHaveBeenCalledWith('/articles/9007199254740995'));
+  // 新文档重新读取由人工交互验收，此处不模拟浏览器重载。
   expect(setArticleLike).not.toHaveBeenCalled();
-  expect(getArticleDetail).toHaveBeenCalledTimes(2);
+  expect(getArticleDetail).toHaveBeenCalledTimes(1);
 });

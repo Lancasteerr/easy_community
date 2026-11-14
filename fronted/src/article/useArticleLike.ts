@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { capturePage } from '../auth/pageLifetime';
 import { setArticleLike } from '../api/articles';
-import { ApiError, errorMessage, getCsrf } from '../api/client';
+import { isAuthenticationFailure, ApiError, errorMessage, getCsrf } from '../api/client';
 import type { ArticleCardData, CsrfToken } from '../api/types';
 
 interface LikeOptions {
@@ -12,6 +13,7 @@ interface LikeOptions {
 
 /** 成功受理后才更新展示；超时保留原状态，校正留给用户手动刷新页面。 */
 export function useArticleLike(article: Pick<ArticleCardData, 'articleId' | 'likeCount' | 'likedByMe'>, options: LikeOptions) {
+  const pageActive = capturePage();
   const [state, setState] = useState({ liked: article.likedByMe, count: article.likeCount, busy: false, retryAt: 0 });
   const current = useRef(state);
   const pending = useRef<AbortController | null>(null);
@@ -29,13 +31,13 @@ export function useArticleLike(article: Pick<ArticleCardData, 'articleId' | 'lik
 
   async function toggle() {
     const previous = current.current;
-    if (!callbacks.current.enabled || pending.current || previous.retryAt > Date.now()) return;
+    if (!pageActive() || !callbacks.current.enabled || pending.current || previous.retryAt > Date.now()) return;
     const controller = new AbortController();
     const version = generation.current;
     pending.current = controller;
     publish({ ...previous, busy: true, retryAt: 0 });
     let writing = false;
-    const fresh = () => version === generation.current && !controller.signal.aborted;
+    const fresh = () => pageActive() && version === generation.current && !controller.signal.aborted;
     try {
       csrf.current ??= await getCsrf(controller.signal);
       if (!fresh() || !callbacks.current.enabled) return;
@@ -53,7 +55,7 @@ export function useArticleLike(article: Pick<ArticleCardData, 'articleId' | 'lik
       if (!fresh()) return;
       // 只对已经尝试发送的写入静默处理未知结果；获取凭证失败仍需正常反馈。
       if (writing && error instanceof ApiError && (error.status === 0 || error.code === 'LIKE_WRITE_RESULT_UNKNOWN')) return;
-      if (error instanceof ApiError && error.status === 401) {
+      if (isAuthenticationFailure(error)) {
         callbacks.current.onUnauthorized();
       } else if (error instanceof ApiError && error.status === 403) {
         csrf.current = null;
@@ -62,7 +64,7 @@ export function useArticleLike(article: Pick<ArticleCardData, 'articleId' | 'lik
           if (fresh()) callbacks.current.notify('操作凭证已刷新，请再次点击');
         } catch (refreshError) {
           if (fresh()) {
-            if (refreshError instanceof ApiError && refreshError.status === 401) callbacks.current.onUnauthorized();
+            if (isAuthenticationFailure(refreshError)) callbacks.current.onUnauthorized();
             else {
               if (refreshError instanceof ApiError) publish({ ...current.current, retryAt: refreshError.retryAt });
               callbacks.current.notify(errorMessage(refreshError));

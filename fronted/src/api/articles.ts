@@ -1,15 +1,10 @@
-import { ApiError, request } from './client';
+import { request } from './client';
 import type { ArticleDetailData, ArticleLikeAccepted, CsrfToken } from './types';
 import { savePayload, type ArticleEditData, type ArticleForm, type Tag } from '../editor/model';
 
-/** 过期 Cookie 清除后，只允许以游客身份重读一次公开详情。 */
-export async function getArticleDetail(id: string, signal?: AbortSignal) {
-  const read = () => request<ArticleDetailData>(`/api/articles/${encodeURIComponent(id)}`, { signal });
-  try { return await read(); }
-  catch (error) {
-    if (error instanceof ApiError && error.status === 401 && !signal?.aborted) return read();
-    throw error;
-  }
+/** 公开详情遇认证失效也由会话边界重置，不静默降为游客重读。 */
+export function getArticleDetail(id: string, signal?: AbortSignal) {
+  return request<ArticleDetailData>(`/api/articles/${encodeURIComponent(id)}`, { signal });
 }
 
 /** 每次显式操作只发送一个目标状态命令，不自动重放结果未知的写入。 */

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { capturePage } from '../auth/pageLifetime';
 import { ApiError, getFeed } from '../api/client';
 import type { ArticleCardData } from '../api/types';
 import { readSnapshot, saveSnapshot } from '../navigation/snapshots';
@@ -16,6 +17,7 @@ const initialState = (): FeedState => ({ items: [], nextCursor: null, status: 'l
 
 /** 请求锁同步建立；代次令牌隔离重载前后的响应，取消只负责节省网络资源。 */
 export function useFeed(snapshotKey?: string) {
+  const pageActive = capturePage();
   const [state, setState] = useState<FeedState>(initialState);
   const current = useRef(state);
   const pending = useRef<AbortController | null>(null);
@@ -36,7 +38,7 @@ export function useFeed(snapshotKey?: string) {
     publish({ ...previous, status: 'loading', error: null, paused: false, retryAt: 0 });
     try {
       const page = await getFeed(previous.nextCursor, controller.signal);
-      if (version !== generation.current || controller.signal.aborted) return;
+      if (version !== generation.current || !pageActive() || controller.signal.aborted) return;
       const seen = new Set(previous.items.map((item) => item.articleId));
       const added = page.items.filter((item) => {
         if (seen.has(item.articleId)) return false;
@@ -47,7 +49,7 @@ export function useFeed(snapshotKey?: string) {
       publish({ items: [...previous.items, ...added], nextCursor: page.nextCursor, status: 'ready', error: null,
         paused: page.nextCursor !== null && (emptyPages.current >= 3 || page.nextCursor === previous.nextCursor), retryAt: 0 });
     } catch (error) {
-      if (version !== generation.current || controller.signal.aborted) return;
+      if (version !== generation.current || !pageActive() || controller.signal.aborted) return;
       publish({ ...previous, status: error instanceof ApiError && error.code === 'ARTICLE_CURSOR_EXPIRED' ? 'expired' : 'error',
         error, retryAt: error instanceof ApiError ? error.retryAt : 0 });
     } finally {

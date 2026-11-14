@@ -3,11 +3,11 @@ import { getArticleDetail, setArticleLike } from './articles';
 
 afterEach(() => vi.unstubAllGlobals());
 
-it('公开详情401后仅以游客重读一次，持续401不无限重试', async () => {
+it('公开详情401直接失败，不按游客重读', async () => {
   const fetch = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ code: 'AUTHENTICATION_REQUIRED' }), { status: 401 }));
   vi.stubGlobal('fetch', fetch);
   await expect(getArticleDetail('9007199254740995')).rejects.toMatchObject({ status: 401 });
-  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenCalledTimes(1);
   expect(fetch.mock.calls[0][0]).toBe('/api/articles/9007199254740995');
 });
 

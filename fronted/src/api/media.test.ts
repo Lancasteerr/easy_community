@@ -1,3 +1,4 @@
+import { isAuthenticationFailure } from './client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { imageFileError, uploadAvatarImage, uploadToStorage, type UploadGrant } from './media';
 
@@ -57,4 +58,16 @@ it('取消上传结束当前请求，不自动重传；非法大小与类型提�
   const assertion = expect(pending).rejects.toMatchObject({ name: 'AbortError' }); controller.abort(); await assertion;
   expect(imageFileError(new File(['x'], 'x.gif', { type: 'image/gif' }), 5)).toMatch(/仅支持/);
   expect(imageFileError(new File(['xxxxxx'], 'x.png', { type: 'image/png' }), 5)).toMatch(/大小/);
+});
+
+it('外部存储401不冒充本站认证失效', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeXhr);
+  const pending = uploadToStorage(grant, new File(['x'], 'x.png'), new AbortController().signal, vi.fn());
+  const assertion = pending.catch((error: unknown) => error);
+  FakeXhr.current.status = 401;
+  FakeXhr.current.responseText = '{"code":"AUTHENTICATION_REQUIRED"}';
+  FakeXhr.current.onload?.();
+  const error = await assertion;
+  expect(isAuthenticationFailure(error)).toBe(false);
+  expect(error).toMatchObject({ code: 'STORAGE_UPLOAD_FAILED', status: 401 });
 });
