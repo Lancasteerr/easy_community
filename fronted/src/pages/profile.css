@@ -27,17 +27,19 @@
 .profile-follow, .profile-primary { color: #15212c; background: #9bceff; }
 .profile-follow:hover:not(:disabled), .profile-primary:hover:not(:disabled) { background: #b7dcff; }
 .profile-action:disabled, .profile-primary:disabled { opacity: .6; cursor: not-allowed; }
-.profile-info { padding: 22px 24px; border: 1px solid rgb(255 255 255 / 10%); }
+/* 信息卡与发布栏共用动态吸顶上缘，资料卡收缩时两列仍保持对齐。 */
+.profile-info { position: sticky; top: var(--profile-list-top); padding: 22px 24px; border: 1px solid rgb(255 255 255 / 10%); }
 .profile-info > p { min-height: 40px; margin: 16px 0; color: #757575; font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
 .profile-info dl { margin: 0; padding-top: 16px; border-top: 1px solid rgb(255 255 255 / 8%); }
 .profile-info dl > div { display: flex; align-items: center; gap: 12px; min-height: 24px; font-size: 14px; line-height: 20px; }
 .profile-info dl > div + div { margin-top: 16px; }
 .profile-info dt { flex-shrink: 0; color: #757575; }
 .profile-info dd { margin: 0; overflow-wrap: anywhere; }
-/* clip保持卡片圆角但不创建第二个滚动容器，让发布栏相对整页吸顶。 */
-.profile-articles { min-width: 0; overflow: clip; border: 1px solid rgb(255 255 255 / 10%); }
-/* 回抵列表顶部1px边框，使标题在自然位置与吸顶位置都保留17px可见间隔。 */
-.profile-list-heading { position: sticky; top: var(--profile-list-top); z-index: 5; display: flex; align-items: center; justify-content: space-between; height: 65px; margin-top: -1px; padding: 0 24px; border-radius: 11px 11px 0 0; border-bottom: 1px solid rgb(255 255 255 / 8%); background: #212121; box-shadow: inset 0 1px rgb(255 255 255 / 10%); }
+/* 内描边和1px内距保留原有内容尺寸，使吸顶遮挡层可以覆盖完整卡片宽度。 */
+.profile-articles { min-width: 0; overflow: clip; padding: 1px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%); }
+/* 方形背景遮住经过标题背后的文章；圆角表面单独绘制，防止底色填平上缘圆角。 */
+.profile-list-heading { position: sticky; top: var(--profile-list-top); z-index: 5; isolation: isolate; display: flex; align-items: center; justify-content: space-between; height: 65px; margin: -1px -1px 0; padding: 0 25px; background: var(--profile-background); }
+.profile-list-heading::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; border: 1px solid rgb(255 255 255 / 10%); border-bottom-color: rgb(255 255 255 / 8%); border-radius: 12px 12px 0 0; background: #212121; }
 .profile-list-heading h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 18px; font-weight: 500; }
 .profile-list-heading h2 > span { position: relative; }
 .profile-list-heading h2 > span::after { position: absolute; content: ''; left: 0; right: 0; bottom: -6px; height: 2px; background: #9bceff; border-radius: 2px; }

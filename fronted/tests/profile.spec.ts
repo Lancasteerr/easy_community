@@ -75,7 +75,7 @@ test('访客关注仅提示未开放，滚动后资料简要吸顶，回顶恢�
   expect((await page.locator('.profile-header').boundingBox())!.height).toBe(88);
   expect((await page.locator('.profile-header').boundingBox())!.y).toBe(167);
   expect((await first.boundingBox())!.y).toBe(y - 700);
-  expect((await page.locator('.profile-info').boundingBox())!.y).toBe(-140);
+  expect((await page.locator('.profile-info').boundingBox())!.y).toBe((await page.locator('.profile-list-heading').boundingBox())!.y);
   await expect(page.getByRole('button', { name: '+ 关注', exact: true })).toHaveCount(1);
   expect(mock.reads()).toBe(1);
   await page.screenshot({ path: testInfo.outputPath('profile-compact.png') });
@@ -94,9 +94,11 @@ test('资料卡连续收缩，头像沿用同一节点，正反滚动保持上�
   const edit = page.getByRole('link', { name: '编辑资料', exact: true });
   await edit.evaluate(element => element.focus({ preventScroll: true }));
   const measures: { scroll: number; avatar: number; height: number }[] = [];
-  for (const selector of ['.profile-header', '.profile-info', '.profile-articles', '.profile-list-heading']) {
+  for (const selector of ['.profile-header', '.profile-info', '.profile-articles']) {
     await expect(page.locator(selector)).toHaveCSS('background-color', 'rgb(33, 33, 33)');
   }
+  // 发布栏的方形背景负责遮挡，实际卡片底色由圆角伪元素绘制。
+  expect(await page.locator('.profile-list-heading').evaluate(element => getComputedStyle(element, '::before').backgroundColor)).toBe('rgb(33, 33, 33)');
   await expect(page.locator('.profile-article-card').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   for (const top of [0, 96, 176, 200, 222, 244, 266, 288, 400, 700, 266, 222, 96, 0]) {
     await scroll.evaluate((element, value) => { element.dispatchEvent(new Event('wheel')); element.scrollTop = value; }, top);
@@ -106,6 +108,7 @@ test('资料卡连续收缩，头像沿用同一节点，正反滚动保持上�
     const heading = (await page.locator('.profile-list-heading').boundingBox())!;
     expect(bounds.y - header.y - header.height).toBeCloseTo(43, 1);
     expect(heading.y - bounds.y - bounds.height).toBeCloseTo(17, 1);
+    expect((await page.locator('.profile-info').boundingBox())!.y).toBeCloseTo(heading.y, 1);
     expect(await avatar.evaluate((element, original) => element === original, originalAvatar)).toBe(true);
     expect(await page.locator('.profile-header').count()).toBe(1);
     expect(await page.getByRole('link', { name: '编辑资料', exact: true }).count()).toBe(1);
