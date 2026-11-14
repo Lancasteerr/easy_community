@@ -1,6 +1,13 @@
 import { request } from './client';
-import type { ArticleDetailData, ArticleLikeAccepted, CsrfToken } from './types';
+import type { ArticleDetailData, ArticleLikeAccepted, CsrfToken, FeedPage } from './types';
 import { savePayload, type ArticleEditData, type ArticleForm, type Tag } from '../editor/model';
+
+/** 本人和访客主页共用公开作者筛选，游标不可与本人管理列表混用。 */
+export function getAuthorArticles(userId: string, cursor: string | null, signal?: AbortSignal) {
+  const query = new URLSearchParams({ authorId: userId, sort: 'latest', size: '20' });
+  if (cursor !== null) query.set('cursor', cursor);
+  return request<FeedPage>(`/api/articles/search?${query}`, { signal });
+}
 
 /** 公开详情遇认证失效也由会话边界重置，不静默降为游客重读。 */
 export function getArticleDetail(id: string, signal?: AbortSignal) {
