@@ -19,9 +19,10 @@ import menuHome from '../assets/menu-home.svg';
 import menuContent from '../assets/menu-content.svg';
 import menuSettings from '../assets/menu-settings.svg';
 import menuLogout from '../assets/menu-logout.svg';
+import searchCancel from '../assets/search-cancel.svg';
 
 const sources = { search, edit, like, comment, terminal, trending, compass, publish, inbox, eye, eyeOff, manageView, favorite, document, manageLike, manageComment,
-  menuHome, menuContent, menuSettings, menuLogout };
+  menuHome, menuContent, menuSettings, menuLogout, searchCancel };
 
 /** 用原稿 SVG 轮廓作遮罩，使悬停、点赞和聚焦颜色随组件状态继承。 */
 export function Icon({ name, size = 20 }: { name: keyof typeof sources; size?: number }) {

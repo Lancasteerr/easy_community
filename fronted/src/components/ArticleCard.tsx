@@ -20,13 +20,15 @@ function relativeTime(value: string) {
   return new Date(value).toLocaleDateString('zh-CN');
 }
 
-export function ArticleCard({ article, onLogin, context = 'feed' }: { article: ArticleCardData; onLogin: () => void; context?: 'feed' | 'profile' }) {
+export function ArticleCard({ article, onLogin, context = 'feed' }: { article: ArticleCardData; onLogin: () => void; context?: 'feed' | 'profile' | 'search' }) {
   const unavailable = useUnavailable();
   const [brokenCover, setBrokenCover] = useState<string>();
   // 稳定的文章锚点用于返回首页后校正图片加载造成的阅读位置偏移。
   const metadata = <><time dateTime={article.publishedAt} title={new Date(article.publishedAt).toLocaleString('zh-CN')}>
     {relativeTime(article.publishedAt)}</time><span> · 阅读 {number.format(article.viewCount)}</span></>;
-  return <article className={`article-card${context === 'profile' ? ' profile-article-card' : ''}`} data-read-block={article.articleId} aria-labelledby={`article-${article.articleId}`}>
+  // 搜索仅改变排版；封面失败时保留占位，阅读锚点不会随图片状态跳动。
+  const variant = context === 'search' ? ` search-article-card${article.coverUrl ? ' has-cover' : ''}` : context === 'profile' ? ' profile-article-card' : '';
+  return <article className={`article-card${variant}`} data-read-block={article.articleId} aria-labelledby={`article-${article.articleId}`}>
     {context === 'profile' ? <div className="article-meta">{metadata}</div> : <div className="article-author-row">
       <Link className="author-entry" aria-label={`查看作者 ${article.authorName}`} to={profilePath(article.authorId)}>
         <Avatar src={article.authorAvatarUrl} /><span className="author-details"><span className="author-name">{article.authorName}</span>
