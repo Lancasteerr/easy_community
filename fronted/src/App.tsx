@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ManageArticlesPage } from './pages/ManageArticlesPage';
 import { ProfileSettingsPage } from './pages/ProfileSettingsPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { SearchPage } from './pages/SearchPage';
 import { lazy, Suspense } from 'react';
 
 // 编辑器按路由加载，主页和登录页不承担正文编辑依赖的下载成本。
@@ -23,6 +24,7 @@ function PageRoutes() {
   const auth = useAuth();
   return auth.resetting ? null : <Routes>
     <Route path="/" element={<HomePage />} />
+    <Route path="/search" element={<SearchPage />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/manage/articles" element={<ManageArticlesPage />} />
     <Route path="/settings/profile" element={<ProfileSettingsPage />} />
