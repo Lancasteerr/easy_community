@@ -35,10 +35,13 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-it('菜单复用四个图标，个人主页保留入口，管理和设置使用新标签链接', async () => {
+it('菜单复用四个图标，个人主页、管理和设置均使用新标签链接', async () => {
   const { user } = mount(); await open(user);
   expect(screen.getAllByRole('menuitem')).toHaveLength(4);
-  await user.click(screen.getByRole('menuitem', { name: '个人主页' }));
+  const home = screen.getByRole('menuitem', { name: '个人主页' });
+  expect(home).toHaveAttribute('href', `/users/${profile.userId}`);
+  expect(home).toHaveAttribute('target', '_blank');
+  expect(home).toHaveAttribute('rel', 'noopener noreferrer');
   const settings = screen.getByRole('menuitem', { name: '设置' });
   expect(settings).toHaveAttribute('href', '/settings/profile');
   expect(settings).toHaveAttribute('target', '_blank');

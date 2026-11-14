@@ -1,15 +1,15 @@
 # 用户资料、个人简介与共享缓存
 
-本期仅提供后端能力，不修改前端。文字资料通过统一入口编辑，目前只开放简介`bio`；头像继续使用独立接口。性别、生日暂未增加，后续增加时需分别定义校验及公开范围。
+本文说明后端资料契约；前端已有资料设置页和公开个人主页。文字资料通过统一入口编辑，目前只开放简介`bio`；头像继续使用独立接口。性别、生日暂未增加，后续增加时需分别定义校验及公开范围。
 
 ## 接口
 
-所有接口要求有效Session，修改接口还需CSRF。ID在JSON中始终为字符串。
+`GET /api/users/{userId}` 允许游客读取公开资料；本人读取及修改接口要求有效Session，修改接口还需CSRF。ID在JSON中始终为字符串，`createdAt` 为UTC加入时间。
 
 | 接口 | 请求与响应 |
 | --- | --- |
-| GET `/api/users/me` | 返回`userId、username、role、avatarMediaId、avatarUrl、bio` |
-| GET `/api/users/{userId}` | 数字正BIGINT路径，返回`userId、username、bio、avatarMediaId、avatarUrl`，不返回角色和认证信息 |
+| GET `/api/users/me` | 返回`userId、username、role、avatarMediaId、avatarUrl、bio、createdAt` |
+| GET `/api/users/{userId}` | 数字正BIGINT路径，游客可读，返回`userId、username、bio、avatarMediaId、avatarUrl、createdAt`，不返回角色和认证信息 |
 | PATCH `/api/users/edit` | `Content-Type: application/json`，本期仅接受`{"bio":"个人简介"}`，返回更新后的本人资料 |
 | PUT `/api/users/me/avatar` | `{"mediaId":"标准UUID"}`，保持现有媒体归属、用途和READY校验，返回本人资料，包括bio |
 | DELETE `/api/users/me/avatar` | 清空头像，204 |

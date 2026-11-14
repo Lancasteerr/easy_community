@@ -5,6 +5,20 @@ import { readSnapshot } from './snapshots';
 
 afterEach(() => vi.unstubAllGlobals());
 
+it('先恢复目标位置，再按资料卡收起后的实时遮挡校正锚点', () => {
+  const root = document.createElement('div');
+  root.innerHTML = '<article data-read-block="1">文章</article>';
+  root.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
+  root.firstElementChild!.getBoundingClientRect = () => ({ top: 800 - root.scrollTop, bottom: 1200 - root.scrollTop }) as DOMRect;
+  const geometry = { getTopInset: () => root.scrollTop >= 376 ? 255 : 167 };
+  root.scrollTop = 500;
+  const position = capturePosition(root, geometry);
+  expect(position.offset).toBe(45);
+  root.scrollTop = 0;
+  renderHook(() => useScrollMemory({ current: root }, 'compact-profile-inset', true, position, undefined, 0, geometry));
+  expect(root.scrollTop).toBe(500);
+});
+
 it('内容增长时按锚点校正位置，显式目录跳转后停止自动校正', () => {
   const callbacks: (() => void)[] = [];
   vi.stubGlobal('ResizeObserver', class {

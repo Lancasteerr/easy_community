@@ -5,6 +5,7 @@ import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { useUnavailable } from './Toast';
 import { ArticleCardLikeButton } from './ArticleCardLikeButton';
+import { profilePath } from '../profile/routes';
 
 const number = new Intl.NumberFormat('en-US');
 
@@ -27,11 +28,11 @@ export function ArticleCard({ article, onLogin, context = 'feed' }: { article: A
     {relativeTime(article.publishedAt)}</time><span> · 阅读 {number.format(article.viewCount)}</span></>;
   return <article className={`article-card${context === 'profile' ? ' profile-article-card' : ''}`} data-read-block={article.articleId} aria-labelledby={`article-${article.articleId}`}>
     {context === 'profile' ? <div className="article-meta">{metadata}</div> : <div className="article-author-row">
-      <button className="author-entry" aria-label={`查看作者 ${article.authorName}`} onClick={unavailable}>
+      <Link className="author-entry" aria-label={`查看作者 ${article.authorName}`} to={profilePath(article.authorId)}>
         <Avatar src={article.authorAvatarUrl} /><span className="author-details"><span className="author-name">{article.authorName}</span>
           <span className="article-meta">{metadata}</span>
         </span>
-      </button>
+      </Link>
       <button className="follow-button" onClick={unavailable}>+ 关注</button>
     </div>}
     <div className="article-copy">

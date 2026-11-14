@@ -7,7 +7,8 @@
 .profile-main { width: 1227px; margin: 0 auto; }
 .profile-columns { display: grid; grid-template-columns: 840px 370px; align-items: start; gap: 17px; margin-top: 17px; }
 .profile-header { height: 376px; overflow: hidden; border-radius: 12px; background: rgb(60 60 67 / 30%); }
-.profile-cover { height: 211px; border-radius: 12px; background: #292c30 url('../assets/profile-cover.svg') center / cover no-repeat; }
+/* 封面使用工具直接导出的两倍 PNG，叠加原稿中独立的对比渐变图层。 */
+.profile-cover { height: 211px; border-radius: 12px; background-color: #292c30; background-image: linear-gradient(180deg, rgb(0 0 0 / 2%), rgb(0 0 0 / 18%) 58%, rgb(0 0 0 / 82%)), url('../assets/profile-cover.png'); background-position: center; background-size: cover; background-repeat: no-repeat; }
 .profile-identity-row { position: relative; display: flex; align-items: flex-start; gap: 24px; height: 165px; padding: 11px 30px 30px 32px; }
 .profile-identity-row > .avatar { position: relative; top: -59px; }
 .profile-identity { min-width: 0; width: 700px; }

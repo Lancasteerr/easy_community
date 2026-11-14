@@ -3,10 +3,10 @@ import { loginDestination } from './routes';
 import { readingReturnState } from '../navigation/readingReturn';
 
 it('登录白名单接受合法详情和原有入口，拒绝外链、越界及夹带路径', () => {
-  for (const target of ['/articles/9007199254740995', '/articles/9223372036854775807/edit', '/articles/new', '/manage/articles', '/settings/profile']) {
+  for (const target of ['/users/9007199254740995', '/users/9223372036854775807', '/articles/9007199254740995', '/articles/9223372036854775807/edit', '/articles/new', '/manage/articles', '/settings/profile']) {
     expect(loginDestination(target)).toBe(target);
   }
-  for (const target of ['https://example.com', '//example.com', '/articles/9223372036854775808', '/articles/0', '/articles/1?redirect=//example.com', '/articles/1/../../login']) {
+  for (const target of ['/users/0', '/users/01', '/users/9223372036854775808', '/users/1/edit', '/users/1?redirect=//example.com', 'https://example.com', '//example.com', '/articles/9223372036854775808', '/articles/0', '/articles/1?redirect=//example.com', '/articles/1/../../login']) {
     expect(loginDestination(target)).toBe('/');
   }
 });

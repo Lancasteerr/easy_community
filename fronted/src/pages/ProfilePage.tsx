@@ -10,6 +10,7 @@ import { ProfileHeader } from '../profile/ProfileHeader';
 import { ProfileInfoCard } from '../profile/ProfileInfoCard';
 import { ProfileArticleList } from '../profile/ProfileArticleList';
 import './profile.css';
+import { useScrollMemory } from '../navigation/useScrollMemory';
 
 /** 每个作者拥有独立页面会话，切换路由先卸载旧资料、请求与滚动监听。 */
 export function ProfilePage() {
@@ -26,7 +27,10 @@ function ProfileSession({ userId }: { userId: string | undefined }) {
   const full = useRef<HTMLDivElement>(null);
   const details = useProfileDetails(userId);
   const list = useProfileArticles(userId ?? '', details.status === 'ready', `profile:${userId}:${location.key}`);
-  const { compact } = useProfileViewport(scroll, top, full, details.status === 'ready');
+  const { compact, getTopInset } = useProfileViewport(scroll, top, full, details.status === 'ready');
+  // 公开列表按作者和历史项恢复；登录会整页导航，不接受来自旧文档的列表快照。
+  useScrollMemory(scroll, `profile-scroll:${userId}:${location.key}`, details.status === 'ready' && list.status !== 'initialLoading',
+    undefined, undefined, list.revision, { getTopInset });
   const seconds = useCooldown(details.retryAt);
   const self = !!auth.identity && auth.identity.userId === userId;
   const blocked = auth.status !== 'authenticated' || auth.refreshing || !!auth.error;

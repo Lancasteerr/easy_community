@@ -16,6 +16,7 @@ import { capturePosition, useScrollMemory, type ReadingPosition } from '../navig
 import { ArticleActions } from '../article/ArticleActions';
 import { useDetailViewport } from '../article/useDetailViewport';
 import './detail.css';
+import { profilePath } from '../profile/routes';
 
 /** 详情读取不依赖登录初始化，公开文章允许游客直接阅读。 */
 export function ArticleDetailPage() {
@@ -77,9 +78,9 @@ function ArticleReader({ article, scroll, body, topInset }: {
     </section>
     <aside className="detail-sidebar" aria-label="作者与目录">
       <section className="detail-author glass-panel" aria-label="文章作者">
-        <div className="detail-author-row"><button className="author-entry" aria-label={`查看作者 ${article.authorName}`} onClick={unavailable}>
+        <div className="detail-author-row"><Link className="author-entry" aria-label={`查看作者 ${article.authorName}`} to={profilePath(article.authorId)}>
           <Avatar src={article.authorAvatarUrl} size={60} /><span className="detail-author-name" title={article.authorName}>{article.authorName}</span>
-        </button>
+        </Link>
           {/* 作者卡片始终保留关注入口，目前仅提供未开放反馈。 */}
           <button className="follow-button" onClick={unavailable}>+ 关注</button></div>
         <p>作者简介暂未开放</p>

@@ -7,12 +7,14 @@ export interface ReadingPosition { top: number; left?: number; anchor?: string; 
 export interface ReadingGeometry {
   contentRef?: RefObject<HTMLElement | null>;
   topInset?: number;
+  /** 收起资料卡会改变遮挡高度；实时读取避免滚动过程中重建恢复会话。 */
+  getTopInset?: () => number;
 }
 
 /** 使用内容块锚点及相对位置恢复，图片在锚点上方变高时仍能保持阅读进度。 */
 export function capturePosition(root: HTMLElement | null, geometry: ReadingGeometry = {}): ReadingPosition {
   if (!root) return { top: 0 };
-  const edge = root.getBoundingClientRect().top + (geometry.topInset ?? 0);
+  const edge = root.getBoundingClientRect().top + (geometry.getTopInset?.() ?? geometry.topInset ?? 0);
   const blocks = Array.from((geometry.contentRef?.current ?? root).querySelectorAll<HTMLElement>('[data-read-block]'));
   const anchor = blocks.find((block) => block.getBoundingClientRect().bottom > edge);
   return { top: root.scrollTop, left: root.scrollLeft, anchor: anchor?.dataset.readBlock,
@@ -22,7 +24,7 @@ export function capturePosition(root: HTMLElement | null, geometry: ReadingGeome
 /** 仅恢复当前历史项；用户开始操作后停止布局校正，避免与手动阅读争抢位置。 */
 export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>, key: string,
   ready: boolean, initial?: ReadingPosition, owner?: string, revision = 0, geometry: ReadingGeometry = {}) {
-  const { contentRef, topInset = 0 } = geometry;
+  const { contentRef, topInset = 0, getTopInset } = geometry;
   const previousRevision = useRef(revision);
   const stopRestoring = useRef<() => void>(() => {});
   useLayoutEffect(() => {
@@ -37,15 +39,18 @@ export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>
     let disposed = false;
     const restore = () => {
       if (!restoring || disposed) return;
+      // 先恢复数值位置，资料卡才能按目标位置计算展开或收起的实际遮挡。
+      if (getTopInset) element.scrollTop = position.top;
+      const inset = getTopInset?.() ?? topInset;
       const anchor = position.anchor === undefined ? undefined : Array.from(content.querySelectorAll<HTMLElement>('[data-read-block]'))
         .find((block) => block.dataset.readBlock === position.anchor);
       element.scrollTop = anchor && position.offset !== undefined
-        ? element.scrollTop + anchor.getBoundingClientRect().top - element.getBoundingClientRect().top - topInset - position.offset : position.top;
+        ? element.scrollTop + anchor.getBoundingClientRect().top - element.getBoundingClientRect().top - inset - position.offset : position.top;
       // 首页通栏同时承接横向浏览；旧快照或显式回顶不改变当前横向位置。
       if (position.left !== undefined) element.scrollLeft = position.left;
     };
     const save = () => {
-      lastPosition = capturePosition(element, { contentRef, topInset });
+      lastPosition = capturePosition(element, { contentRef, topInset, getTopInset });
       saveSnapshot(key, lastPosition, owner);
     };
     const interact = () => { restoring = false; save(); };
@@ -76,7 +81,7 @@ export function useScrollMemory<T extends HTMLElement>(root: RefObject<T | null>
       element.removeEventListener('pointerdown', interact);
       element.removeEventListener('keydown', onKey);
     };
-  }, [root, key, ready, initial, owner, revision, contentRef, topInset]);
+  }, [root, key, ready, initial, owner, revision, contentRef, topInset, getTopInset]);
   // 目录位于阅读容器外，显式章节跳转也应终止返回页面时的自动校正。
   return useCallback(() => stopRestoring.current(), []);
 }

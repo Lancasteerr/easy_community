@@ -3,9 +3,10 @@ import { useLogout, type LogoutOptions } from '../auth/useLogout';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import './avatar-menu.css';
+import { profilePath } from '../profile/routes';
 
 /** 菜单相对 Banner 定位，触发区域与浮层共同管理鼠标、焦点和关闭计时。 */
-export function AvatarMenu({ avatarUrl, label, ...options }: LogoutOptions & { avatarUrl?: string | null; label: string }) {
+export function AvatarMenu({ avatarUrl, label, userId, ...options }: LogoutOptions & { avatarUrl?: string | null; label: string; userId: string }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -63,7 +64,8 @@ export function AvatarMenu({ avatarUrl, label, ...options }: LogoutOptions & { a
       }}><Avatar src={avatarUrl} size={40} /></button>
     {open && <div className="avatar-menu-positioner">
       <div id={id} className="avatar-menu" role="menu" aria-label="用户菜单" ref={menu} onKeyDown={menuKeyDown}>
-        <button type="button" role="menuitem" tabIndex={-1} className="avatar-menu-item"><Icon name="menuHome" />个人主页</button>
+        <a role="menuitem" tabIndex={-1} className="avatar-menu-item" href={profilePath(userId)} target="_blank" rel="noopener noreferrer" onClick={close}>
+          <Icon name="menuHome" />个人主页</a>
         <a role="menuitem" tabIndex={-1} className="avatar-menu-item" href="/manage/articles" target="_blank" rel="noopener noreferrer" onClick={close}>
           <Icon name="menuContent" />内容管理</a>
         <a role="menuitem" tabIndex={-1} className="avatar-menu-item" href="/settings/profile" target="_blank" rel="noopener noreferrer" onClick={close}>

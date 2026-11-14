@@ -29,7 +29,7 @@ export function Header({ onLogin, hideSearch = false, ...logoutOptions }: Logout
           if (auth.status === 'guest') navigate('/login', { state: { returnTo: '/articles/new' } });
           else if (auth.status === 'authenticated') navigate('/articles/new'); else checkIdentity();
         }}><Icon name="edit" size={25} /></button>
-        {auth.status === 'authenticated' && auth.identity ? <AvatarMenu avatarUrl={profile?.avatarUrl} label={profile ? `${profile.username} 的个人中心` : '个人中心'} {...logoutOptions} />
+        {auth.status === 'authenticated' && auth.identity ? <AvatarMenu userId={auth.identity.userId} avatarUrl={profile?.avatarUrl} label={profile ? `${profile.username} 的个人中心` : '个人中心'} {...logoutOptions} />
           : auth.status === 'guest' ? <button type="button" className="header-login" onClick={login}>登录</button>
           : <button type="button" className="avatar-entry icon-button" aria-label={auth.status === 'loading' ? '正在确认登录状态' : '重新检查登录状态'}
             aria-busy={auth.status === 'loading'} onClick={checkIdentity}><Avatar size={40} /></button>}

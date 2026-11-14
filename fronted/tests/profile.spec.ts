@@ -22,6 +22,7 @@ async function mockProfile(page: Page, signedIn = true, items = 12) {
       ...article(String(index + 1)), authorId: query.get('authorId'), coverUrl: index % 2 ? null : '/profile-cover-test.png',
     })), nextCursor: null } });
   });
+  await context.route('**/api/articles/feed?**', (route) => route.fulfill({ json: { items: [article('5')], nextCursor: null } }));
   await context.route(/\/api\/articles\/\d+$/, (route) => route.fulfill({ json: {
     ...article(new URL(route.request().url()).pathname.split('/').at(-1)), coverMediaId: null, contentHtml: '<h2>正文</h2><p>阅读后返回个人主页。</p>',
   } }));
@@ -102,3 +103,80 @@ for (const viewport of [{ width: 1440, height: 768 }, { width: 1920, height: 108
     await page.screenshot({ path: testInfo.outputPath('profile-viewport.png') });
   });
 }
+
+test('菜单主页新标签打开，作者入口当前页导航，文章后退恢复列表和锚点', async ({ page }) => {
+  const mock = await mockProfile(page);
+  await openProfile(page);
+  await page.locator('.avatar-entry').hover();
+  const popup = page.waitForEvent('popup');
+  await page.getByRole('menuitem', { name: '个人主页' }).click();
+  const personal = await popup;
+  await expect(personal).toHaveURL(new RegExp(`/users/${profile.userId}$`));
+  await personal.close();
+  const scroll = page.locator('.profile-scroll');
+  await scroll.evaluate((element) => { element.dispatchEvent(new Event('wheel')); element.scrollTop = 1700; });
+  await expect(page.locator('.profile-compact-positioner')).toBeVisible();
+  // 先将目标文章放入实际可见区域，点击之后采集离页位置，避免测试自身自动滚入影响断言。
+  const link = page.getByRole('link', { name: '文章 5', exact: true });
+  await link.scrollIntoViewIfNeeded();
+  const position = await scroll.evaluate((element) => element.scrollTop);
+  const reads = mock.reads();
+  await link.click();
+  await expect(page).toHaveURL(/\/articles\/5$/);
+  await expect(page.getByRole('link', { name: '查看作者 Flame' })).toHaveAttribute('href', `/users/${profile.userId}`);
+  await page.goBack();
+  await expect(page.locator('.profile-article-card')).toHaveCount(12);
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeCloseTo(position, 0);
+  expect(mock.reads()).toBe(reads);
+  await expect(page.locator('.profile-compact-positioner')).toBeVisible();
+  await page.goto('/articles/5');
+  await page.getByRole('link', { name: '查看作者 Flame' }).click();
+  await expect(page).toHaveURL(new RegExp(`/users/${profile.userId}$`));
+  await page.goto('/');
+  await page.getByRole('link', { name: '查看作者 Flame' }).click();
+  await expect(page).toHaveURL(new RegExp(`/users/${profile.userId}$`));
+});
+
+test('游客点赞登录后返回公开主页，不重放旧点赞，登出后保留主页地址', async ({ page }) => {
+  const mock = await mockProfile(page, false);
+  await openProfile(page, '8');
+  await page.getByRole('button', { name: '点赞 328', exact: true }).first().click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByRole('textbox', { name: '账号' }).fill('test_user');
+  await page.getByLabel('密码', { exact: true }).fill('test_password');
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await expect(page).toHaveURL(/\/users\/8$/);
+  await expect(page.locator('.profile-article-card')).toHaveCount(12);
+  expect(mock.likes()).toBe(0);
+  await page.getByRole('button', { name: '点赞 328', exact: true }).first().click();
+  await expect(page.getByRole('button', { name: '取消点赞 329', exact: true })).toBeVisible();
+  expect(mock.likes()).toBe(1);
+  await page.locator('.avatar-entry').hover();
+  await page.getByRole('menuitem', { name: '退出登录' }).click();
+  await expect(page.locator('.header-login')).toBeVisible();
+  await expect(page).toHaveURL(/\/users\/8$/);
+  await expect(page.getByRole('button', { name: '取消点赞 329', exact: true })).toHaveCount(0);
+});
+
+test('非法及不存在用户不启动列表，资料故障可手动重试，空列表保留样例统计', async ({ page }) => {
+  const mock = await mockProfile(page, false, 0);
+  await page.goto('/users/0');
+  await expect(page.getByRole('heading', { name: '用户不存在' })).toBeVisible();
+  expect(mock.reads()).toBe(0);
+  await page.route('**/api/users/9', (route) => route.fulfill({ status: 404, json: { code: 'USER_NOT_FOUND' } }));
+  await page.goto('/users/9');
+  await expect(page.getByRole('heading', { name: '用户不存在' })).toBeVisible();
+  expect(mock.reads()).toBe(0);
+  let failed = true;
+  await page.route('**/api/users/8', (route) => route.fulfill(failed
+    ? { status: 503, json: { code: 'USER_BASIC_UNAVAILABLE' } }
+    : { json: { ...profile, userId: '8' } }));
+  await page.goto('/users/8');
+  await expect(page.getByText('加载失败，请稍后重试')).toBeVisible();
+  expect(mock.reads()).toBe(0);
+  failed = false;
+  await page.getByRole('button', { name: '重新加载' }).click();
+  await expect(page.getByText('该用户还没有发布任何文章。')).toBeVisible();
+  await expect(page.locator('.profile-stats').last()).toHaveText('12文章19关注1.2k粉丝');
+  await expect(page.getByRole('link', { name: '去发布' })).toHaveCount(0);
+});

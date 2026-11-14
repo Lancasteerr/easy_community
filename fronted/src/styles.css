@@ -75,7 +75,7 @@ img { display: block; max-width: 100%; }
 .article-card + .article-card { position: relative; }
 .article-card + .article-card::before { content: ''; position: absolute; left: 24px; right: 24px; top: 0; height: 1px; background: rgb(255 255 255 / 8%); }
 .article-author-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 36px; }
-.author-entry { display: flex; align-items: center; gap: 10px; min-width: 0; border: 0; padding: 0; background: none; text-align: left; }
+.author-entry { display: flex; align-items: center; gap: 10px; min-width: 0; border: 0; padding: 0; background: none; text-align: left; text-decoration: none; }
 .author-details { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .author-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 19px; }
 .article-meta { color: #757575; font-size: 12px; line-height: 16px; white-space: nowrap; }

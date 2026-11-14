@@ -63,9 +63,21 @@ for (const [path, scrollSelector] of [['/', '.home-scroll'], ['/manage/articles'
     }
     await first.hover(); await expect(first).toHaveCSS('color', 'rgb(152, 204, 255)');
     await expect(first).toHaveCSS('background-color', 'rgba(152, 204, 255, 0.15)');
-    await first.click(); await expect(page).toHaveURL(`http://127.0.0.1:5175${path}`);
+    const popupPromise = page.waitForEvent('popup');
+    await first.click();
+    const profilePage = await popupPromise;
+    await expect(profilePage).toHaveURL(new RegExp(`/users/${profile.userId}$`));
+    await profilePage.close();
+    await expect(page).toHaveURL(`http://127.0.0.1:5175${path}`);
+    await openMenu(page);
+    const settingsPopup = page.waitForEvent('popup');
     await menu.getByRole('menuitem', { name: '设置' }).click();
+    const settingsPage = await settingsPopup;
+    await expect(settingsPage).toHaveURL(/\/settings\/profile$/);
+    await settingsPage.close();
     await expect(page.locator('.toast')).toBeEmpty();
+    // 链接激活会关闭菜单；重新打开后再检查 Esc 的焦点归还。
+    await openMenu(page);
     await page.keyboard.press('Escape'); const trigger = page.locator('.avatar-entry'); await expect(trigger).toBeFocused();
     await page.keyboard.press('Enter'); await expect(first).toBeFocused();
     await expect(first).toHaveCSS('outline-color', 'rgb(152, 204, 255)'); await expect(first).toHaveCSS('outline-width', '1px');
