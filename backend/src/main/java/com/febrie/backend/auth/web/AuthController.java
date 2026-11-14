@@ -4,6 +4,7 @@ import com.febrie.backend.auth.application.AuthService;
 import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.auth.web.request.LoginRequest;
 import com.febrie.backend.auth.web.response.CsrfView;
+import com.febrie.backend.auth.web.response.SessionView;
 import com.febrie.backend.auth.web.session.SessionService;
 import com.febrie.backend.user.application.dto.UserView;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,6 +12,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,6 +34,13 @@ public class AuthController {
         response.setHeader("Cache-Control", "no-store");
         // 获取框架暴露的掩码Token，前端原样通过指定请求头返回。
         return new CsrfView(token.getToken(), token.getHeaderName());
+    }
+
+    /** 身份已由安全链完成校验；这里只映射会话快照，不读取用户展示资料。 */
+    @GetMapping("/session")
+    public SessionView session(@AuthenticationPrincipal SessionPrincipal principal, HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
+        return new SessionView(Long.toString(principal.userId()), principal.role());
     }
 
     @PostMapping("/login")

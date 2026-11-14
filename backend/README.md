@@ -128,11 +128,15 @@ if (login.ok) csrf = await fetch('/api/auth/csrf').then(r => r.json());
 所有修改接口，包括登录、退出，必须提供CSRF请求头。401后回到登录流程；403可能是权限不足或CSRF失效，重新获取Token后再由用户发起操作。
 认证后2小时绝对过期，不随访问延长；匿名会话15分钟空闲过期。不提供公开注册、刷新Token、自助找回密码或管理员重置密码。
 
+身份确认使用 `GET /api/auth/session`，成功返回 `{userId,role}`，无需CSRF且禁止缓存；该读取仍经过账号状态、认证版本、有效期和活跃会话校验，不续期。401表示游客或会话失效，数据库、会话Redis等依赖故障沿用服务错误，不能当作游客处理。
+确认身份后，可通过 `GET /api/users/{userId}` 独立读取用户名、头像、简介等公开资料；资料加载失败不代表会话失效。原 `GET /api/users/me` 保留兼容，当前前端尚未迁移，会话与资料状态的拆分将在后续完成。
+
 ## 接口
 
 | 方法与路径 | 请求/响应 | 权限 |
 |---|---|---|
 | GET `/api/auth/csrf` | 返回token、headerName；禁止缓存 | 匿名可访问 |
+| GET `/api/auth/session` | `{userId,role}`，仅查询有效会话身份，禁止缓存 | 已登录，无需CSRF |
 | POST `/api/auth/login` | `{username,password}` → `{userId,username,role}` | 匿名可访问，需CSRF |
 | POST `/api/auth/logout` | 无请求体，204 | 已登录，需CSRF |
 | GET `/api/users/me` | `{userId,username,role,avatarMediaId,avatarUrl,bio,createdAt}`，资料读取共享展示缓存 | 已登录 |

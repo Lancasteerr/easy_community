@@ -163,6 +163,7 @@ class UserProfileHttpIntegrationTests {
         assertNotNull(files.find(avatar).orElseThrow().nextActionAt());
         verifyNoInteractions(storage);
         assertEquals(401, owner.call("PATCH", "/api/users/edit", Map.of("bio", "禁止"), true).statusCode());
+        json(owner.call("GET", "/api/auth/session", null, false), 401);
         assertEquals(401, owner.call("GET", "/api/users/me", null, false).statusCode());
     }
 
@@ -174,6 +175,7 @@ class UserProfileHttpIntegrationTests {
         // 冷缓存同样允许读取停用目标，不能仅靠停用前的旧缓存通过断言。
         redis.delete(cache.key(ownerId, "data"));
         assertEquals("停用资料", json(viewer.call("GET", target(), null, false), 200).path("bio").asString());
+        json(owner.call("GET", "/api/auth/session", null, false), 401);
         assertEquals(401, owner.call("GET", "/api/users/me", null, false).statusCode());
     }
 
@@ -259,12 +261,37 @@ class UserProfileHttpIntegrationTests {
     @Test void cacheAndSqlFailuresReturn503InsteadOf404() throws Exception {
         redis.opsForValue().set(cache.key(ownerId, "data"), "D{broken");
         json(viewer.call("GET", target(), null, false), 503);
+        // 同一会话的资料读取故障不影响身份查询；此处不关闭共享Redis。
+        json(owner.call("GET", "/api/users/me", null, false), 503);
+        assertEquals(Long.toString(ownerId), json(owner.call("GET", "/api/auth/session", null, false), 200).path("userId").asString());
         redis.delete(cache.key(ownerId, "data"));
         doThrow(new org.springframework.dao.DataAccessResourceFailureException("模拟主库故障"))
                 .when(reader).load(List.of(ownerId));
         json(viewer.call("GET", target(), null, false), 503);
+        json(owner.call("GET", "/api/users/me", null, false), 503);
+        assertEquals(Long.toString(ownerId), json(owner.call("GET", "/api/auth/session", null, false), 200).path("userId").asString());
         assertFalse(Boolean.TRUE.equals(redis.hasKey(cache.key(ownerId, "data"))));
         assertFalse(Boolean.TRUE.equals(redis.hasKey(cache.key(ownerId, "cache-lock"))));
+    }
+
+    @Test void sessionAuthenticationDependencyFailureIsNotGuest() throws Exception {
+        doThrow(new org.springframework.dao.DataAccessResourceFailureException("模拟认证主库故障"))
+                .when(accounts).authState(ownerId);
+        assertEquals("DEPENDENCY_UNAVAILABLE", json(owner.call("GET", "/api/auth/session", null, false), 503).path("code").asString());
+        reset(accounts);
+        // 活跃集合类型损坏只影响本测试用户，模拟Redis校验失败而非撤销会话。
+        String members = PREFIX + ":auth:user:" + ownerId + ":v:1:sessions";
+        var before = redis.opsForSet().members(members);
+        redis.delete(members);
+        redis.opsForValue().set(members, "模拟会话Redis故障");
+        try {
+            assertEquals("DEPENDENCY_UNAVAILABLE", json(owner.call("GET", "/api/auth/session", null, false), 503).path("code").asString());
+        } finally {
+            redis.delete(members);
+            redis.opsForSet().add(members, Objects.requireNonNull(before).toArray(String[]::new));
+            redis.expire(members, java.time.Duration.ofHours(2));
+        }
+        json(owner.call("GET", "/api/auth/session", null, false), 200);
     }
 
     private UserActor actor() { return new UserActor(ownerId, Role.USER, 1); }

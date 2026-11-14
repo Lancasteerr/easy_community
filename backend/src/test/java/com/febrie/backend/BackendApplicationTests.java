@@ -108,6 +108,16 @@ class BackendApplicationTests {
         assertNull(context.getAuthentication().getCredentials());
         assertEquals("set", redis.type(active.key(saved)).code());
         assertTrue(active.contains(saved, browser.sessionId()));
+        // 会话查询无需CSRF，也不能改变已登记的绝对过期时间。
+        browser.token = null;
+        var session = browser.call("GET", "/api/auth/session", null);
+        assertEquals(200, session.statusCode(), session.body());
+        assertEquals("no-store", session.headers().firstValue("Cache-Control").orElseThrow());
+        assertEquals(mapper.valueToTree(Map.of("userId", view.userId(), "role", "PATROLLER")), mapper.readTree(session.body()));
+        Session afterRead = repository.findById(browser.sessionId());
+        assertEquals(stored.<Long>getAttribute("auth.expiresAt"), afterRead.<Long>getAttribute("auth.expiresAt"));
+        var afterContext = (org.springframework.security.core.context.SecurityContext) afterRead.getAttribute("SPRING_SECURITY_CONTEXT");
+        assertEquals(saved, afterContext.getAuthentication().getPrincipal());
         browser.token = oldCsrf;
         assertEquals(403, browser.call("POST", "/api/auth/logout", null).statusCode());
         browser.csrf();
@@ -126,6 +136,9 @@ class BackendApplicationTests {
         var two = new Browser(); two.csrf(); two.token = one.token;
         assertEquals(403, two.call("POST", "/api/auth/login", Map.of("username", admin.username(), "password", PASSWORD)).statusCode());
         assertEquals(401, new Browser().call("GET", "/api/users/me", null).statusCode());
+        assertSessionUnauthorized(new Browser());
+        // 只有匿名CSRF会话也不能被误认为已登录。
+        assertSessionUnauthorized(one);
     }
 
     @Test
@@ -136,10 +149,12 @@ class BackendApplicationTests {
         String oldId = one.sessionId();
         var oldData = redis.opsForHash().entries(PREFIX + ":session:v2:sessions:" + oldId);
         assertEquals(204, one.call("POST", "/api/auth/logout", null).statusCode());
+        assertSessionUnauthorized(one);
         // 模拟已通过鉴权的旧请求在退出后回写完整Hash，Set仍然拒绝它。
         redis.opsForHash().putAll(PREFIX + ":session:v2:sessions:" + oldId, oldData);
         redis.expire(PREFIX + ":session:v2:sessions:" + oldId, java.time.Duration.ofMinutes(2));
         assertThrows(ApiException.class, () -> validation.validate(principal(view, 1), oldId));
+        assertEquals(200, two.call("GET", "/api/auth/session", null).statusCode());
         assertEquals(200, two.call("GET", "/api/users/me", null).statusCode());
     }
 
@@ -150,6 +165,8 @@ class BackendApplicationTests {
         var two = new Browser(); two.login(view.username());
         assertEquals(204, one.call("PUT", "/api/users/me/password", Map.of("oldPassword", PASSWORD, "newPassword", "new-password-456")).statusCode());
         assertEquals(2, accounts.authState(Long.parseLong(view.userId())).orElseThrow().authVersion());
+        assertSessionUnauthorized(one);
+        assertSessionUnauthorized(two);
         assertEquals(401, two.call("GET", "/api/users/me", null).statusCode());
         var oldLogin = new Browser(); oldLogin.csrf();
         assertEquals(401, oldLogin.call("POST", "/api/auth/login", Map.of("username", view.username(), "password", PASSWORD)).statusCode());
@@ -163,8 +180,10 @@ class BackendApplicationTests {
         var browser = new Browser(); browser.login(view.username());
         assertEquals(403, browser.call("POST", "/api/admin/users", Map.of("username", name(), "password", PASSWORD)).statusCode());
         users.changeRole(Long.parseLong(view.userId()), Role.PATROLLER);
+        assertSessionUnauthorized(browser);
         assertEquals(401, browser.call("GET", "/api/users/me", null).statusCode());
         var changed = new Browser(); changed.login(view.username());
+        assertEquals("PATROLLER", mapper.readTree(changed.call("GET", "/api/auth/session", null).body()).path("role").asText());
         assertEquals("PATROLLER", mapper.readTree(changed.call("GET", "/api/users/me", null).body()).path("role").asText());
         assertEquals(403, changed.call("POST", "/api/admin/users", Map.of("username", name(), "password", PASSWORD)).statusCode());
         var operator = new Browser(); operator.login(admin.username());
@@ -172,9 +191,57 @@ class BackendApplicationTests {
         assertEquals(403, operator.call("POST", "/api/admin/users", Map.of("username", name(), "password", PASSWORD, "role", "ADMIN")).statusCode());
         assertEquals(204, operator.call("DELETE", "/api/admin/users/" + view.userId(), null).statusCode());
         assertEquals(204, operator.call("DELETE", "/api/admin/users/" + view.userId(), null).statusCode());
+        assertSessionUnauthorized(changed);
         assertEquals(401, changed.call("GET", "/api/users/me", null).statusCode());
         assertEquals(409, operator.call("POST", "/api/admin/users", Map.of("username", view.username(), "password", PASSWORD)).statusCode());
         assertEquals(404, operator.call("DELETE", "/api/admin/users/9223372036854775807", null).statusCode());
+    }
+
+    @Test
+    void sessionQueryRejectsExpiredPrincipalBeforeRedisSessionExpires() throws Exception {
+        var view = create(Role.USER);
+        var browser = new Browser(); browser.login(view.username());
+        Session stored = repository.findById(browser.sessionId());
+        var context = (org.springframework.security.core.context.SecurityContext) stored.getAttribute("SPRING_SECURITY_CONTEXT");
+        var previous = (SessionPrincipal) context.getAuthentication().getPrincipal();
+        // 保留可读取的Redis会话，单独验证认证快照的绝对过期检查。
+        var expired = new SessionPrincipal(previous.userId(), previous.username(), previous.role(), previous.authVersion(),
+                previous.authenticatedAt().minusSeconds(7200), Instant.now().minusSeconds(1));
+        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(expired, null,
+                context.getAuthentication().getAuthorities()));
+        stored.setAttribute("SPRING_SECURITY_CONTEXT", context);
+        stored.setAttribute("auth.expiresAt", expired.expiresAt().toEpochMilli());
+        save(stored);
+
+        assertSessionUnauthorized(browser);
+        assertNull(repository.findById(stored.getId()));
+    }
+
+    @Test
+    void sessionQueryRejectsRemovedActiveMember() throws Exception {
+        var view = create(Role.USER);
+        var browser = new Browser(); browser.login(view.username());
+        String id = browser.sessionId();
+        // Hash仍存在但活跃成员已撤销时，查询不能重新登记或恢复身份。
+        active.remove(principal(view, 1), id);
+        assertNotNull(repository.findById(id));
+        assertSessionUnauthorized(browser);
+        assertFalse(active.contains(principal(view, 1), id));
+        assertNull(repository.findById(id));
+    }
+
+    @Test
+    void sessionQueryUsesExistingUserRateLimit() throws Exception {
+        var view = create(Role.USER);
+        var browser = new Browser(); browser.login(view.username());
+        // 直接耗尽同一用户的限流额度，不通过大量HTTP请求拖慢回归。
+        for (int i = 0; i < properties.userPerMinute(); i++) {
+            try { limits.consume("user", view.userId(), properties.userPerMinute()); }
+            catch (ApiException exhausted) { assertEquals(429, exhausted.status().value()); break; }
+        }
+        var response = browser.call("GET", "/api/auth/session", null);
+        assertEquals(429, response.statusCode(), response.body());
+        assertTrue(Long.parseLong(response.headers().firstValue("Retry-After").orElseThrow()) > 0);
     }
 
     @Test
@@ -307,6 +374,14 @@ class BackendApplicationTests {
         var blocked = browser.call("POST", "/api/auth/login", Map.of("username", username, "password", "wrong-password"));
         assertEquals(429, blocked.statusCode());
         assertTrue(Long.parseLong(blocked.headers().firstValue("Retry-After").orElseThrow()) > 0);
+    }
+
+    /** 失效身份与服务故障使用不同协议，且错误响应同样不能缓存。 */
+    private void assertSessionUnauthorized(Browser browser) throws Exception {
+        var response = browser.call("GET", "/api/auth/session", null);
+        assertEquals(401, response.statusCode(), response.body());
+        assertEquals("AUTHENTICATION_REQUIRED", mapper.readTree(response.body()).path("code").asText());
+        assertEquals("no-store", response.headers().firstValue("Cache-Control").orElseThrow());
     }
 
     private UserView create(Role role) {
