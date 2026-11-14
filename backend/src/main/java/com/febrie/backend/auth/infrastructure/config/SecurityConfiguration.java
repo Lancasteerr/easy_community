@@ -74,6 +74,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/articles/*").permitAll()
+                        // 游客可读取数字ID对应的公开资料，me等本人入口仍要求登录。
+                        .requestMatchers(HttpMethod.GET, "/api/users/{userId:[0-9]+}").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated().anyRequest().denyAll())
                 .exceptionHandling(config -> config

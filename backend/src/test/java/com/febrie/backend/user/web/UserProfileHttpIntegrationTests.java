@@ -131,14 +131,14 @@ class UserProfileHttpIntegrationTests {
         assertEquals("", json(owner.call("PATCH", "/api/users/edit", Collections.singletonMap("bio", null), true), 200).path("bio").asString());
     }
 
-    @Test void anonymousCannotReadProfilesOrEditAndMissingUsesNegativeCache() throws Exception {
+    @Test void anonymousCanReadMetadataButCannotReadMeOrEditAndMissingUsesNegativeCache() throws Exception {
         Browser guest = browser(); guest.csrf();
-        assertEquals(401, guest.call("GET", target(), null, false).statusCode());
+        assertEquals(200, guest.call("GET", target(), null, false).statusCode());
         assertEquals(401, guest.call("GET", "/api/users/me", null, false).statusCode());
         assertEquals(401, guest.call("PATCH", "/api/users/edit", Map.of("bio", "x"), true).statusCode());
         String missing = "/api/users/9223372036854775807";
-        assertEquals("USER_NOT_FOUND", json(viewer.call("GET", missing, null, false), 404).path("code").asString());
-        json(viewer.call("GET", missing, null, false), 404);
+        assertEquals("USER_NOT_FOUND", json(guest.call("GET", missing, null, false), 404).path("code").asString());
+        json(guest.call("GET", missing, null, false), 404);
         verify(reader, times(1)).load(List.of(Long.MAX_VALUE));
         assertEquals(400, viewer.call("GET", "/api/users/0", null, false).statusCode());
         assertEquals(400, viewer.call("GET", "/api/users/9223372036854775808", null, false).statusCode());

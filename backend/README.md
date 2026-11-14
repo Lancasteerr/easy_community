@@ -136,7 +136,7 @@ if (login.ok) csrf = await fetch('/api/auth/csrf').then(r => r.json());
 | POST `/api/auth/login` | `{username,password}` → `{userId,username,role}` | 匿名可访问，需CSRF |
 | POST `/api/auth/logout` | 无请求体，204 | 已登录，需CSRF |
 | GET `/api/users/me` | `{userId,username,role,avatarMediaId,avatarUrl,bio,createdAt}`，资料读取共享展示缓存 | 已登录 |
-| GET `/api/users/{userId}` | `{userId,username,bio,avatarMediaId,avatarUrl,createdAt}`，停用及软删除目标可展示 | 已登录 |
+| GET `/api/users/{userId}` | `{userId,username,bio,avatarMediaId,avatarUrl,createdAt}`，停用及软删除目标可展示 | 匿名可访问 |
 | PATCH `/api/users/edit` | `{bio}`，返回更新后的本人资料；仅支持文字资料 | 已登录，需CSRF |
 | PUT `/api/users/me/avatar` | `{mediaId}`，返回更新后的本人资料 | 已登录，需CSRF |
 | DELETE `/api/users/me/avatar` | 无请求体，204 | 已登录，需CSRF |
