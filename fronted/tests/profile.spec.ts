@@ -47,7 +47,7 @@ async function openProfile(page: Page, id = profile.userId) {
 test('本人完整资料、真实文章与只读样例，编辑资料打开新标签页', async ({ page }, testInfo) => {
   await mockProfile(page);
   await openProfile(page);
-  expect((await page.locator('.profile-main > div > .profile-header').boundingBox())!.height).toBe(376);
+  expect((await page.locator('.profile-header').boundingBox())!.height).toBe(376);
   expect((await page.locator('.profile-columns').boundingBox())!.y).toBe(560);
   expect(await page.locator('.profile-article-card .article-author-row').count()).toBe(0);
   await expect(page.locator('.profile-article-card').first().getByRole('button', { name: '点赞 328' })).toBeVisible();
@@ -71,17 +71,65 @@ test('访客关注仅提示未开放，滚动后资料简要吸顶，回顶恢�
   const first = page.locator('.profile-article-card').first();
   const y = (await first.boundingBox())!.y;
   await scroll.evaluate((element) => { element.dispatchEvent(new Event('wheel')); element.scrollTop = 700; });
-  await expect(page.locator('.profile-compact-positioner')).toBeVisible();
-  expect((await page.locator('.profile-header-compact').boundingBox())!.height).toBe(88);
-  expect((await page.locator('.profile-header-compact').boundingBox())!.y).toBe(167);
+  await expect(page.locator('.profile-scroll[data-profile-collapsed="true"]')).toBeVisible();
+  expect((await page.locator('.profile-header').boundingBox())!.height).toBe(88);
+  expect((await page.locator('.profile-header').boundingBox())!.y).toBe(167);
   expect((await first.boundingBox())!.y).toBe(y - 700);
   expect((await page.locator('.profile-info').boundingBox())!.y).toBe(-140);
   await expect(page.getByRole('button', { name: '+ 关注', exact: true })).toHaveCount(1);
   expect(mock.reads()).toBe(1);
   await page.screenshot({ path: testInfo.outputPath('profile-compact.png') });
   await scroll.evaluate((element) => { element.scrollTop = 0; });
-  await expect(page.locator('.profile-compact-positioner')).toBeHidden();
+  await expect(page.locator('.profile-scroll[data-profile-collapsed="true"]')).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Flame', exact: true })).toBeVisible();
+});
+
+test('资料卡连续收缩，头像沿用同一节点，正反滚动保持上下间距与不透明底色', async ({ page }, testInfo) => {
+  const mock = await mockProfile(page);
+  await openProfile(page);
+  const scroll = page.locator('.profile-scroll');
+  const card = page.locator('.profile-header');
+  const avatar = page.locator('.profile-identity-row > .avatar');
+  const originalAvatar = await avatar.elementHandle();
+  const edit = page.getByRole('link', { name: '编辑资料', exact: true });
+  await edit.evaluate(element => element.focus({ preventScroll: true }));
+  const measures: { scroll: number; avatar: number; height: number }[] = [];
+  for (const selector of ['.profile-header', '.profile-info', '.profile-articles', '.profile-list-heading']) {
+    await expect(page.locator(selector)).toHaveCSS('background-color', 'rgb(33, 33, 33)');
+  }
+  await expect(page.locator('.profile-article-card').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  for (const top of [0, 96, 176, 200, 222, 244, 266, 288, 400, 700, 266, 222, 96, 0]) {
+    await scroll.evaluate((element, value) => { element.dispatchEvent(new Event('wheel')); element.scrollTop = value; }, top);
+    await expect.poll(async () => (await card.boundingBox())!.height).toBe(Math.max(88, 376 - top));
+    const bounds = (await card.boundingBox())!;
+    const header = (await page.locator('.home-header').boundingBox())!;
+    const heading = (await page.locator('.profile-list-heading').boundingBox())!;
+    expect(bounds.y - header.y - header.height).toBeCloseTo(43, 1);
+    expect(heading.y - bounds.y - bounds.height).toBeCloseTo(17, 1);
+    expect(await avatar.evaluate((element, original) => element === original, originalAvatar)).toBe(true);
+    expect(await page.locator('.profile-header').count()).toBe(1);
+    expect(await page.getByRole('link', { name: '编辑资料', exact: true }).count()).toBe(1);
+    await expect(edit).toBeFocused();
+    measures.push({ scroll: top, avatar: (await avatar.boundingBox())!.width, height: bounds.height });
+    if ([0, 244, 288].includes(top)) await page.screenshot({ path: testInfo.outputPath(`profile-morph-${top}.png`) });
+  }
+  const shrinking = measures.filter((_, index) => index >= 3 && index <= 7).map(item => item.avatar);
+  expect(shrinking[0]).toBe(96);
+  expect(shrinking.at(-1)).toBe(48);
+  expect(shrinking.every((size, index) => index === 0 || size < shrinking[index - 1])).toBe(true);
+  expect(measures.find(item => item.scroll === 222)?.avatar).toBeCloseTo(measures.at(-3)!.avatar, 2);
+  expect(measures.at(-1)!.avatar).toBe(96);
+  expect(mock.reads()).toBe(1);
+});
+
+test('空列表不强行增加滚动距离，卡片和发布栏始终在同一个滚动口', async ({ page }) => {
+  await mockProfile(page, true, 0);
+  await page.goto(`/users/${profile.userId}`);
+  await expect(page.getByRole('link', { name: '去发布' })).toBeVisible();
+  const scroll = page.locator('.profile-scroll');
+  expect(await scroll.evaluate(element => element.scrollHeight)).toBeLessThanOrEqual(1024);
+  await expect(page.locator('.profile-header')).toHaveCSS('height', '376px');
+  await expect(page.locator('.profile-scroll')).toHaveAttribute('data-profile-collapsed', 'false');
 });
 
 for (const viewport of [{ width: 1440, height: 768 }, { width: 1920, height: 1080 }, { width: 390, height: 844 }]) {
@@ -91,13 +139,13 @@ for (const viewport of [{ width: 1440, height: 768 }, { width: 1920, height: 108
     await openProfile(page);
     const scroll = page.locator('.profile-scroll');
     await scroll.evaluate((element) => { element.dispatchEvent(new Event('wheel')); element.scrollTop = 800; });
-    await expect(page.locator('.profile-compact-positioner')).toBeVisible();
+    await expect(page.locator('.profile-scroll[data-profile-collapsed="true"]')).toBeVisible();
     expect((await scroll.boundingBox())!.height).toBe(viewport.height);
     expect(await page.locator('.profile-articles').evaluate((element) => element.scrollTop)).toBe(0);
     if (viewport.width < 1440) {
       await scroll.evaluate((element) => { element.scrollLeft = 800; });
       expect(await scroll.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
-      expect((await page.locator('.profile-header-compact').boundingBox())!.x).toBe((await page.locator('.profile-main').boundingBox())!.x);
+      expect((await page.locator('.profile-header').boundingBox())!.x).toBe((await page.locator('.profile-main').boundingBox())!.x);
     }
     expect(await page.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual({ x: 0, y: 0 });
     await page.screenshot({ path: testInfo.outputPath('profile-viewport.png') });
@@ -115,7 +163,7 @@ test('菜单主页新标签打开，作者入口当前页导航，文章后退�
   await personal.close();
   const scroll = page.locator('.profile-scroll');
   await scroll.evaluate((element) => { element.dispatchEvent(new Event('wheel')); element.scrollTop = 1700; });
-  await expect(page.locator('.profile-compact-positioner')).toBeVisible();
+  await expect(page.locator('.profile-scroll[data-profile-collapsed="true"]')).toBeVisible();
   // 先将目标文章放入实际可见区域，点击之后采集离页位置，避免测试自身自动滚入影响断言。
   const link = page.getByRole('link', { name: '文章 5', exact: true });
   await link.scrollIntoViewIfNeeded();
@@ -128,7 +176,7 @@ test('菜单主页新标签打开，作者入口当前页导航，文章后退�
   await expect(page.locator('.profile-article-card')).toHaveCount(12);
   await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeCloseTo(position, 0);
   expect(mock.reads()).toBe(reads);
-  await expect(page.locator('.profile-compact-positioner')).toBeVisible();
+  await expect(page.locator('.profile-scroll[data-profile-collapsed="true"]')).toBeVisible();
   await page.goto('/articles/5');
   await page.getByRole('link', { name: '查看作者 Flame' }).click();
   await expect(page).toHaveURL(new RegExp(`/users/${profile.userId}$`));

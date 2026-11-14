@@ -24,10 +24,9 @@ function ProfileSession({ userId }: { userId: string | undefined }) {
   const navigate = useNavigate();
   const scroll = useRef<HTMLDivElement>(null);
   const top = useRef<HTMLDivElement>(null);
-  const full = useRef<HTMLDivElement>(null);
   const details = useProfileDetails(userId);
   const list = useProfileArticles(userId ?? '', details.status === 'ready', `profile:${userId}:${location.key}`);
-  const { compact, getTopInset } = useProfileViewport(scroll, top, full, details.status === 'ready');
+  const { getTopInset } = useProfileViewport(scroll, top, details.status === 'ready');
   // 公开列表按作者和历史项恢复；登录会整页导航，不接受来自旧文档的列表快照。
   useScrollMemory(scroll, `profile-scroll:${userId}:${location.key}`, details.status === 'ready' && list.status !== 'initialLoading',
     undefined, undefined, list.revision, { getTopInset });
@@ -43,11 +42,11 @@ function ProfileSession({ userId }: { userId: string | undefined }) {
     <div className="profile-scroll" ref={scroll} role="region" tabIndex={0} aria-label="个人主页滚动区域">
       <div className="profile-canvas">
         <div className="profile-top-frame" ref={top}><Header onLogin={login} />
-          {props && <div className="profile-compact-positioner" hidden={!compact}><ProfileHeader {...props} compact /></div>}
+          {props && <div className="profile-header-positioner"><ProfileHeader {...props} /></div>}
         </div>
         <main className="profile-main">
           {props ? <>
-            <div ref={full} inert={compact} aria-hidden={compact}><ProfileHeader {...props} /></div>
+            <div className="profile-header-placeholder" aria-hidden="true" />
             <div className="profile-columns"><ProfileArticleList list={list} scroll={scroll} self={self} canPublish={!blocked} onLogin={login} />
               <ProfileInfoCard profile={props.profile} /></div>
           </> : <section className="profile-read-state glass-panel" aria-busy={details.status === 'loading'}>

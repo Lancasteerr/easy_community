@@ -13,7 +13,7 @@ export function ProfileStats() {
   </dl>;
 }
 
-/** 完整与简要卡片共用操作，身份未确认时不误显示访客关注或本人编辑入口。 */
+/** 资料卡只保留一个操作入口，身份未确认时不误显示访客关注或本人编辑入口。 */
 function ProfileAction({ self, known, blocked }: { self: boolean; known: boolean; blocked: boolean }) {
   const unavailable = useUnavailable();
   if (!known) return null;
@@ -22,18 +22,17 @@ function ProfileAction({ self, known, blocked }: { self: boolean; known: boolean
     : <a className="profile-action" href="/settings/profile" target="_blank" rel="noopener noreferrer">编辑资料</a>;
 }
 
-/** 简要卡片保留同一份资料，隐藏态由外层 hidden 管理，避免重复焦点。 */
-export function ProfileHeader({ profile, self, known, blocked, compact = false }: {
-  profile: PublicUserProfile; self: boolean; known: boolean; blocked: boolean; compact?: boolean;
+/** 同一张卡片由CSS变量连续收缩，头像、名字与操作保持原有DOM和焦点。 */
+export function ProfileHeader({ profile, self, known, blocked }: {
+  profile: PublicUserProfile; self: boolean; known: boolean; blocked: boolean;
 }) {
-  return <div className={`profile-header${compact ? ' profile-header-compact' : ''}`}>
-    {!compact && <div className="profile-cover" role="img" aria-label="个人主页封面" />}
+  return <div className="profile-header">
+    <div className="profile-cover" role="img" aria-label="个人主页封面" />
     <div className="profile-identity-row">
-      <Avatar src={profile.avatarUrl} size={compact ? 48 : 96} />
+      <Avatar src={profile.avatarUrl} size={96} />
       <div className="profile-identity">
-        {compact ? <p className="profile-username" title={profile.username}>{profile.username}</p>
-          : <h1 className="profile-username" title={profile.username}>{profile.username}</h1>}
-        {!compact && <p className="profile-bio">{profile.bio || '—'}</p>}
+        <h1 className="profile-username" title={profile.username}>{profile.username}</h1>
+        <p className="profile-bio">{profile.bio || '—'}</p>
         <ProfileStats />
       </div>
       <ProfileAction self={self} known={known} blocked={blocked} />

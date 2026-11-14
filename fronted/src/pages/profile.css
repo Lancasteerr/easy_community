@@ -1,39 +1,32 @@
 /* 整页共用一个滚动口，窄屏横滚也由该容器承接；资料卡与文章不分割滚动。 */
 .profile-page { --profile-background: #171719 url('../assets/home-background.png') center / cover no-repeat fixed; position: relative; isolation: isolate; display: flex; height: 100dvh; overflow: hidden; }
 .profile-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: var(--profile-background); }
-.profile-scroll { flex: 1; min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #55555c transparent; }
+.profile-scroll { --profile-card-height: 376px; --profile-list-top: 560px; flex: 1; min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #55555c transparent; }
 .profile-canvas { min-width: 1440px; padding-bottom: 22px; }
 .profile-top-frame { position: sticky; top: 0; z-index: 10; height: 167px; padding-top: 34px; background: var(--profile-background); }
 .profile-main { width: 1227px; margin: 0 auto; }
 .profile-columns { display: grid; grid-template-columns: 840px 370px; align-items: start; gap: 17px; margin-top: 17px; }
-.profile-header { height: 376px; overflow: hidden; border-radius: 12px; background: rgb(60 60 67 / 30%); }
+/* 固定层始终贴在导航下43px；保留376px占位，收缩不反馈到文档高度。 */
+.profile-header-placeholder { height: 376px; }
+.profile-header-positioner { position: absolute; top: 100%; left: 0; right: 0; height: calc(var(--profile-card-height) + 17px); background: var(--profile-background); }
+.profile-header { position: relative; width: 1227px; height: var(--profile-card-height); margin: 0 auto; overflow: hidden; border-radius: 12px; }
+/* 卡片使用不透明底色，文章条目继承底色，不再叠加多层半透明玻璃。 */
+.profile-page .profile-header, .profile-page .profile-info, .profile-page .profile-articles, .profile-page .profile-read-state { background: #212121; }
 /* 封面使用工具直接导出的两倍 PNG，叠加原稿中独立的对比渐变图层。 */
-.profile-cover { height: 211px; border-radius: 12px; background-color: #292c30; background-image: linear-gradient(180deg, rgb(0 0 0 / 2%), rgb(0 0 0 / 18%) 58%, rgb(0 0 0 / 82%)), url('../assets/profile-cover.png'); background-position: center; background-size: cover; background-repeat: no-repeat; }
-.profile-identity-row { position: relative; display: flex; align-items: flex-start; gap: 24px; height: 165px; padding: 11px 30px 30px 32px; }
-.profile-identity-row > .avatar { position: relative; top: -59px; }
-.profile-identity { min-width: 0; width: 700px; }
-.profile-username { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 24px; line-height: 32px; font-weight: 700; }
-.profile-bio { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 44px; margin: 8px 0; max-width: 660px; font-size: 14px; line-height: 22px; color: #757575; overflow-wrap: anywhere; }
-.profile-stats { display: flex; gap: 20px; margin: 0; min-height: 32px; }
+.profile-cover { position: absolute; inset: 0 0 auto; height: 211px; border-radius: 12px; background-color: #292c30; background-image: linear-gradient(180deg, rgb(0 0 0 / 2%), rgb(0 0 0 / 18%) 58%, rgb(0 0 0 / 82%)), url('../assets/profile-cover.png'); background-position: center; background-size: cover; background-repeat: no-repeat; transform: translateY(var(--profile-cover-y, 0px)); visibility: var(--profile-cover-visibility, visible); }
+.profile-identity-row, .profile-identity { position: absolute; inset: 0; min-width: 0; }
+.profile-identity-row > .avatar { position: absolute; z-index: 1; left: 32px; top: 163px; transform: translateY(var(--profile-avatar-y, 0px)) scale(var(--profile-avatar-scale, 1)); transform-origin: left top; }
+.profile-username { position: absolute; left: 152px; top: 222px; width: 700px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 24px; line-height: 32px; font-weight: 700; transform: translate(var(--profile-name-x, 0px), var(--profile-name-y, 0px)) scale(var(--profile-name-scale, 1)); transform-origin: left top; }
+.profile-bio { position: absolute; left: 152px; top: 262px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; width: 660px; min-height: 44px; margin: 0; font-size: 14px; line-height: 22px; color: #757575; overflow-wrap: anywhere; transform: translateY(var(--profile-bio-y, 0px)); opacity: var(--profile-bio-opacity, 1); visibility: var(--profile-bio-visibility, visible); }
+.profile-stats { position: absolute; left: 152px; top: 314px; display: flex; gap: 20px; margin: 0; min-height: 32px; transform: translate(var(--profile-name-x, 0px), var(--profile-stats-y, 0px)) scale(var(--profile-stats-scale, 1)); transform-origin: left top; }
 .profile-stats > div { display: flex; align-items: center; gap: 8px; min-width: 92px; }
 .profile-stats dd { margin: 0; font-size: 16px; line-height: 22px; font-weight: 600; }
 .profile-stats dt { font-size: 14px; color: #757575; line-height: 20px; }
-.profile-action { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 120px; height: 40px; margin: 15px 0 0 auto; padding: 0 12px; border: 0; border-radius: 8px; color: #9bceff; background: #1d1d21; font-size: 14px; text-decoration: none; }
+.profile-action { position: absolute; z-index: 2; top: 237px; right: 30px; display: inline-flex; align-items: center; justify-content: center; width: 120px; height: 40px; padding: 0 12px; border: 0; border-radius: 8px; color: #9bceff; background: #1d1d21; font-size: 14px; text-decoration: none; transform: translateY(var(--profile-action-y, 0px)); }
 .profile-action:hover:not(:disabled) { background: #33333b; }
 .profile-follow, .profile-primary { color: #15212c; background: #9bceff; }
 .profile-follow:hover:not(:disabled), .profile-primary:hover:not(:disabled) { background: #b7dcff; }
 .profile-action:disabled, .profile-primary:disabled { opacity: .6; cursor: not-allowed; }
-/* 简要卡覆盖在吸顶栏下方，完整卡原有占位不变，切换时列表坐标不跳动。 */
-.profile-compact-positioner { position: absolute; top: 100%; left: 0; right: 0; height: 88px; background: var(--profile-background); }
-.profile-compact-positioner[hidden] { display: none; }
-.profile-header-compact { width: 1227px; height: 88px; margin: 0 auto; background: #252528; }
-.profile-header-compact .profile-identity-row { height: 88px; align-items: center; padding: 12px 30px 12px 32px; gap: 16px; }
-.profile-header-compact .profile-identity-row > .avatar { top: 0; }
-.profile-header-compact .profile-username { font-size: 18px; line-height: 26px; }
-.profile-header-compact .profile-stats { min-height: 24px; }
-.profile-header-compact .profile-stats dd { font-size: 14px; }
-.profile-header-compact .profile-stats dt { font-size: 12px; }
-.profile-header-compact .profile-action { margin-top: 0; }
 .profile-info { padding: 22px 24px; border: 1px solid rgb(255 255 255 / 10%); }
 .profile-info > p { min-height: 40px; margin: 16px 0; color: #757575; font-size: 14px; line-height: 20px; overflow-wrap: anywhere; }
 .profile-info dl { margin: 0; padding-top: 16px; border-top: 1px solid rgb(255 255 255 / 8%); }
@@ -41,13 +34,15 @@
 .profile-info dl > div + div { margin-top: 16px; }
 .profile-info dt { flex-shrink: 0; color: #757575; }
 .profile-info dd { margin: 0; overflow-wrap: anywhere; }
-.profile-articles { min-width: 0; overflow: hidden; border: 1px solid rgb(255 255 255 / 10%); }
-.profile-list-heading { display: flex; align-items: center; justify-content: space-between; height: 65px; padding: 0 24px; border-bottom: 1px solid rgb(255 255 255 / 8%); }
+/* clip保持卡片圆角但不创建第二个滚动容器，让发布栏相对整页吸顶。 */
+.profile-articles { min-width: 0; overflow: clip; border: 1px solid rgb(255 255 255 / 10%); }
+/* 回抵列表顶部1px边框，使标题在自然位置与吸顶位置都保留17px可见间隔。 */
+.profile-list-heading { position: sticky; top: var(--profile-list-top); z-index: 5; display: flex; align-items: center; justify-content: space-between; height: 65px; margin-top: -1px; padding: 0 24px; border-radius: 11px 11px 0 0; border-bottom: 1px solid rgb(255 255 255 / 8%); background: #212121; box-shadow: inset 0 1px rgb(255 255 255 / 10%); }
 .profile-list-heading h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 18px; font-weight: 500; }
 .profile-list-heading h2 > span { position: relative; }
 .profile-list-heading h2 > span::after { position: absolute; content: ''; left: 0; right: 0; bottom: -6px; height: 2px; background: #9bceff; border-radius: 2px; }
 .profile-list-heading small, .profile-list-heading > span { color: #757575; font-size: 14px; font-weight: 400; }
-.profile-article-card { background: rgb(60 60 67 / 30%); }
+.profile-article-card { background: transparent; }
 .profile-article-card > .article-meta { line-height: 18px; }
 .profile-article-card .article-copy h2 { min-height: 28px; line-height: 28px; }
 .profile-article-card .article-cover { aspect-ratio: 788 / 356; border-radius: 8px; }
