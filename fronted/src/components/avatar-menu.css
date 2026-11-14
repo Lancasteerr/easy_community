@@ -1,0 +1,16 @@
+/* 浮层以已定位的 Banner 为包含块；桥接头像下方 25px 留白及 8px 菜单间距。 */
+.avatar-menu-control { display: flex; }
+.avatar-menu-positioner { position: absolute; z-index: 40; top: calc(100% - 25px); right: 0; width: 240px; padding-top: 33px; }
+.avatar-menu { width: 240px; padding: 7px; border: 1px solid #45454d; border-radius: 12px; color: #eeeef2; background: #27272c; box-shadow: 0 8px 24px rgb(0 0 0 / 24%); animation: avatar-menu-appear 120ms ease-out; }
+.avatar-menu-item { display: flex; align-items: center; gap: 12px; width: 224px; height: 44px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: inherit; font-size: 14px; line-height: 22px; text-decoration: none; text-align: left; }
+.avatar-menu-item:hover, .avatar-menu-item:focus-visible { color: #98ccff; background: rgb(152 204 255 / 15%); }
+.avatar-menu-item:focus-visible { outline: 1px solid #98ccff; outline-offset: -1px; }
+.avatar-menu-item:disabled { opacity: .65; }
+.avatar-menu-divider { height: 1px; margin: 8px 0; background: rgb(160 160 170 / 16%); }
+.avatar-entry[aria-expanded='true'] { outline: 1px solid #98ccff; outline-offset: 3px; }
+/* 游客入口占位固定，使用站内浅蓝主按钮风格。 */
+.header-login { width: 64px; height: 40px; padding: 0; border: 0; border-radius: 8px; background: #98ccff; color: #171719; font-size: 14px; }
+.header-login:hover { background: #b2d9ff; }
+.header-login:active { background: #81b9ef; }
+@keyframes avatar-menu-appear { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .avatar-menu { animation: none; } }

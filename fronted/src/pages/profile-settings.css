@@ -1,0 +1,35 @@
+/* 页面保留1440px桌面画布，矮屏与窄屏都使用文档本身的滚动口。 */
+.profile-settings-page { position: relative; isolation: isolate; min-width: 1440px; min-height: 100dvh; padding: 34px 0 22px; }
+.profile-settings-page::before { content: ''; position: fixed; inset: 0; z-index: -1; background: #171719 url('../assets/home-background.png') center / cover no-repeat; }
+.profile-settings-columns { display: grid; grid-template-columns: 225px 985px; gap: 17px; width: 1227px; min-height: max(835px, calc(100dvh - 189px)); margin: 43px auto 0; }
+.profile-settings-sidebar { padding: 25px 16px; }
+.profile-settings-heading { position: relative; display: flex; align-items: baseline; gap: 2px; height: 22px; margin: 0; font-size: 18px; line-height: 22px; font-weight: 700; }
+.profile-settings-heading span { color: #757575; font-size: 14px; line-height: 17px; font-weight: 400; }
+.profile-settings-heading::after { content: ''; position: absolute; top: 24px; left: 0; width: 104px; height: 2px; border-radius: 1px; background: #98ccff; }
+.profile-settings-sidebar nav { margin-top: 25px; }
+.profile-settings-nav { position: relative; display: flex; align-items: center; gap: 3px; width: 195px; height: 48px; padding: 0 13px; border-radius: 10px; background: rgb(152 204 255 / 15%); color: #98ccff; font-size: 14px; line-height: 17px; font-weight: 700; text-decoration: none; }
+.profile-settings-nav::before { content: ''; position: absolute; top: 14px; left: 0; width: 2px; height: 20px; border-radius: 1px; background: #98ccff; }
+.profile-settings-panel { min-width: 0; padding: 32px; }
+.profile-settings-panel h1 { margin: 0; padding-bottom: 20px; border-bottom: 1px solid rgb(160 160 170 / 16%); color: #f0f0f3; font-size: 20px; line-height: 28px; font-weight: 700; }
+
+/* 表单尺寸独立于头像地址和简介长度，固定计数行避免超限时发生位移。 */
+.profile-settings-content { display: flex; flex-direction: column; align-items: center; margin-top: 32px; }
+.profile-avatar-button { width: 120px; height: 40px; margin-top: 16px; padding: 0; border: 1px solid #45454d; border-radius: 8px; color: #e8e8ed; background: #27272c; font-size: 14px; line-height: 22px; font-weight: 500; }
+.profile-bio-form { display: flex; flex-direction: column; width: 640px; margin-top: 40px; }
+.profile-bio-form label { color: #eeeef2; font-size: 14px; line-height: 22px; }
+.profile-bio-input { width: 100%; height: 48px; margin-top: 8px; padding: 11px 16px; border: 1px solid #45454d; border-radius: 8px; color: #eeeef2; background: #2c2c31; font-size: 16px; line-height: 24px; }
+.profile-bio-input::placeholder { color: #a0a0aa; opacity: 1; }
+.profile-bio-input:focus-visible { outline: 1px solid #98ccff; outline-offset: 2px; }
+.profile-bio-count { height: 20px; margin-top: 8px; color: #a0a0aa; font-size: 12px; line-height: 20px; text-align: right; }
+.profile-bio-input.profile-bio-invalid { border-color: #d98188; }
+.profile-bio-count.profile-bio-invalid { color: #d98188; }
+.profile-save-button { align-self: center; width: 128px; height: 44px; margin-top: 32px; padding: 0; border: 0; border-radius: 8px; color: #18212a; background: #99ccff; font-size: 14px; line-height: 22px; font-weight: 500; }
+.profile-avatar-button:hover:not(:disabled) { background: #303036; }
+.profile-save-button:hover:not(:disabled) { background: #b1d8ff; }
+/* 禁用仅表达请求互斥或冷却，不增加加载文案、进度或确认步骤。 */
+.profile-settings-panel button:disabled { cursor: not-allowed; }
+.profile-settings-panel button:disabled:not([aria-busy='true']) { opacity: .65; }
+.profile-bio-input:disabled { cursor: wait; }
+.profile-settings-read-state { margin: 32px 0 0; color: #a0a0aa; font-size: 14px; line-height: 22px; text-align: center; }
+.profile-settings-read-state p { margin: 0 0 12px; }
+.profile-settings-read-state button { padding: 6px 14px; border: 1px solid #45454d; border-radius: 8px; color: #98ccff; background: #27272c; font-size: 14px; }

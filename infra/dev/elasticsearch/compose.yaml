@@ -1,0 +1,43 @@
+# 独立的本地开发 ES 服务，与项目其他容器分开管理。
+name: easy-community-es
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.6
+    container_name: easy-community-es
+    restart: unless-stopped
+    # 限制总内存，并为堆外内存和文件缓存预留空间。
+    mem_limit: 2g
+    environment:
+      node.name: easy-community-es
+      cluster.name: easy-community-local
+      discovery.type: single-node
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      # 本地开发保留密码认证；仅绑定回环地址时使用 HTTP。
+      xpack.security.enabled: "true"
+      xpack.security.autoconfiguration.enabled: "false"
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      xpack.ml.enabled: "false"
+      xpack.license.self_generated.type: basic
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?请先在同目录 .env 中设置 ES 密码}
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      # 容器重建保留索引数据；不要使用 down -v 删除此卷。
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      # 单节点的副本分片可能使状态为 yellow，仍可正常提供服务。
+      test: ["CMD-SHELL", "curl --fail --silent --user elastic:$$ELASTIC_PASSWORD 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  es-data:
