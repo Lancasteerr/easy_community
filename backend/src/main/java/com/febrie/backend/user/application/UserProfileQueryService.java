@@ -24,7 +24,7 @@ public class UserProfileQueryService {
     public UserProfileView me(UserActor actor) {
         var data = requireUser(actor.userId());
         return new UserProfileView(Long.toString(data.userId()), data.username(), actor.role(),
-                data.avatarMediaId(), avatarUrl(data), data.bio());
+                data.avatarMediaId(), avatarUrl(data), data.bio(), data.createdAt());
     }
 
     public UserMetadataView user(long userId) {
@@ -33,7 +33,7 @@ public class UserProfileQueryService {
         }
         var data = requireUser(userId);
         return new UserMetadataView(Long.toString(data.userId()), data.username(), data.bio(),
-                data.avatarMediaId(), avatarUrl(data));
+                data.avatarMediaId(), avatarUrl(data), data.createdAt());
     }
 
     private UserBasicData requireUser(long userId) {

@@ -97,16 +97,21 @@ class UserProfileHttpIntegrationTests {
         assertEquals("", me.path("bio").asString());
         assertEquals("USER", me.path("role").asString());
         assertTrue(me.path("avatarUrl").isNull());
+        var createdAt = Instant.parse(me.path("createdAt").asString());
         var target = json(viewer.call("GET", target(), null, false), 200);
         assertEquals(Long.toString(ownerId), target.path("userId").asString());
-        assertEquals(5, target.size());
+        assertEquals(6, target.size());
+        assertEquals(me.path("createdAt"), target.path("createdAt"));
         assertFalse(target.has("role"));
         assertEquals("", basics.get(ownerId).orElseThrow().bio());
+        assertEquals(createdAt, basics.get(ownerId).orElseThrow().createdAt());
         verify(reader, times(1)).load(List.of(ownerId));
         verify(accounts, never()).profile(anyLong(), anyBoolean());
     }
 
     @Test void editIsStrictSessionScopedAndRequiresCsrf() throws Exception {
+        // 写响应来自锁内快照，加入时间应与读取接口保持一致。
+        var createdAt = json(owner.call("GET", "/api/users/me", null, false), 200).path("createdAt");
         assertEquals(403, owner.call("PATCH", "/api/users/edit", Map.of("bio", "x"), false).statusCode());
         for (Object body : List.of(Map.of(), Map.of("bio", 12), Map.of("bio", true), Map.of("bio", List.of()),
                 Map.of("avatarMediaId", "x"), Map.of("bio", "x", "userId", viewer.id),
@@ -115,6 +120,7 @@ class UserProfileHttpIntegrationTests {
         }
         var response = json(owner.call("PATCH", "/api/users/edit", Map.of("bio", " 😀社区 "), true), 200);
         assertEquals("😀社区", response.path("bio").asString());
+        assertEquals(createdAt, response.path("createdAt"));
         assertEquals("😀社区", json(viewer.call("GET", target(), null, false), 200).path("bio").asString());
         assertEquals("", accounts.profile(viewer.id, false).orElseThrow().bio());
         assertEquals(1, fixtures.authVersion(ownerId));
@@ -139,15 +145,18 @@ class UserProfileHttpIntegrationTests {
     }
 
     @Test void deletionKeepsBioButDetachesAvatarAndRevokesSession() throws Exception {
-        json(owner.call("PATCH", "/api/users/edit", Map.of("bio", "历史简介"), true), 200);
+        var edited = json(owner.call("PATCH", "/api/users/edit", Map.of("bio", "历史简介"), true), 200);
+        var createdAt = Instant.parse(edited.path("createdAt").asString());
         String avatar = readyAvatar();
         var set = json(owner.call("PUT", "/api/users/me/avatar", Map.of("mediaId", avatar), true), 200);
         assertEquals("历史简介", set.path("bio").asString());
         assertFalse(set.path("avatarUrl").isNull());
+        assertEquals(createdAt, Instant.parse(set.path("createdAt").asString()));
         json(viewer.call("GET", target(), null, false), 200);
         assertEquals(204, viewer.call("DELETE", "/api/admin/users/" + ownerId, null, true).statusCode());
         var deleted = json(viewer.call("GET", target(), null, false), 200);
         assertEquals("历史简介", deleted.path("bio").asString());
+        assertEquals(createdAt, Instant.parse(deleted.path("createdAt").asString()));
         assertTrue(deleted.path("avatarMediaId").isNull());
         assertTrue(deleted.path("avatarUrl").isNull());
         assertTrue(files.references(ReferenceType.USER_AVATAR, ownerId).isEmpty());

@@ -36,9 +36,11 @@ public class AccountRepository {
     /** 历史文章仍保留软删除账号的署名，不能以ACTIVE筛选代替作者存在性。 */
     public Map<Long, UserBasicData> basics(Collection<Long> ids) {
         if (ids.isEmpty()) { return Map.of(); }
-        return users.selectList(Wrappers.<UserEntity>lambdaQuery().select(UserEntity::getId, UserEntity::getUsername, UserEntity::getAvatarMediaId, UserEntity::getBio)
+        return users.selectList(Wrappers.<UserEntity>lambdaQuery().select(UserEntity::getId, UserEntity::getUsername,
+                        UserEntity::getAvatarMediaId, UserEntity::getBio, UserEntity::getCreatedAt)
                 .in(UserEntity::getId, ids)).stream().collect(Collectors.toMap(UserEntity::getId,
-                        row -> new UserBasicData(row.getId(), row.getUsername(), MediaIds.text(row.getAvatarMediaId()), row.getBio())));
+                        row -> new UserBasicData(row.getId(), row.getUsername(), MediaIds.text(row.getAvatarMediaId()),
+                                row.getBio(), row.getCreatedAt())));
     }
 
     public Optional<AccountSnapshot> lockById(long userId) {
@@ -49,10 +51,12 @@ public class AccountRepository {
     public Optional<UserProfileSnapshot> profile(long userId, boolean lock) {
         UserEntity user = lock ? users.lockProfile(userId) : users.selectOne(Wrappers.<UserEntity>lambdaQuery()
                 .select(UserEntity::getId, UserEntity::getUsername, UserEntity::getRole,
-                        UserEntity::getStatus, UserEntity::getAuthVersion, UserEntity::getAvatarMediaId, UserEntity::getBio)
+                        UserEntity::getStatus, UserEntity::getAuthVersion, UserEntity::getAvatarMediaId,
+                        UserEntity::getBio, UserEntity::getCreatedAt)
                 .eq(UserEntity::getId, userId));
         return Optional.ofNullable(user).map(row -> new UserProfileSnapshot(row.getId(), row.getUsername(),
-                row.getRole(), row.getStatus(), row.getAuthVersion(), MediaIds.text(row.getAvatarMediaId()), row.getBio()));
+                row.getRole(), row.getStatus(), row.getAuthVersion(), MediaIds.text(row.getAvatarMediaId()),
+                row.getBio(), row.getCreatedAt()));
     }
 
     /** 调用者持有用户行锁，只更新简介，避免覆盖并发提交的其他资料。 */

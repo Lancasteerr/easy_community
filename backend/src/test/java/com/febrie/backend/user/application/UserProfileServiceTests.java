@@ -6,6 +6,7 @@ import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.dto.*;
 import com.febrie.backend.user.domain.Role;
 import com.febrie.backend.user.infrastructure.persistence.AccountRepository;
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -15,6 +16,8 @@ import static org.mockito.Mockito.*;
 
 /** 锁内比较保证局部更新；响应使用写入值，不依赖可能尚未失效的展示缓存。 */
 class UserProfileServiceTests {
+    // 修改展示资料不能改变账号原始加入时间。
+    private static final Instant CREATED_AT = Instant.parse("2026-11-01T02:03:04.123456Z");
     private final AccountRepository accounts = mock(AccountRepository.class);
     private final UserCacheMaintenance cache = mock(UserCacheMaintenance.class);
     private final MediaReferenceService references = mock(MediaReferenceService.class);
@@ -31,6 +34,7 @@ class UserProfileServiceTests {
         var response = service().editBio(actor, " 新简介 ");
         assertEquals("新简介", response.bio());
         assertEquals("42", response.userId());
+        assertEquals(CREATED_AT, response.createdAt());
         verify(accounts).updateBio(42, "新简介");
         verify(accounts, never()).updateAvatar(anyLong(), any());
         verify(cache).invalidateAfterCommit(42);
@@ -40,7 +44,9 @@ class UserProfileServiceTests {
 
     @Test void unchangedBioDoesNotWriteOrInvalidate() {
         when(accounts.profile(42, true)).thenReturn(Optional.of(snapshot("ACTIVE", 3, "简介")));
-        assertEquals("简介", service().editBio(actor, " 简介 ").bio());
+        var response = service().editBio(actor, " 简介 ");
+        assertEquals("简介", response.bio());
+        assertEquals(CREATED_AT, response.createdAt());
         verify(accounts, never()).updateBio(anyLong(), anyString());
         verifyNoInteractions(cache, references);
     }
@@ -63,6 +69,6 @@ class UserProfileServiceTests {
     }
 
     private UserProfileSnapshot snapshot(String status, long version, String bio) {
-        return new UserProfileSnapshot(42, "alice", Role.USER, status, version, null, bio);
+        return new UserProfileSnapshot(42, "alice", Role.USER, status, version, null, bio, CREATED_AT);
     }
 }

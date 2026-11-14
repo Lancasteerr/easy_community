@@ -78,7 +78,7 @@ public class UserProfileService {
 
     private UserProfileView view(UserProfileSnapshot profile, String mediaId, String bio) {
         return new UserProfileView(Long.toString(profile.id()), profile.username(), profile.role(), mediaId,
-                mediaId == null ? null : urls.publicUrl(mediaId), bio);
+                mediaId == null ? null : urls.publicUrl(mediaId), bio, profile.createdAt());
     }
 
     private static void requireActive(UserActor actor, UserProfileSnapshot current) {
