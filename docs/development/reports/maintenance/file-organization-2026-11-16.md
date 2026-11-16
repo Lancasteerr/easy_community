@@ -7,7 +7,7 @@
 - 批次：`20261116-142816`。
 - 仓库外位置：`E:\codes\java\easy_community\_agent_archives\easy_community\20261116-142816`。
 - `manifest.json`：原相对路径、文件大小、SHA-256、修改时间、分组及处理理由；`files/` 保持原目录结构。
-- `snapshot-comparison.json`：四套快照与正式前端的逐文件比较；`duplicate-assets.json`：重复设计导出与正式素材的对应关系。
+- `snapshot-comparison.json` 和 `snapshot-differences.patch`：四套快照与整理前正式前端的逐文件比较及文本差异；`duplicate-assets.json`：重复设计导出与正式素材的对应关系。
 - `protected-hashes.json`：正式性能运行、性能源码与报告附件、工具会话、个人主页证据和浏览器失败产物的整理前哈希。
 - `initial-working-tree.patch`、`initial-status.txt`：原有工作区状态备份，不纳入本轮提交。
 
@@ -52,6 +52,8 @@
 | `backend/docs/public-read-cache.md` | `docs/public/guides/cache/zh-CN/public-read-cache.md`：当前公开缓存说明 |
 | `infra/test/collect-resume-like.ps1` | 移除兼容转发；命令统一到 `infra/test/performance/run.ps1 -Suite Like` |
 
+两个已移除的旧入口另存归档批次的 `retired-entrypoints/`，原路径和 SHA-256 见 `retired-entrypoints.json`，不计入上述 1139 个中间文件。原本未跟踪的简历准备计划仅更新命令和历史说明，保留未跟踪状态，原文备份为 `resume-plan-before.md`。
+
 旧过程文档正文保留编写时结论。历史路径需要更新时仅修正入口，并明确历史运行时间；不将旧验收次数解释为本轮结果。前端 README 的长篇历史记录迁入开发报告，保留设计来源、限制和旧失败记录。
 
 ## 后续存放约定
@@ -65,4 +67,17 @@
 
 ## 本轮验证
 
-待目录迁移及清理完成后记录：归档及保护哈希、引用与链接、脚本语法和模块导入、Compose 挂载、上传协议测试、前端类型检查及构建、后端测试编译。不会执行真实 COS 写入、完整压测或覆盖浏览器失败证据。
+| 检查 | 本轮结果 |
+|---|---|
+| 归档复制、二次校验与源组清理 | 11 组、1139 文件；逐文件大小、SHA-256、修改时间及文件集合核对通过，2 个联接仅移除入口 |
+| 恢复抽检 | 每组 1 个文件，共 11 个，复制恢复后哈希一致 |
+| 正式数据和失败证据 | 247 个保护文件与整理前哈希一致；包含两次正式性能运行、精选报告附件和现有浏览器失败证据 |
+| 文档链接 | 核对 259 个本地 Markdown 文件链接，无失效文件目标；新入口的章节锚点另行核对 |
+| 模板与辅助代码迁移 | 10 个纯移动文件与 Git 原文一致；COS 验证脚本只调整辅助函数导入路径 |
+| PowerShell 与 Node 入口 | 8 个 PowerShell 脚本解析通过，迁移后的两个 mjs 入口语法通过；离线测试实际导入上传辅助函数 |
+| Compose 相对挂载 | `docker compose -f infra/dev/media/compose.dev.yaml config --no-interpolate --format json` 通过，Caddy 挂载解析到新目录的现有文件；未读取真实凭证或启动容器 |
+| 上传离线协议 | `node --test infra/test/media/support/upload.test.mjs`：7 通过、0 失败、0 跳过 |
+| 前端 | `npm run build -- --logLevel warn` 通过，包含 `tsc --noEmit` 类型检查 |
+| 后端 | `mvn -q -DskipTests test-compile` 通过，只编译测试，不执行外部依赖测试 |
+
+本轮未执行真实 COS 写入、完整压测、浏览器交互回归或业务行为修复。历史详情滚动失败仍保留，不计为本轮通过。归档复核、恢复抽检和静态验证详情分别见外部 `cleanup-result.json`、`restore-check.json`、`static-verification.json`。

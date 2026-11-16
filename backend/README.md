@@ -10,7 +10,7 @@
 
 文章标签已改为 JSON 元数据，搜索使用本地目录；缺失 ID 只在主库目录版本更新时同步一次。V8/V9 迁移、v4 缓存切换及回滚约束见[标签接入与恢复](../docs/public/guides/article/zh-CN/article-tags.md)。本次不修改前端。
 
-文章与用户公开展示现使用独立的三类缓存，响应新增可空的`authorAvatarUrl`；锁范围、用户提交后失效、指标及文章v4发布步骤见[公开读取缓存说明](docs/public-read-cache.md)。前端展示适配另行实施。
+文章与用户公开展示现使用独立的三类缓存，响应新增可空的`authorAvatarUrl`；锁范围、用户提交后失效、指标及文章v4发布步骤见[公开读取缓存说明](../docs/public/guides/cache/zh-CN/public-read-cache.md)。当前前端已使用公开作者资料和头像。
 
 文件上传、MinIO/COS桶配置、头像接口和文章接入见[文件服务V2](../docs/public/guides/media/zh-CN/media-service.md)。
 升级已有本机环境文件时，必须补充示例中的全部`MEDIA_*`字段；应用只校验配置，不自动创建桶或修改权限。
@@ -108,7 +108,7 @@ Remove-Item Env:ADMIN_USERNAME,Env:ADMIN_PASSWORD
 
 ## 浏览器接入
 
-前端使用Vite的 `server.proxy`，示例见 `examples/vite.config.ts`，不剥离 `/api`。
+前端使用 [正式 Vite 配置](../fronted/vite.config.ts)中的 `server.proxy`，不剥离 `/api`；开发上传适配也由该配置加载。
 开发流程为浏览器 → Vite:5173 → 后端:8080；前端始终请求相对路径，浏览器不跨Origin访问后端。
 不要混用localhost和127.0.0.1访问前端，否则浏览器会分别保存Cookie。
 
@@ -129,7 +129,7 @@ if (login.ok) csrf = await fetch('/api/auth/csrf').then(r => r.json());
 认证后2小时绝对过期，不随访问延长；匿名会话15分钟空闲过期。不提供公开注册、刷新Token、自助找回密码或管理员重置密码。
 
 身份确认使用 `GET /api/auth/session`，成功返回 `{userId,role}`，无需CSRF且禁止缓存；该读取仍经过账号状态、认证版本、有效期和活跃会话校验，不续期。401表示游客或会话失效，数据库、会话Redis等依赖故障沿用服务错误，不能当作游客处理。
-确认身份后，可通过 `GET /api/users/{userId}` 独立读取用户名、头像、简介等公开资料；资料加载失败不代表会话失效。原 `GET /api/users/me` 保留兼容，当前前端尚未迁移，会话与资料状态的拆分将在后续完成。
+确认身份后，可通过 `GET /api/users/{userId}` 独立读取用户名、头像、简介等公开资料；资料加载失败不代表会话失效。原 `GET /api/users/me` 保留兼容；当前前端已分别通过会话接口和公开资料接口读取身份与展示资料。
 
 ## 接口
 
@@ -150,7 +150,7 @@ if (login.ok) csrf = await fetch('/api/auth/csrf').then(r => r.json());
 
 ADMIN只允许创建/删除USER和PATROLLER；role省略默认USER，不能通过该接口创建或删除ADMIN。
 
-`createdAt`取账号创建时间，表示加入日期，以UTC ISO 8601字符串返回；文字编辑和头像设置返回的本人资料同样包含该字段，修改资料不会改变加入时间。本次无需数据库迁移，用户缓存默认升级至`USER_BASIC_CACHE_VERSION=v3`；显式版本配置及切换步骤见[公开展示缓存说明](docs/public-read-cache.md)。
+`createdAt`取账号创建时间，表示加入日期，以UTC ISO 8601字符串返回；文字编辑和头像设置返回的本人资料同样包含该字段，修改资料不会改变加入时间。本次无需数据库迁移，用户缓存默认升级至`USER_BASIC_CACHE_VERSION=v3`；显式版本配置及切换步骤见[公开展示缓存说明](../docs/public/guides/cache/zh-CN/public-read-cache.md)。
 
 简介最多50个Unicode码点，文字编辑、缓存一致性和发布步骤见[用户资料接口](../docs/public/guides/user/zh-CN/user-profile.md)。账号软删除保留简介及历史署名，同时解除头像关联并清空头像；缓存更新后由前端展示默认头像，原文件按无引用媒体机制回收，不同步删除存储对象。
 PATROLLER目前没有用户管理权限，巡查权限留待内容模块。每用户单角色，不提供修改角色的HTTP接口。
@@ -210,7 +210,7 @@ Spring Data Redis 复用单例脚本，优先 EVALSHA，缓存缺失时回退 EV
 ## 生产代理与容器配置
 
 拓扑：浏览器 HTTPS → Caddy → Nginx → 后端。只公开Caddy，Nginx和后端仅在专用容器网络可达。
-`examples/Caddyfile`与`examples/nginx.conf.template`给出转发约定；根据实际容器网段填写，不直接套用示例IP。
+[Web 部署模板](../infra/deploy/web/README.md)中的 `Caddyfile` 与 `nginx.conf.template` 给出转发约定；根据实际容器网段填写，不直接套用示例IP。
 
 - Caddy丢弃客户端提供的Forwarded、X-Real-IP，覆盖X-Forwarded-For/Proto/Host。
 - Nginx只信任Caddy地址恢复真实IP，然后用 `$remote_addr` 覆盖后端收到的XFF；保留外部HTTPS协议信息。

@@ -44,4 +44,4 @@
 
 先执行新增V10迁移，再启用`USER_BASIC_CACHE_VERSION=v2`（新默认值）或全新兼容版本。不得继续显式配置v1，也不得与使用旧命名空间的实例同时接流量；用户缓存直接冷启动。文章缓存版本不变，不需重新构建文章或ES。回滚保留新增列并使用全新旧格式用户命名空间，避免复用陈旧投影。
 
-缓存协议、指标、TTL及隔离测试命令见[公开读取缓存说明](../../../../../backend/docs/public-read-cache.md)。普通单元测试执行`mvn test`；真实HTTP/MySQL/Redis测试通过仓库的`infra/test/run-search-tests.ps1`运行，包含`UserProfileHttpIntegrationTests`及既有头像、文章、认证回归测试。
+缓存协议、指标、TTL及隔离测试命令见[公开读取缓存说明](../../cache/zh-CN/public-read-cache.md)。普通单元测试执行`mvn test`；真实HTTP/MySQL/Redis测试通过仓库的`infra/test/run-search-tests.ps1`运行，包含`UserProfileHttpIntegrationTests`及既有头像、文章、认证回归测试。

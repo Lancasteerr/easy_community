@@ -1,6 +1,6 @@
 # 独立 Elasticsearch 开发服务
 
-固定版本 `9.5.6`，单节点，独立 Docker Compose 项目、网络与数据卷。此处仅部署 ES，后端尚未接入。后续选择 Java 客户端时需确认与服务端版本兼容。
+固定版本 `9.5.6`，单节点，独立 Docker Compose 项目、网络与数据卷。此处只管理 ES 开发服务；后端已接入搜索与索引同步，业务索引、开关和恢复步骤见[搜索运维说明](../../../docs/public/operations/search/zh-CN/article-search-operations.md)。
 
 - 地址：`http://127.0.0.1:9200`
 - 用户名：`elastic`

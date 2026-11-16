@@ -34,7 +34,7 @@
 }
 ```
 
-实际 fields 包含全部 Policy 和签名字段。前端逐项原样放入 FormData，最后放 file；不手动设置请求级 Content-Type，以 `credentials: omit` 上传。示例为 `backend/examples/media/upload.mjs`，可直接导入 uploadMedia 或 uploadFile。社区 API 使用同源 Cookie 和 CSRF，存储请求不发送社区 Cookie。
+实际 fields 包含全部 Policy 和签名字段。前端逐项原样放入 FormData，最后放 file；不手动设置请求级 Content-Type，以 `credentials: omit` 上传。正式前端实现见 `fronted/src/api/media.ts`；离线协议测试及 COS 验证共用 `infra/test/media/support/upload.mjs` 中的 uploadMedia/uploadFile。社区 API 使用同源 Cookie 和 CSRF，存储请求不发送社区 Cookie。
 
 仅 HTTP 200 且 JSON 明确 `success:true` 才成功，文件身份与 URL 取自授权：
 
@@ -108,33 +108,34 @@ GC 每五分钟按三个状态分别扫描最多 100 个候选。加文件行锁
 
 代理只接受固定桶路径的 POST，流式转发 multipart，限制整体请求为 11MiB，不转发社区 Cookie 或 Authorization。仅 MinIO 返回 200 且包含 ETag、请求 ID 时转换为 `success:true`，存储错误、连接中断和异常响应保持失败。代理不等待 Webhook、不查询 READY、不触发发布，也不自动重传。
 
-文章封面、正文图片和保存流程不加固定等待，公共上传函数也不加等待。开发环境偶发图片尚未发布时，预览可手动重新加载，保存失败保留输入并由用户重试。未来头像上传实现时，才在开发环境上传成功后、立即绑定头像前等待 500ms；这只错开常见时序，不证明已 READY，生产不等待。
+文章封面、正文图片和保存流程不加固定等待，公共上传函数也不加等待。开发环境偶发图片尚未发布时，预览可手动重新加载，保存失败保留输入并由用户重试。当前头像上传也不增加固定等待；即时绑定遇到尚未 READY 的 409 时按普通失败由用户重试，不能将延迟当成就绪证明。
 
 ### 历史 Caddy 上传联调示例
 
 以下保留旧方案供独立上传协议联调，使用固定 MinIO `RELEASE.2025-09-07T16-13-09Z` 和 Caddy `2.10.2-alpine`。不属于当前日常开发启动步骤；使用前检查 19000/19001/19002 端口，避免与独立容器冲突。
 
 ```powershell
-# 仅历史方案：在 backend 目录执行，上传端点需单独设为 http://127.0.0.1:19002。
+# 仅历史方案：在仓库根目录执行，上传端点需单独设为 http://127.0.0.1:19002。
 # --env-file 按 Compose 语法读取，不能直接假定 Java Properties 特殊字符具有相同含义。
-docker compose --env-file .env.dev -f examples/media/compose.dev.yaml up -d
+docker compose --env-file backend/.env.dev -f infra/dev/media/compose.dev.yaml up -d
 ```
 
 示例使用独立卷和 localhost:19000（MinIO）、19001（控制台）、19002（上传代理），不会复用原9000端口存储。浏览器由授权取得 `http://127.0.0.1:19002/<bucket>`；后端 Copy 使用19000；公开 URL 使用19000加桶名。MinIO通知宿主机8080，容器内不能用自身localhost指代后端；后端 SERVER_ADDRESS 需允许该连接。更改后端端口时同步改 compose 中通知 URL。
 
-创建专用桶，套用填好桶名与前缀的 minio-public-policy.json，仅公开 public/ 读取；temp/ 保持私有。添加仅临时前缀、Expire Days=1 的生命周期。通过 S3 管理 API应用 minio-notification.json，只订阅临时前缀的 s3:ObjectCreated:Post，不能用整个 ObjectCreated 通配事件。FilterRules.Name 必须为小写 prefix。运行期应用不创建桶、不修改桶策略或通知。
+创建专用桶，套用 `infra/dev/media/` 中填好桶名与前缀的 minio-public-policy.json，仅公开 public/ 读取；temp/ 保持私有。添加仅临时前缀、Expire Days=1 的生命周期。通过 S3 管理 API应用 minio-notification.json，只订阅临时前缀的 s3:ObjectCreated:Post，不能用整个 ObjectCreated 通配事件。FilterRules.Name 必须为小写 prefix。运行期应用不创建桶、不修改桶策略或通知。
 
 Webhook使用 `Authorization: Bearer <token>`。请求上限1 MiB、最多10条Records，共享预算并逐条记录结果；整批期限耗尽后停止剩余发布并记录数量，业务发布失败或超时仍确认接收，不依赖MinIO重投恢复。READY、DELETING、过期或不存在的记录不复制；并发重复通知可能重复复制，不承诺开发恰好一次。
 
 Caddy只透传固定桶POST与必要OPTIONS，以 MinIO HTTP200、ETag和请求ID确认接收成功并输出统一JSON。错误保留失败状态和请求ID，连接失败同样失败；不查询数据库或等待Webhook。代理不处理公开GET，也不缓存尚未发布对象的404。CORS白名单为 MEDIA_FRONTEND_ORIGIN。
 
-生产必须使用COS、HTTPS、约定密钥和真实审核策略，否则拒绝启动。桶未启用版本控制，临时源通过签入Policy的禁止覆盖字段保护。应用身份只具有所需前缀的上传、审核、复制、删除权限，匿名仅能读取公开前缀；使用 cos-cors.xml 配置实际前端来源的POST CORS。
+生产必须使用COS、HTTPS、约定密钥和真实审核策略，否则拒绝启动。桶未启用版本控制，临时源通过签入Policy的禁止覆盖字段保护。应用身份只具有所需前缀的上传、审核、复制、删除权限，匿名仅能读取公开前缀；使用 `infra/deploy/media/cos-cors.xml` 配置实际前端来源的POST CORS。
 
 ## 验证与切换
 
 ```powershell
-mvn clean verify
-node --test examples/media/upload.test.mjs
+# 从仓库根目录执行。
+mvn -f backend/pom.xml clean verify
+node --test infra/test/media/support/upload.test.mjs
 ```
 
 普通测试不连接外部依赖。V2真实集成测试只有显式 `IT_MEDIA_V2=true` 才运行，启用后所有必填配置缺失直接失败。准备新的 `easy_community_media_v2_test` 或带下划线后缀的空库，设置 IT_MEDIA_DB_URL、IT_DB_USERNAME、IT_DB_PASSWORD、IT_REDIS_*。再设置 IT_MEDIA_BUCKET（本次专属 ec-v2-it-* 桶）、IT_MINIO_ENDPOINT、IT_MINIO_UPLOAD_ENDPOINT、IT_MINIO_ACCESS_KEY、IT_MINIO_SECRET_KEY。
@@ -143,7 +144,7 @@ node --test examples/media/upload.test.mjs
 
 Windows Java25若出现 `Unable to establish loopback connection`，按本机已存在的短路径设置 `$env:JDK_JAVA_OPTIONS = "-Djdk.net.unixdomain.tmpdir=$env:JAVA_SOCKET_TMPDIR"` 后运行测试，不将此运行参数写入生产配置。
 
-可设置 IT_COS_API_URL、IT_COS_USERNAME、IT_COS_PASSWORD、IT_COS_SMALL_IMAGE（PNG）和 IT_COS_LARGE_IMAGE（恰好10MiB的JPEG），运行 `node examples/media/verify-cos.mjs`。使用专用测试账号；脚本不绑定头像，成功上传的无引用图片交给正常GC。脚本不会把本地SDK响应替身视为真实云端。
+可设置 IT_COS_API_URL、IT_COS_USERNAME、IT_COS_PASSWORD、IT_COS_SMALL_IMAGE（PNG）和 IT_COS_LARGE_IMAGE（恰好10MiB的JPEG），运行 `node infra/test/media/verify-cos.mjs`。使用专用测试账号；脚本不绑定头像，成功上传的无引用图片交给正常GC。脚本不会把本地SDK响应替身视为真实云端。
 
 真实COS验收必须在已开通Callback并设置ckey、真实审核策略和可达回调地址的环境执行：验证POST约束、防覆盖、成功JSON转发、真实审核拒绝/复核、10MiB大图、回调504到上传端203以及协作式超时丢弃语义。离线SDK响应测试或MinIO通过都不能替代生产验收。
 

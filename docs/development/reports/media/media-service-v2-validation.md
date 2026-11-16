@@ -1,5 +1,7 @@
 # 文件服务 V2 实施验收记录
 
+> 2026-11-16 仅更新验证脚本的现路径；以下测试数量和结论仍为原历史运行记录，不代表本次重测。
+
 日期：2026-10-29。本轮按协作式截止重新验收；此记录区分当前结果、历史认证基线和仍需真实COS环境验收的内容。
 
 ## 已通过
@@ -9,7 +11,7 @@
 | `mvn -f backend/pom.xml clean verify` | 成功；普通模式62项通过，22项外部集成测试按门禁跳过，零失败与错误 |
 | 真实文件集成 `MediaV2IntegrationTests` | 10项通过，零跳过、失败或错误 |
 | 真实认证回归 `BackendApplicationTests` | 首次V2实施时12项通过；本轮未重跑，认证代码未修改 |
-| `node --test backend/examples/media/upload.test.mjs` | 7项通过，包含203 CallbackFailed XML及504空正文 |
+| `node --test infra/test/media/support/upload.test.mjs` | 7项通过，包含203 CallbackFailed XML及504空正文 |
 | Caddy 2.10.2 上传代理 | 配置未改，真实文件集成本轮再次经过该代理 |
 | 真实COS验收脚本 | 本轮未执行真实云端请求 |
 
@@ -35,7 +37,7 @@
 
 本次没有真实COS凭证、已开通Callback的桶、可达生产回调与约定ckey，因此不能宣称生产验收通过。
 
-生产部署前应使用专用测试账号与 `backend/examples/media/verify-cos.mjs`，验证真实验签、回调JSON转发、POST防覆盖、回调参数不可篡改及恰好10MiB图片审核。再以真实审核拒绝和复核样本检查失败分支，验证后端504到COS上传端203 CallbackFailed，并结合日志检查期限耗尽后没有启动后续操作。后端不再承诺线程恰好在第五秒退出，COS实际等待参数需要真实环境确认。离线响应替身与MinIO通过不能替代此项。
+生产部署前应使用专用测试账号与 `infra/test/media/verify-cos.mjs`，验证真实验签、回调JSON转发、POST防覆盖、回调参数不可篡改及恰好10MiB图片审核。再以真实审核拒绝和复核样本检查失败分支，验证后端504到COS上传端203 CallbackFailed，并结合日志检查期限耗尽后没有启动后续操作。后端不再承诺线程恰好在第五秒退出，COS实际等待参数需要真实环境确认。离线响应替身与MinIO通过不能替代此项。
 
 部署需要新库以及更新后的环境配置，不对既有Flyway历史执行repair或clean。具体配置和已接受限制见[文件服务V2](../../../public/guides/media/zh-CN/media-service.md)。
 
@@ -49,7 +51,7 @@
 - 专用真实 MySQL 的 `MysqlPersistenceTests` 8 项全部通过，包含改名后的 `lockedReadyUpdateTimesOutAndKeepsRecoverableMetadata`。保留真实行锁阻塞、4 秒耗时上限、超时异常和后续连接可用校验；按实际状态核对原维护时间或 READY 元数据与回收时间，数据库时间统一到毫秒精度。
 - 专用真实 MySQL、Redis、MinIO、Caddy 的 `MediaV2IntegrationTests` 13 项全部通过，0 跳过、失败与错误。新增确定性 ISSUED/READY 公开对象回收、到期前保留、到期时删除、已绑定公开对象保留和删除后迟到更新不能复活记录的验证。阻塞通知仍确认接收，GC 使用独立未来时钟，避免手动修改过期时间与迟到 SQL 竞争。
 - 真实依赖全量 `./infra/test/run-like-tests.ps1 -Verify -Faults` 通过：220 项，207 通过、13 按门禁跳过，0 失败、0 错误；没有传入测试排除项，原超时用例改名后实际执行并通过。跳过项为媒体集成类 12 项和容量实验 1 项；媒体类单独启用后实际执行 13 项，其中参数化回收测试展开为两种状态。各轮结果分别记录，不将跳过项计为通过，也不拼成一次全量运行。
-- 受影响的流程、超时识别和删除重试单元测试通过；删除失败保留调度，重试成功后先删公开对象再删记录。`node --test backend/examples/media/upload.test.mjs` 7 项全部通过。
+- 受影响的流程、超时识别和删除重试单元测试通过；删除失败保留调度，重试成功后先删公开对象再删记录。`node --test infra/test/media/support/upload.test.mjs` 7 项全部通过。
 
 真实媒体验证使用本轮独立桶、空测试数据库、MinIO 和 Caddy 容器，不连接开发 MinIO。MySQL 与 Redis 使用现有专用测试容器，无共享业务数据清理；测试结束删除本次用户和桶内对象。临时源在断言期间保留供桶生命周期处理，不将清理测试夹具等同于发布补偿。
 

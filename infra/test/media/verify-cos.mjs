@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { uploadFile } from './upload.mjs';
+import { uploadFile } from './support/upload.mjs';
 
 /** 显式运行的生产契约验收，使用专用测试账号；不绑定头像，成功孤儿交给正常GC。 */
 const required = name => {

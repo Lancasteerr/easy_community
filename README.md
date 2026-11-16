@@ -6,7 +6,7 @@
 
 文档入口：[文档中心](docs/README.md) · [公开文档](docs/public/README.md)。
 
-前端启动、页面范围与联调记录见 [前端说明](fronted/README.md)。
+前端启动、页面范围与联调记录见 [前端说明](fronted/README.md)，开发环境、部署模板与测试入口见 [基础设施索引](infra/README.md)。
 
 功能：
 
