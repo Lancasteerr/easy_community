@@ -6,6 +6,8 @@
 
 ## 当前阅读入口
 
+- 简历四条主亮点、三轮真实性能与脚本见[最终简历稿](reviews/resume/resume-final-2026-11-16.md)、[2026-11-16实测报告](reports/performance/resume-performance-2026-11-16.md)及[统一压测文档](../../infra/test/performance/README.md)。
+
 - 当前功能说明以[公开文档](../public/README.md)为入口。
 - 个人主页当前底色与连续收缩修正见[2026-11-15 收缩验收记录](reports/frontend/profile-collapse-validation-2026-11-15.md)；初次交付结果见[个人主页验收记录](reports/frontend/public-profile-validation-2026-11-15.md)，后端核对与取舍背景保留在[实施审查稿](plans/frontend/public-profile-plan-2026-11-15.md)。
 - 文章标签 JSON 元数据、本地目录搜索与按版本校验的实施方案见[2026-11-12 后端计划](plans/article/article-tags-json-local-cache-plan.md)。
