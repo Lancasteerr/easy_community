@@ -47,7 +47,7 @@ npm run test:e2e
 
 本次创建/隐藏对应的索引事件在现有环境进入死信，保留供既有可靠同步恢复流程处理。后续应按[统一查询运维](../../../public/operations/search/zh-CN/article-search-operations.md)完成当前版本索引映射和别名迁移，处理同步与死信，再复测真实列表和页面删除闭环；不能把本次模拟接口验收计为该闭环已通过。
 
-本机诊断及真实联调结果保留在已忽略的`.figma_bridge_agent/validation/`。公开接入说明见[前端说明](../../../../fronted/README.md)。
+本机诊断及真实联调结果原位于 `.figma_bridge_agent/validation/`，2026-11-16 已随中间产物整理归档；位置、校验及恢复方法见[归档索引](../maintenance/file-organization-2026-11-16.md#归档批次与恢复)。这些内容仍为历史运行记录。公开接入说明见[前端说明](../../../../fronted/README.md)。
 
 ## 设计对照修正
 

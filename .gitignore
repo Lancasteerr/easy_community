@@ -5,3 +5,6 @@ AGENTS.md
 .env
 .env.*
 !.env.*.example
+
+# Agent 一次性诊断和中间输出不进入源码，也不占用覆盖率目录。
+/artifacts/agent/
