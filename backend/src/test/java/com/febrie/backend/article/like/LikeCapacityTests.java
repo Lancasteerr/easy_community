@@ -45,6 +45,7 @@ class LikeCapacityTests {
     private int[] ports;
     private String namespace;
     private AtomicLong oldest = new AtomicLong();
+    private volatile List<Map<String, Object>> pendingSeries = Collections.synchronizedList(new ArrayList<>());
 
     @Test void measureUniformHotColdMixedAndBacklogAcrossTwoApplications() throws Exception {
         String url = System.getenv("IT_DB_URL"), vhost = System.getenv("IT_RABBITMQ_VHOST");
@@ -68,22 +69,34 @@ class LikeCapacityTests {
             List<Map<String, Object>> measurements = new ArrayList<>();
             try (var sampler = Executors.newSingleThreadScheduledExecutor()) {
                 sampler.scheduleWithFixedDelay(this::samplePending, 0, 250, TimeUnit.MILLISECONDS);
+                // 专用性能入口可以收窄写入阶梯；未配置时保持历史实验范围不变。
+                var selected = Set.of(System.getenv().getOrDefault("IT_LIKE_LOAD_SCENARIOS", "uniform,hot,warm,cold,mixed,backlog").split(","));
+                var rates = Arrays.stream(System.getenv().getOrDefault("IT_LIKE_LOAD_RATES", "20,60,120,240").split(",")).map(Integer::parseInt).toList();
+                assertTrue(rates.stream().allMatch(rate -> rate >= 1 && rate <= 1000));
                 for (String scenario : List.of("uniform", "hot")) {
-                    for (int rate : List.of(20, 60, 120, 240)) { measurements.add(stage(scenario, rate, seconds)); }
+                    if (!selected.contains(scenario)) { continue; }
+                    for (int rate : rates) {
+                        // 各写阶梯前排空，防止上阶段积压污染本阶段的SQL完成观测。
+                        await().atMost(Duration.ofSeconds(60)).until(() -> { samplePending(); return pending.isEmpty(); });
+                        measurements.add(stage(scenario, rate, seconds));
+                    }
                 }
                 // 先完整预热访问矩阵，再分别测热读取与清缓存后的冷启动读取。
                 for(var client:clients){for(long article:articles){assertEquals(200,client.request(0,article,true).statusCode());}}
-                measurements.add(stage("warm",60,seconds));
+                if (selected.contains("warm")) { measurements.add(stage("warm",60,seconds)); }
                 // 删除的只是本次实验的展示缓存，不触碰签发器或共享Redis数据。
                 clearDisplayCache(first);
-                measurements.add(stage("cold", 60, seconds));
-                measurements.add(stage("mixed", 60, seconds));
-                for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).stop(); }
-                measurements.add(stage("backlog", 60, Math.min(5, seconds)));
-                long resumed = System.nanoTime();
-                for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).start(); }
+                if (selected.contains("cold")) { measurements.add(stage("cold", 60, seconds)); }
+                if (selected.contains("mixed")) { measurements.add(stage("mixed", 60, seconds)); }
                 await().atMost(Duration.ofSeconds(60)).until(() -> { samplePending(); return pending.isEmpty(); });
-                measurements.add(Map.of("scenario", "backlog_recovery", "milliseconds", (System.nanoTime() - resumed) / 1_000_000));
+                if (selected.contains("backlog")) {
+                    for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).stop(); }
+                    measurements.add(stage("backlog", 60, Math.min(5, seconds)));
+                    long resumed = System.nanoTime();
+                    for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).start(); }
+                    await().atMost(Duration.ofSeconds(60)).until(() -> { samplePending(); return pending.isEmpty(); });
+                    measurements.add(Map.of("scenario", "backlog_recovery", "milliseconds", (System.nanoTime() - resumed) / 1_000_000));
+                }
             }
             assertTrue(first.getBean(LikeAuditService.class).discrepancies().isEmpty(), "负载结束后关系与计数必须一致");
             var registry = first.getBean(io.micrometer.core.instrument.MeterRegistry.class);
@@ -99,7 +112,8 @@ class LikeCapacityTests {
             report.put("maxObservedPendingAgeMs", oldest.get() / 1_000_000); report.put("measurements", measurements);
             report.put("firstApplicationTimers", timers); report.put("sqlAuditConsistent", true);
             report.put("qualification", "本机短窗口容量实验，包含认证SQL；不代表生产SLA或长期极限吞吐");
-            Path output = Path.of("target", "like-capacity.json");
+            Path output = Path.of(System.getenv().getOrDefault("IT_PERF_OUTPUT", "target"), "like-capacity.json");
+            Files.createDirectories(output.getParent());
             Files.writeString(output, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(report));
             System.out.println("LIKE_CAPACITY_REPORT " + output.toAbsolutePath());
         } finally { cleanup(); }
@@ -132,6 +146,7 @@ class LikeCapacityTests {
     }
 
     private Map<String, Object> stage(String scenario, int rate, int seconds) throws Exception {
+        pendingSeries = Collections.synchronizedList(new ArrayList<>());
         ConcurrentLinkedQueue<Long> latencies = new ConcurrentLinkedQueue<>();
         AtomicInteger success = new AtomicInteger(), skipped = new AtomicInteger();
         ConcurrentMap<Integer, AtomicInteger> statuses = new ConcurrentHashMap<>();
@@ -169,8 +184,15 @@ class LikeCapacityTests {
         result.put("scenario", scenario); result.put("targetQps", rate); result.put("sampleSeconds", seconds);
         result.put("completed", values.size()); result.put("success", success.get()); result.put("skippedBusyClient", skipped.get());
         result.put("actualQps", values.size() / ((System.nanoTime() - began) / 1_000_000_000.0));
+        result.put("p50Ms", percentile(values, .50));
         result.put("p95Ms", percentile(values, .95)); result.put("p99Ms", percentile(values, .99));
         result.put("statusCounts", statuses); result.put("acceptedPending", pending.size());
+        synchronized (pendingSeries) { result.put("pendingSeries", List.copyOf(pendingSeries)); }
+        // 独立保存每个阶段的原始延迟，不只保留聚合分位数。
+        Path sampleDirectory = Path.of(System.getenv().getOrDefault("IT_PERF_OUTPUT", "target"));
+        Files.createDirectories(sampleDirectory);
+        Files.writeString(sampleDirectory.resolve("like-" + scenario + "-" + rate + ".csv"),
+                "latencyNanos\n" + String.join("\n", latencies.stream().map(Object::toString).toList()));
         var lockAfter=lockStatistics();
         result.put("sqlRowLockWaits",lockAfter.getOrDefault("Innodb_row_lock_waits",0L)-lockBefore.getOrDefault("Innodb_row_lock_waits",0L));
         result.put("sqlRowLockWaitMs",lockAfter.getOrDefault("Innodb_row_lock_time",0L)-lockBefore.getOrDefault("Innodb_row_lock_time",0L));
@@ -179,7 +201,10 @@ class LikeCapacityTests {
     }
 
     private void samplePending() {
-        if (pending.isEmpty() || jdbc == null) { return; }
+        if (jdbc == null) { return; }
+        if (pending.isEmpty()) {
+            pendingSeries.add(Map.of("at", Instant.now().toString(), "pending", 0, "oldestMs", 0)); return;
+        }
         try {
             Map<String, Long> versions = new HashMap<>();
             String marks = String.join(",", Collections.nCopies(articles.size(), "?"));
@@ -190,7 +215,12 @@ class LikeCapacityTests {
                 if (versions.getOrDefault(key.user + ":" + key.article, 0L) >= key.version) { pending.remove(key, sent); }
                 else { oldest.accumulateAndGet(now - sent, Math::max); }
             });
-        } catch (RuntimeException ignored) { /* 监控失败不能伪造已经完成，保留待确认集合。 */ }
+            long age = pending.values().stream().mapToLong(sent -> now - sent).max().orElse(0) / 1_000_000;
+            pendingSeries.add(Map.of("at", Instant.now().toString(), "pending", pending.size(), "oldestMs", age));
+        } catch (RuntimeException ignored) {
+            // 监控失败不能伪造已完成；错误样本单独标记，不用0覆盖未知状态。
+            pendingSeries.add(Map.of("at", Instant.now().toString(), "samplingError", true));
+        }
     }
 
     private static double percentile(List<Long> values, double fraction) {
