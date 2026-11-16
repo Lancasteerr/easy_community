@@ -1,0 +1,176 @@
+{
+  "recordedAt" : "2026-11-16T03:33:28.303688400Z",
+  "round" : 1,
+  "java" : "25.0.4.1",
+  "os" : "Windows 11",
+  "datasetArticles" : 256,
+  "authors" : 4,
+  "pageSize" : 20,
+  "bodyCharacters" : 4096,
+  "stages" : [ {
+    "scenario" : "cache_source",
+    "targetQps" : 80,
+    "seconds" : 60,
+    "elapsedSeconds" : 60.0018081,
+    "planned" : 4800,
+    "completed" : 4800,
+    "success" : 4800,
+    "dropped" : 0,
+    "statusCounts" : {
+      "200" : 4800
+    },
+    "actualQps" : 79.99758927264728,
+    "successfulQps" : 79.99758927264728,
+    "successRate" : 1.0,
+    "p50Ms" : 19.271,
+    "p95Ms" : 101.6339,
+    "p99Ms" : 132.3304,
+    "dispatchLagP99Ms" : 1.9243,
+    "sqlStatements" : {
+      "com.febrie.backend.article.content.infrastructure.persistence.mapper.ArticleMapper.listRows" : 4800,
+      "com.febrie.backend.article.search.infrastructure.persistence.mapper.IndexOutboxMapper.available" : 58,
+      "com.febrie.backend.article.tag.infrastructure.persistence.mapper.TagMapper.directoryVersion" : 1
+    }
+  }, {
+    "scenario" : "cache_cached",
+    "targetQps" : 80,
+    "seconds" : 60,
+    "elapsedSeconds" : 60.0419511,
+    "planned" : 4800,
+    "completed" : 4800,
+    "success" : 4800,
+    "dropped" : 0,
+    "statusCounts" : {
+      "200" : 4800
+    },
+    "actualQps" : 79.94410428144798,
+    "successfulQps" : 79.94410428144798,
+    "successRate" : 1.0,
+    "p50Ms" : 17.0793,
+    "p95Ms" : 124.0455,
+    "p99Ms" : 167.189,
+    "dispatchLagP99Ms" : 1.9978,
+    "sqlStatements" : {
+      "com.febrie.backend.article.search.infrastructure.persistence.mapper.IndexOutboxMapper.available" : 59,
+      "com.febrie.backend.article.tag.infrastructure.persistence.mapper.TagMapper.directoryVersion" : 1
+    }
+  }, {
+    "scenario" : "feed_http",
+    "targetQps" : 80,
+    "seconds" : 60,
+    "elapsedSeconds" : 60.0100502,
+    "planned" : 4800,
+    "completed" : 4800,
+    "success" : 4800,
+    "dropped" : 0,
+    "statusCounts" : {
+      "200" : 4800
+    },
+    "actualQps" : 79.98660197754675,
+    "successfulQps" : 79.98660197754675,
+    "successRate" : 1.0,
+    "p50Ms" : 15.952,
+    "p95Ms" : 75.6079,
+    "p99Ms" : 108.5814,
+    "dispatchLagP99Ms" : 1.912,
+    "sqlStatements" : {
+      "com.febrie.backend.article.like.infrastructure.persistence.mapper.LikeMapper.counts" : 3,
+      "com.febrie.backend.article.search.infrastructure.persistence.mapper.IndexOutboxMapper.available" : 59,
+      "com.febrie.backend.article.tag.infrastructure.persistence.mapper.TagMapper.directoryVersion" : 1
+    }
+  }, {
+    "scenario" : "pv_sql",
+    "targetQps" : 120,
+    "seconds" : 60,
+    "elapsedSeconds" : 60.0194608,
+    "planned" : 7200,
+    "completed" : 7200,
+    "success" : 7200,
+    "dropped" : 0,
+    "statusCounts" : {
+      "200" : 7200
+    },
+    "actualQps" : 119.96109101999797,
+    "successfulQps" : 119.96109101999797,
+    "successRate" : 1.0,
+    "p50Ms" : 34.3822,
+    "p95Ms" : 86.58,
+    "p99Ms" : 111.207,
+    "dispatchLagP99Ms" : 1.8659,
+    "finalFlushMs" : 37.5647,
+    "sqlStatementsIncludingFinalFlush" : {
+      "com.febrie.backend.article.search.infrastructure.persistence.mapper.IndexOutboxMapper.available" : 59,
+      "com.febrie.backend.article.tag.infrastructure.persistence.mapper.TagMapper.directoryVersion" : 1,
+      "com.febrie.backend.article.view.infrastructure.persistence.mapper.ArticleViewStatMapper.incrementTotal" : 7200,
+      "com.febrie.backend.article.view.infrastructure.persistence.mapper.ArticleViewStatMapper.selectPvForUpdate" : 7240,
+      "com.febrie.backend.article.view.infrastructure.persistence.mapper.ArticleViewStatMapper.selectTotal" : 7240,
+      "com.febrie.backend.article.view.infrastructure.persistence.mapper.ArticleViewStatMapper.upsertPv" : 7200
+    },
+    "persistedIncrement" : 7200,
+    "sqlCountMatchesSuccess" : true,
+    "pvWriteStatements" : 14400
+  }, {
+    "scenario" : "pv_redis",
+    "targetQps" : 120,
+    "seconds" : 60,
+    "elapsedSeconds" : 60.0206673,
+    "planned" : 7200,
+    "completed" : 7200,
+    "success" : 7200,
+    "dropped" : 0,
+    "statusCounts" : {
+      "200" : 7200
+    },
+    "actualQps" : 119.95867963300701,
+    "successfulQps" : 119.95867963300701,
+    "successRate" : 1.0,
+    "p50Ms" : 11.5088,
+    "p95Ms" : 69.319,
+    "p99Ms" : 93.0586,
+    "dispatchLagP99Ms" : 2.0049,
+    "finalFlushMs" : 146.7701,
+    "sqlStatementsIncludingFinalFlush" : {
+      "com.febrie.backend.article.search.infrastructure.persistence.mapper.IndexOutboxMapper.available" : 58,
+      "com.febrie.backend.article.tag.infrastructure.persistence.mapper.TagMapper.directoryVersion" : 1,
+      "com.febrie.backend.article.view.infrastructure.persistence.mapper.ArticleViewStatMapper.incrementTotal" : 40,
+      "com.febrie.backend.article.view.infrastructure.persistence.mapper.ArticleViewStatMapper.selectPvForUpdate" : 40,
+      "com.febrie.backend.article.view.infrastructure.persistence.mapper.ArticleViewStatMapper.selectTotal" : 40,
+      "com.febrie.backend.article.view.infrastructure.persistence.mapper.ArticleViewStatMapper.upsertPv" : 40
+    },
+    "persistedIncrement" : 7200,
+    "sqlCountMatchesSuccess" : true,
+    "pvWriteStatements" : 80
+  }, {
+    "scenario" : "index_publish_http",
+    "targetQps" : 5,
+    "seconds" : 60,
+    "elapsedSeconds" : 59.9996643,
+    "planned" : 300,
+    "completed" : 300,
+    "success" : 300,
+    "dropped" : 0,
+    "statusCounts" : {
+      "200" : 300
+    },
+    "actualQps" : 5.000027975156521,
+    "successfulQps" : 5.000027975156521,
+    "successRate" : 1.0,
+    "p50Ms" : 71.9519,
+    "p95Ms" : 255.5408,
+    "p99Ms" : 335.3947,
+    "dispatchLagP99Ms" : 2.2076,
+    "observedIndexCompletions" : 300,
+    "observationErrors" : 0,
+    "indexObservedP50Ms" : 832.0234,
+    "indexObservedP95Ms" : 1362.0689,
+    "indexObservedP99Ms" : 1472.626,
+    "observation" : "请求开始至ES实时GET读到metaVersion>=1；轮询50ms，包含观察开销，不是搜索refresh可见延迟"
+  } ],
+  "mysql" : "8.4.11",
+  "mysqlDurability" : {
+    "flushAtCommit" : 1,
+    "syncBinlog" : 1
+  },
+  "qualification" : "同机HTTP基准；缓存/PV为测试专用对照入口，feed/文章发布为实际业务入口；不代表极限容量",
+  "passed" : true
+}

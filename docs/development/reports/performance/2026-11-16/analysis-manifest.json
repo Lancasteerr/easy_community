@@ -1,0 +1,24 @@
+{
+  "createdAt": "2026-11-16T04:15:09.6934151+00:00",
+  "qualification": "两次调度补齐Core与Like各三轮；首次批处理在第三轮Core通过后因采集时间解析误判而中断，保留failed元数据，第三轮Like单独续测；不冒充一次无中断全量验证",
+  "sourceRounds": [
+    {
+      "coreSource": "artifacts\\performance\\20261116-113300-1b831540\\round-1\\core.json",
+      "round": 1,
+      "likeSource": "artifacts\\performance\\20261116-113300-1b831540\\round-1\\like-capacity.json"
+    },
+    {
+      "coreSource": "artifacts\\performance\\20261116-113300-1b831540\\round-2\\core.json",
+      "round": 2,
+      "likeSource": "artifacts\\performance\\20261116-113300-1b831540\\round-2\\like-capacity.json"
+    },
+    {
+      "coreSource": "artifacts\\performance\\20261116-113300-1b831540\\round-3\\core.json",
+      "round": 3,
+      "likeSource": "artifacts\\performance\\20261116-120704-560d41cc\\round-1\\like-capacity.json"
+    }
+  ],
+  "httpSamples": 152962,
+  "indexObservedSamples": 900,
+  "verifiedCsvFiles": 36
+}

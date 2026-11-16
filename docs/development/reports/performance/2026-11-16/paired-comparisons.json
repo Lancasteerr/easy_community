@@ -1,0 +1,44 @@
+[
+  {
+    "round": "round-1",
+    "comparison": "cache_source->cache_cached",
+    "p95ReductionPercent": -22.05130374806046,
+    "p99ReductionPercent": -26.34209524039828,
+    "writeReductionPercent": null
+  },
+  {
+    "round": "round-1",
+    "comparison": "pv_sql->pv_redis",
+    "p95ReductionPercent": 19.936474936474934,
+    "p99ReductionPercent": 16.319476291960033,
+    "writeReductionPercent": 99.44444444444444
+  },
+  {
+    "round": "round-2",
+    "comparison": "cache_source->cache_cached",
+    "p95ReductionPercent": -16.133328259959654,
+    "p99ReductionPercent": -5.256641421334973,
+    "writeReductionPercent": null
+  },
+  {
+    "round": "round-2",
+    "comparison": "pv_sql->pv_redis",
+    "p95ReductionPercent": 72.07490988873218,
+    "p99ReductionPercent": 59.18372072917696,
+    "writeReductionPercent": 99.44444444444444
+  },
+  {
+    "round": "round-3",
+    "comparison": "cache_source->cache_cached",
+    "p95ReductionPercent": 12.697425594170308,
+    "p99ReductionPercent": 8.45548244440878,
+    "writeReductionPercent": null
+  },
+  {
+    "round": "round-3",
+    "comparison": "pv_sql->pv_redis",
+    "p95ReductionPercent": 37.446580241394734,
+    "p99ReductionPercent": 0.4934745553198949,
+    "writeReductionPercent": 99.44436727323239
+  }
+]

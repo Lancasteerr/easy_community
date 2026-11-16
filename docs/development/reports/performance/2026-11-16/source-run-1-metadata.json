@@ -1,0 +1,40 @@
+{
+  "startedAt": "2026-11-16T03:33:00.2574833+00:00",
+  "status": "failed",
+  "revision": "1c65a7727a4d49052466f12675cee69464130436",
+  "workingTree": [
+    " M .gitignore",
+    " M backend/src/test/java/com/febrie/backend/article/like/LikeCapacityTests.java",
+    "?? backend/src/test/java/com/febrie/backend/performance/",
+    "?? docs/development/designs/like/",
+    "?? docs/development/plans/resume/",
+    "?? docs/development/reviews/resume/",
+    "?? infra/test/collect-resume-like.ps1",
+    "?? infra/test/performance/"
+  ],
+  "seconds": 60,
+  "rounds": 3,
+  "suite": "All",
+  "likeRates": "60,120",
+  "os": "Microsoft Windows 10.0.22631",
+  "logicalProcessors": 28,
+  "docker": "Engine=29.2.1 CPUs=28 Memory=8203149312",
+  "applicationLimit": "每个测试JVM Xmx768m；未施加操作系统CPU上限；客户端与应用同机",
+  "results": [
+    {
+      "status": "measured",
+      "round": 1
+    },
+    {
+      "status": "measured",
+      "round": 2
+    }
+  ],
+  "containers": [
+    "/easy-community-resume-perf-elasticsearch-1 docker.elastic.co/elasticsearch/elasticsearch:9.5.6 CPU=2000000000 Memory=1610612736 Mounts=[{\"Destination\":\"/usr/share/elasticsearch/data\",\"Driver\":\"local\",\"Mode\":\"rw\",\"Name\":\"easy-community-resume-perf_es-data\",\"Propagation\":\"\",\"RW\":true,\"Source\":\"/var/lib/docker/volumes/easy-community-resume-perf_es-data/_data\",\"Type\":\"volume\"}]",
+    "/easy-community-resume-perf-mysql-1 mysql:8.4@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb CPU=2000000000 Memory=1610612736 Mounts=[{\"Destination\":\"/var/lib/mysql\",\"Driver\":\"local\",\"Mode\":\"rw\",\"Name\":\"easy-community-resume-perf_mysql-data\",\"Propagation\":\"\",\"RW\":true,\"Source\":\"/var/lib/docker/volumes/easy-community-resume-perf_mysql-data/_data\",\"Type\":\"volume\"}]",
+    "/easy-community-resume-perf-rabbitmq-1 rabbitmq:4-management@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407 CPU=2000000000 Memory=805306368 Mounts=[{\"Destination\":\"/var/lib/rabbitmq\",\"Driver\":\"local\",\"Mode\":\"rw\",\"Name\":\"easy-community-resume-perf_rabbit-data\",\"Propagation\":\"\",\"RW\":true,\"Source\":\"/var/lib/docker/volumes/easy-community-resume-perf_rabbit-data/_data\",\"Type\":\"volume\"}]",
+    "/easy-community-resume-perf-redis-1 redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2 CPU=1000000000 Memory=268435456 Mounts=[{\"Destination\":\"/data\",\"Driver\":\"local\",\"Mode\":\"rw\",\"Name\":\"easy-community-resume-perf_redis-data\",\"Propagation\":\"\",\"RW\":true,\"Source\":\"/var/lib/docker/volumes/easy-community-resume-perf_redis-data/_data\",\"Type\":\"volume\"}]"
+  ],
+  "finishedAt": "2026-11-16T04:03:38.6285283+00:00"
+}

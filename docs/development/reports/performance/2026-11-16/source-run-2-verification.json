@@ -1,0 +1,41 @@
+{
+  "verifiedAt": "2026-11-16T04:12:36.3175749+00:00",
+  "passed": true,
+  "runComplete": true,
+  "missingReports": [],
+  "checkedFiles": 5,
+  "httpSamples": 21869.0,
+  "indexObservedSamples": 0.0,
+  "checks": [
+    {
+      "kind": "http",
+      "file": "round-1\\like-uniform-60.csv",
+      "samples": 3601,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\like-uniform-120.csv",
+      "samples": 7166,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\like-hot-60.csv",
+      "samples": 3601,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\like-hot-120.csv",
+      "samples": 7201,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\like-backlog-60.csv",
+      "samples": 300,
+      "percentilesMatch": true
+    }
+  ]
+}

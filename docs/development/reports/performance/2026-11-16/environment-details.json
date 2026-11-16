@@ -1,0 +1,22 @@
+{
+  "recordedAt": "2026-11-16T03:47:23.4065395+00:00",
+  "processor": "Intel(R) Core(TM) i7-14700HX",
+  "physicalMemoryBytes": 16944848896,
+  "images": [
+    "sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb [\"mysql@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb\"]",
+    "sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2 [\"redis@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2\"]",
+    "sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407 [\"rabbitmq@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407\"]",
+    "sha256:79b4f1de4c15e6eca824723086a51e5934406d614d410cc11be77748cafac537 [\"docker.elastic.co/elasticsearch/elasticsearch@sha256:79b4f1de4c15e6eca824723086a51e5934406d614d410cc11be77748cafac537\"]"
+  ],
+  "containers": [
+    "easy-community-resume-perf-redis-1 redis:7.4-alpine",
+    "easy-community-resume-perf-rabbitmq-1 rabbitmq:4-management",
+    "easy-community-resume-perf-mysql-1 mysql:8.4",
+    "easy-community-resume-perf-elasticsearch-1 docker.elastic.co/elasticsearch/elasticsearch:9.5.6",
+    "easy-community-es docker.elastic.co/elasticsearch/elasticsearch:9.5.6",
+    "rabbitmq af6f50d38098",
+    "minio quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
+    "redis redis:7"
+  ],
+  "qualification": "实验期间单次环境快照，不是全程资源峰值监测"
+}

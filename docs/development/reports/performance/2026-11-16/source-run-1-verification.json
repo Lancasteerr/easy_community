@@ -1,0 +1,199 @@
+{
+  "verifiedAt": "2026-11-16T04:07:02.9475142+00:00",
+  "passed": true,
+  "runComplete": false,
+  "missingReports": [
+    "round-3/like-capacity.json"
+  ],
+  "checkedFiles": 31,
+  "httpSamples": 131093.0,
+  "indexObservedSamples": 900.0,
+  "checks": [
+    {
+      "kind": "http",
+      "file": "round-1\\cache_source.csv",
+      "samples": 4800,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\cache_cached.csv",
+      "samples": 4800,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\feed_http.csv",
+      "samples": 4800,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\pv_sql.csv",
+      "samples": 7200,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\pv_redis.csv",
+      "samples": 7200,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\index_publish_http.csv",
+      "samples": 300,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "index_observed",
+      "file": "round-1\\index-observed.csv",
+      "samples": 300,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\like-uniform-60.csv",
+      "samples": 3601,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\like-uniform-120.csv",
+      "samples": 7191,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\like-hot-60.csv",
+      "samples": 3601,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\like-hot-120.csv",
+      "samples": 7200,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-1\\like-backlog-60.csv",
+      "samples": 300,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\cache_cached.csv",
+      "samples": 4800,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\cache_source.csv",
+      "samples": 4800,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\feed_http.csv",
+      "samples": 4800,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\pv_redis.csv",
+      "samples": 7200,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\pv_sql.csv",
+      "samples": 7200,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\index_publish_http.csv",
+      "samples": 300,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "index_observed",
+      "file": "round-2\\index-observed.csv",
+      "samples": 300,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\like-uniform-60.csv",
+      "samples": 3601,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\like-uniform-120.csv",
+      "samples": 7201,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\like-hot-60.csv",
+      "samples": 3600,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\like-hot-120.csv",
+      "samples": 7199,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-2\\like-backlog-60.csv",
+      "samples": 300,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-3\\cache_source.csv",
+      "samples": 4800,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-3\\cache_cached.csv",
+      "samples": 4800,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-3\\feed_http.csv",
+      "samples": 4800,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-3\\pv_sql.csv",
+      "samples": 7200,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-3\\pv_redis.csv",
+      "samples": 7199,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "http",
+      "file": "round-3\\index_publish_http.csv",
+      "samples": 300,
+      "percentilesMatch": true
+    },
+    {
+      "kind": "index_observed",
+      "file": "round-3\\index-observed.csv",
+      "samples": 300,
+      "percentilesMatch": true
+    }
+  ]
+}
