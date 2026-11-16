@@ -1,0 +1,72 @@
+# 简历性能实验专用项目；四个持久卷与端口均独立于开发和既有集成环境。
+name: easy-community-resume-perf
+services:
+  mysql:
+    image: mysql:8.4@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
+    cpus: 2
+    mem_limit: 1536m
+    environment:
+      MYSQL_ROOT_PASSWORD: ${IT_SERVICE_PASSWORD:?需要专用测试凭证}
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: easy_community_resume_test
+    ports: ["127.0.0.1:17906:3306"]
+    volumes: ["mysql-data:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysql --protocol=TCP -h 127.0.0.1 -uroot -e 'SELECT 1' >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+  redis:
+    image: redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+    cpus: 1
+    mem_limit: 256m
+    environment: { IT_SERVICE_PASSWORD: "${IT_SERVICE_PASSWORD:?需要专用测试凭证}" }
+    command: ["sh", "-ec", "exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$$IT_SERVICE_PASSWORD\""]
+    ports: ["127.0.0.1:17979:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$IT_SERVICE_PASSWORD\" redis-cli ping | grep -qx PONG"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  rabbitmq:
+    image: rabbitmq:4-management@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407
+    hostname: ec-resume-perf-rabbit
+    cpus: 2
+    mem_limit: 768m
+    environment:
+      RABBITMQ_DEFAULT_USER: resume_test
+      RABBITMQ_DEFAULT_PASS: ${IT_SERVICE_PASSWORD:?需要专用测试凭证}
+      RABBITMQ_DEFAULT_VHOST: easy_community_resume_test
+    ports: ["127.0.0.1:17972:5672", "127.0.0.1:17973:15672"]
+    volumes: ["rabbit-data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.6
+    cpus: 2
+    mem_limit: 1536m
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      xpack.security.enabled: "true"
+      xpack.security.autoconfiguration.enabled: "false"
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      xpack.ml.enabled: "false"
+      ELASTIC_PASSWORD: ${IT_SERVICE_PASSWORD:?需要专用测试凭证}
+    ports: ["127.0.0.1:19300:9200"]
+    volumes: ["es-data:/usr/share/elasticsearch/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --user elastic:$$ELASTIC_PASSWORD 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 3s
+      timeout: 8s
+      retries: 60
+volumes:
+  mysql-data:
+  redis-data:
+  rabbit-data:
+  es-data:

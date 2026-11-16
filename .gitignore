@@ -6,5 +6,8 @@ AGENTS.md
 .env.*
 !.env.*.example
 
+# 压测原始日志和逐请求样本长期留在本机，避免Maven clean清除或误提交诊断内容。
+/artifacts/performance/
+
 # Agent 一次性诊断和中间输出不进入源码，也不占用覆盖率目录。
 /artifacts/agent/
