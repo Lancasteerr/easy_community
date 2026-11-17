@@ -11,7 +11,7 @@ import org.springframework.data.redis.core.*;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
-/** 故障只停止签发，绝不根据SQL关系最大版本重置序号。 */
+/** 正常Redis重启沿用持久序号；异常宕机后须先人工提升纪元，绝不根据SQL关系最大版本重置序号。 */
 @Component
 public class LikeVersionAllocator {
     private static final ClassPathResource SCRIPT = new ClassPathResource("redis/like-version.lua");

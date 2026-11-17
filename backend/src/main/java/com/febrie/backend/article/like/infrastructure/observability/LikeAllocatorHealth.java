@@ -6,7 +6,7 @@ import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.stereotype.Component;
 
-/** 始终只读验证签发栅栏，不消耗序号；健康异常不停止后台消费。 */
+/** 只读验证当前签发条件，不消耗序号；健康正常不能证明异常宕机前的序号未回退。 */
 @Component
 public class LikeAllocatorHealth implements HealthIndicator {
     private final LikeVersionAllocator allocator;

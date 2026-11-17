@@ -1,4 +1,4 @@
--- 三个Key是持久签发器，不是缓存；任何缺失、TTL或运行标识变化都拒绝签发。
+-- 三个Key是持久签发器，不是缓存；正常重启沿用序号，异常宕机后须先人工提升纪元。
 local action = ARGV[1]
 local info = redis.call('INFO', 'server', 'replication')
 local run = string.match(info, 'run_id:([0-9a-f]+)')
@@ -34,19 +34,22 @@ if action == 'INITIALIZE' then
     local guarded = guardEpoch and integer(guardEpoch, 1048576) or nil
     if (epoch and not old) or (guardEpoch and not guarded) then return fail('corrupt epoch') end
     if (old and old >= target) or (guarded and guarded >= target) then return fail('cannot reset used epoch') end
-    if state == 'READY' and guardRun == run then return fail('pause before recovery') end
+    -- 运行标识变化不能替代暂停，所有新纪元初始化都须先停止旧纪元签发。
+    if state == 'READY' then return fail('pause before recovery') end
     redis.call('SET', KEYS[1], ARGV[2])
     redis.call('SET', KEYS[2], '0')
     redis.call('HSET', KEYS[3], 'epoch', ARGV[2], 'runId', run, 'state', 'PAUSED')
     redis.call('PERSIST', KEYS[3])
     return 1
 end
-if not integer(epoch, 1048576) or not integer(seq, 8796093022208) or epoch ~= guardEpoch or run ~= guardRun then
+-- runId保留维护记录；正常重启后允许非空的旧标识，不据此判断序号是否回退。
+if not integer(epoch, 1048576) or not integer(seq, 8796093022208) or epoch ~= guardEpoch or not guardRun or guardRun == '' then
     return fail('missing or mismatched guard')
 end
 for i = 1, 3 do if redis.call('PTTL', KEYS[i]) ~= -1 then return fail('allocator must not expire') end end
 if action == 'ACTIVATE' then
-    if epoch ~= ARGV[2] or run ~= ARGV[3] or state ~= 'PAUSED' then return fail('stale activation') end
+    -- 激活仍绑定初始化时的进程，防止恢复期间重启或迟到维护请求错误地放行。
+    if epoch ~= ARGV[2] or run ~= ARGV[3] or guardRun ~= run or state ~= 'PAUSED' then return fail('stale activation') end
     redis.call('HSET', KEYS[3], 'state', 'READY')
     return 1
 end
