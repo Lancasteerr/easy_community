@@ -1,0 +1,1369 @@
+{
+  "comparison": {
+    "purpose": "measurement",
+    "comparisonType": "cross_time_history_only",
+    "baselineRounds": 3,
+    "newRounds": 3,
+    "comparisons": [
+      {
+        "scenario": "uniform",
+        "targetQps": 60,
+        "oldSuccessQps": {
+          "median": 59.98278658931743,
+          "min": 59.98050771749172,
+          "max": 59.9849132529368,
+          "values": [
+            59.98278658931743,
+            59.9849132529368,
+            59.98050771749172
+          ]
+        },
+        "newSuccessQps": {
+          "median": 59.98780623314887,
+          "min": 59.8281501612796,
+          "max": 59.99184530846722,
+          "values": [
+            59.98780623314887,
+            59.99184530846722,
+            59.8281501612796
+          ]
+        },
+        "loadMatchedWithin5Percent": true,
+        "cleanNewSamples": true,
+        "metrics": {
+          "p50Ms": {
+            "old": {
+              "median": 24.2361,
+              "min": 24.2088,
+              "max": 29.5002,
+              "values": [
+                29.5002,
+                24.2361,
+                24.2088
+              ]
+            },
+            "new": {
+              "median": 24.3553,
+              "min": 23.5114,
+              "max": 24.4457,
+              "values": [
+                24.3553,
+                23.5114,
+                24.4457
+              ]
+            },
+            "changePercent": 0.49182830570924096
+          },
+          "p95Ms": {
+            "old": {
+              "median": 39.5414,
+              "min": 38.2251,
+              "max": 77.837,
+              "values": [
+                77.837,
+                39.5414,
+                38.2251
+              ]
+            },
+            "new": {
+              "median": 49.5348,
+              "min": 42.817,
+              "max": 59.2498,
+              "values": [
+                49.5348,
+                42.817,
+                59.2498
+              ]
+            },
+            "changePercent": 25.273257901844627
+          },
+          "p99Ms": {
+            "old": {
+              "median": 55.4031,
+              "min": 52.5243,
+              "max": 112.6711,
+              "values": [
+                112.6711,
+                52.5243,
+                55.4031
+              ]
+            },
+            "new": {
+              "median": 67.0954,
+              "min": 66.358,
+              "max": 107.0301,
+              "values": [
+                67.0954,
+                66.358,
+                107.0301
+              ]
+            },
+            "changePercent": 21.104053744285057
+          },
+          "acceptedPending": {
+            "old": {
+              "median": 3,
+              "min": 2,
+              "max": 4,
+              "values": [
+                3,
+                4,
+                2
+              ]
+            },
+            "new": {
+              "median": 5,
+              "min": 4,
+              "max": 11,
+              "values": [
+                11,
+                5,
+                4
+              ]
+            },
+            "changePercent": 66.66666666666667
+          },
+          "sqlRowLockWaits": {
+            "old": {
+              "median": 1652,
+              "min": 1513,
+              "max": 2241,
+              "values": [
+                2241,
+                1513,
+                1652
+              ]
+            },
+            "new": {
+              "median": 0,
+              "min": 0,
+              "max": 0,
+              "values": [
+                0,
+                0,
+                0
+              ]
+            },
+            "changePercent": -100.0
+          },
+          "sqlRowLockWaitMs": {
+            "old": {
+              "median": 16256,
+              "min": 14820,
+              "max": 38820,
+              "values": [
+                38820,
+                14820,
+                16256
+              ]
+            },
+            "new": {
+              "median": 0,
+              "min": 0,
+              "max": 0,
+              "values": [
+                0,
+                0,
+                0
+              ]
+            },
+            "changePercent": -100.0
+          }
+        }
+      },
+      {
+        "scenario": "uniform",
+        "targetQps": 120,
+        "oldSuccessQps": {
+          "median": 119.78076372404841,
+          "min": 119.37043188005701,
+          "max": 119.95980292102004,
+          "values": [
+            119.78076372404841,
+            119.95980292102004,
+            119.37043188005701
+          ]
+        },
+        "newSuccessQps": {
+          "median": 119.77542100231601,
+          "min": 119.09061215651877,
+          "max": 119.94829973426712,
+          "values": [
+            119.09061215651877,
+            119.77542100231601,
+            119.94829973426712
+          ]
+        },
+        "loadMatchedWithin5Percent": true,
+        "cleanNewSamples": true,
+        "metrics": {
+          "p50Ms": {
+            "old": {
+              "median": 28.5887,
+              "min": 28.5412,
+              "max": 30.2508,
+              "values": [
+                30.2508,
+                28.5412,
+                28.5887
+              ]
+            },
+            "new": {
+              "median": 21.8084,
+              "min": 21.4842,
+              "max": 24.4335,
+              "values": [
+                24.4335,
+                21.8084,
+                21.4842
+              ]
+            },
+            "changePercent": -23.716713246842293
+          },
+          "p95Ms": {
+            "old": {
+              "median": 42.1214,
+              "min": 41.8725,
+              "max": 58.1377,
+              "values": [
+                58.1377,
+                41.8725,
+                42.1214
+              ]
+            },
+            "new": {
+              "median": 39.2955,
+              "min": 38.8449,
+              "max": 42.3461,
+              "values": [
+                42.3461,
+                38.8449,
+                39.2955
+              ]
+            },
+            "changePercent": -6.708941298247462
+          },
+          "p99Ms": {
+            "old": {
+              "median": 58.6781,
+              "min": 53.4963,
+              "max": 89.8443,
+              "values": [
+                89.8443,
+                53.4963,
+                58.6781
+              ]
+            },
+            "new": {
+              "median": 62.0837,
+              "min": 59.7384,
+              "max": 65.9281,
+              "values": [
+                59.7384,
+                65.9281,
+                62.0837
+              ]
+            },
+            "changePercent": 5.803868905094056
+          },
+          "acceptedPending": {
+            "old": {
+              "median": 1026,
+              "min": 874,
+              "max": 1382,
+              "values": [
+                1382,
+                874,
+                1026
+              ]
+            },
+            "new": {
+              "median": 9,
+              "min": 8,
+              "max": 20,
+              "values": [
+                9,
+                20,
+                8
+              ]
+            },
+            "changePercent": -99.12280701754386
+          },
+          "sqlRowLockWaits": {
+            "old": {
+              "median": 3440,
+              "min": 3396,
+              "max": 3595,
+              "values": [
+                3396,
+                3440,
+                3595
+              ]
+            },
+            "new": {
+              "median": 0,
+              "min": 0,
+              "max": 0,
+              "values": [
+                0,
+                0,
+                0
+              ]
+            },
+            "changePercent": -100.0
+          },
+          "sqlRowLockWaitMs": {
+            "old": {
+              "median": 55202,
+              "min": 54088,
+              "max": 58465,
+              "values": [
+                55202,
+                54088,
+                58465
+              ]
+            },
+            "new": {
+              "median": 0,
+              "min": 0,
+              "max": 0,
+              "values": [
+                0,
+                0,
+                0
+              ]
+            },
+            "changePercent": -100.0
+          }
+        }
+      },
+      {
+        "scenario": "hot",
+        "targetQps": 60,
+        "oldSuccessQps": {
+          "median": 59.994462216246575,
+          "min": 59.99074236724466,
+          "max": 59.9971636340892,
+          "values": [
+            59.99074236724466,
+            59.9971636340892,
+            59.994462216246575
+          ]
+        },
+        "newSuccessQps": {
+          "median": 59.988303580548376,
+          "min": 59.982935954408134,
+          "max": 59.989977474463345,
+          "values": [
+            59.982935954408134,
+            59.988303580548376,
+            59.989977474463345
+          ]
+        },
+        "loadMatchedWithin5Percent": true,
+        "cleanNewSamples": true,
+        "metrics": {
+          "p50Ms": {
+            "old": {
+              "median": 23.7681,
+              "min": 22.7437,
+              "max": 27.5564,
+              "values": [
+                27.5564,
+                22.7437,
+                23.7681
+              ]
+            },
+            "new": {
+              "median": 22.709,
+              "min": 21.082,
+              "max": 22.8945,
+              "values": [
+                22.8945,
+                22.709,
+                21.082
+              ]
+            },
+            "changePercent": -4.455972500957173
+          },
+          "p95Ms": {
+            "old": {
+              "median": 41.2603,
+              "min": 37.2937,
+              "max": 65.179,
+              "values": [
+                65.179,
+                37.2937,
+                41.2603
+              ]
+            },
+            "new": {
+              "median": 52.4995,
+              "min": 40.9739,
+              "max": 63.407,
+              "values": [
+                52.4995,
+                63.407,
+                40.9739
+              ]
+            },
+            "changePercent": 27.23974377306999
+          },
+          "p99Ms": {
+            "old": {
+              "median": 62.3378,
+              "min": 51.3214,
+              "max": 91.8666,
+              "values": [
+                91.8666,
+                51.3214,
+                62.3378
+              ]
+            },
+            "new": {
+              "median": 89.5617,
+              "min": 66.4942,
+              "max": 92.2364,
+              "values": [
+                89.5617,
+                92.2364,
+                66.4942
+              ]
+            },
+            "changePercent": 43.67157647526862
+          },
+          "acceptedPending": {
+            "old": {
+              "median": 2,
+              "min": 1,
+              "max": 3,
+              "values": [
+                3,
+                1,
+                2
+              ]
+            },
+            "new": {
+              "median": 12,
+              "min": 9,
+              "max": 14,
+              "values": [
+                12,
+                14,
+                9
+              ]
+            },
+            "changePercent": 500.0
+          },
+          "sqlRowLockWaits": {
+            "old": {
+              "median": 2013,
+              "min": 1816,
+              "max": 2449,
+              "values": [
+                2449,
+                1816,
+                2013
+              ]
+            },
+            "new": {
+              "median": 0,
+              "min": 0,
+              "max": 0,
+              "values": [
+                0,
+                0,
+                0
+              ]
+            },
+            "changePercent": -100.0
+          },
+          "sqlRowLockWaitMs": {
+            "old": {
+              "median": 26845,
+              "min": 18087,
+              "max": 41450,
+              "values": [
+                41450,
+                18087,
+                26845
+              ]
+            },
+            "new": {
+              "median": 0,
+              "min": 0,
+              "max": 0,
+              "values": [
+                0,
+                0,
+                0
+              ]
+            },
+            "changePercent": -100.0
+          }
+        }
+      },
+      {
+        "scenario": "hot",
+        "targetQps": 120,
+        "oldSuccessQps": {
+          "median": 119.94710850691685,
+          "min": 119.91090100441467,
+          "max": 119.96928060036872,
+          "values": [
+            119.91090100441467,
+            119.94710850691685,
+            119.96928060036872
+          ]
+        },
+        "newSuccessQps": {
+          "median": 119.93423646561503,
+          "min": 119.7018772518041,
+          "max": 119.95404425801495,
+          "values": [
+            119.95404425801495,
+            119.93423646561503,
+            119.7018772518041
+          ]
+        },
+        "loadMatchedWithin5Percent": true,
+        "cleanNewSamples": true,
+        "metrics": {
+          "p50Ms": {
+            "old": {
+              "median": 25.8844,
+              "min": 25.3683,
+              "max": 27.7015,
+              "values": [
+                27.7015,
+                25.3683,
+                25.8844
+              ]
+            },
+            "new": {
+              "median": 19.9832,
+              "min": 19.6053,
+              "max": 20.6022,
+              "values": [
+                19.9832,
+                20.6022,
+                19.6053
+              ]
+            },
+            "changePercent": -22.79828777178532
+          },
+          "p95Ms": {
+            "old": {
+              "median": 39.5922,
+              "min": 38.5787,
+              "max": 45.667,
+              "values": [
+                45.667,
+                38.5787,
+                39.5922
+              ]
+            },
+            "new": {
+              "median": 35.6516,
+              "min": 34.8933,
+              "max": 37.8723,
+              "values": [
+                35.6516,
+                37.8723,
+                34.8933
+              ]
+            },
+            "changePercent": -9.952970534600237
+          },
+          "p99Ms": {
+            "old": {
+              "median": 53.8167,
+              "min": 49.5819,
+              "max": 66.3018,
+              "values": [
+                66.3018,
+                49.5819,
+                53.8167
+              ]
+            },
+            "new": {
+              "median": 57.2254,
+              "min": 52.4281,
+              "max": 59.4377,
+              "values": [
+                52.4281,
+                59.4377,
+                57.2254
+              ]
+            },
+            "changePercent": 6.333907504547853
+          },
+          "acceptedPending": {
+            "old": {
+              "median": 3210,
+              "min": 3148,
+              "max": 3304,
+              "values": [
+                3148,
+                3210,
+                3304
+              ]
+            },
+            "new": {
+              "median": 28,
+              "min": 23,
+              "max": 29,
+              "values": [
+                29,
+                28,
+                23
+              ]
+            },
+            "changePercent": -99.12772585669782
+          },
+          "sqlRowLockWaits": {
+            "old": {
+              "median": 3992,
+              "min": 3898,
+              "max": 4044,
+              "values": [
+                4044,
+                3992,
+                3898
+              ]
+            },
+            "new": {
+              "median": 0,
+              "min": 0,
+              "max": 0,
+              "values": [
+                0,
+                0,
+                0
+              ]
+            },
+            "changePercent": -100.0
+          },
+          "sqlRowLockWaitMs": {
+            "old": {
+              "median": 138077,
+              "min": 130632,
+              "max": 139158,
+              "values": [
+                130632,
+                139158,
+                138077
+              ]
+            },
+            "new": {
+              "median": 0,
+              "min": 0,
+              "max": 0,
+              "values": [
+                0,
+                0,
+                0
+              ]
+            },
+            "changePercent": -100.0
+          }
+        }
+      }
+    ],
+    "backlogCoverageRecovery": {
+      "oldMs": {
+        "median": 3119,
+        "min": 2890,
+        "max": 3161,
+        "values": [
+          2890,
+          3161,
+          3119
+        ]
+      },
+      "newMs": {
+        "median": 879,
+        "min": 856,
+        "max": 891,
+        "values": [
+          891,
+          856,
+          879
+        ]
+      },
+      "comparable300Accepted": true
+    },
+    "qualification": "不是同步配对实验；正变化百分比表示新版数值更高；没有历史数据的指标不计算提升"
+  },
+  "newDiagnostics": [
+    {
+      "round": 1,
+      "scenario": "uniform",
+      "targetQps": 60,
+      "successQps": 59.98780623314887,
+      "completed": 3601,
+      "success": 3601,
+      "skippedBusyClient": 0,
+      "p95Ms": 49.5348,
+      "p99Ms": 67.0954,
+      "acceptedPending": 11,
+      "coverageP95Ms": 481.2085,
+      "coverageDrainMs": 260,
+      "physicalDrainMs": 6693,
+      "sqlAttempts": 592,
+      "groups": 592,
+      "relations": 3601,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 592,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        592,
+        0
+      ],
+      "maxSampledReady": 0,
+      "maxSampledUnacked": 21
+    },
+    {
+      "round": 1,
+      "scenario": "uniform",
+      "targetQps": 120,
+      "successQps": 119.09061215651877,
+      "completed": 7148,
+      "success": 7148,
+      "skippedBusyClient": 53,
+      "p95Ms": 42.3461,
+      "p99Ms": 59.7384,
+      "acceptedPending": 9,
+      "coverageP95Ms": 469.6424,
+      "coverageDrainMs": 260,
+      "physicalDrainMs": 5446,
+      "sqlAttempts": 894,
+      "groups": 894,
+      "relations": 7148,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 893,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        894,
+        0
+      ],
+      "maxSampledReady": 0,
+      "maxSampledUnacked": 49
+    },
+    {
+      "round": 1,
+      "scenario": "hot",
+      "targetQps": 60,
+      "successQps": 59.982935954408134,
+      "completed": 3600,
+      "success": 3600,
+      "skippedBusyClient": 0,
+      "p95Ms": 52.4995,
+      "p99Ms": 89.5617,
+      "acceptedPending": 12,
+      "coverageP95Ms": 509.2529,
+      "coverageDrainMs": 263,
+      "physicalDrainMs": 5210,
+      "sqlAttempts": 295,
+      "groups": 295,
+      "relations": 3540,
+      "coalesced": 60,
+      "coalescingRatio": 0.016666666666666666,
+      "countUpdates": 288,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        295,
+        0
+      ],
+      "maxSampledReady": 0,
+      "maxSampledUnacked": 20
+    },
+    {
+      "round": 1,
+      "scenario": "hot",
+      "targetQps": 120,
+      "successQps": 119.95404425801495,
+      "completed": 7201,
+      "success": 7201,
+      "skippedBusyClient": 0,
+      "p95Ms": 35.6516,
+      "p99Ms": 52.4281,
+      "acceptedPending": 29,
+      "coverageP95Ms": 445.6135,
+      "coverageDrainMs": 525,
+      "physicalDrainMs": 5455,
+      "sqlAttempts": 362,
+      "groups": 362,
+      "relations": 5778,
+      "coalesced": 1423,
+      "coalescingRatio": 0.197611442855159,
+      "countUpdates": 354,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        362,
+        0
+      ],
+      "maxSampledReady": 6,
+      "maxSampledUnacked": 20
+    },
+    {
+      "round": 1,
+      "scenario": "backlog",
+      "targetQps": 60,
+      "successQps": 59.70533150101651,
+      "completed": 300,
+      "success": 300,
+      "skippedBusyClient": 0,
+      "p95Ms": 42.9056,
+      "p99Ms": 61.6977,
+      "acceptedPending": 300,
+      "coverageP95Ms": 4900.2126,
+      "coverageDrainMs": 891,
+      "physicalDrainMs": 9202,
+      "sqlAttempts": 31,
+      "groups": 31,
+      "relations": 300,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 31,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        31,
+        0
+      ],
+      "maxSampledReady": 257,
+      "maxSampledUnacked": 0
+    },
+    {
+      "round": 1,
+      "scenario": "uniform_explore",
+      "targetQps": 240,
+      "successQps": 238.34806347853944,
+      "completed": 14308,
+      "success": 14308,
+      "skippedBusyClient": 93,
+      "p95Ms": 41.8367,
+      "p99Ms": 60.8893,
+      "acceptedPending": 35,
+      "coverageP95Ms": 490.1083,
+      "coverageDrainMs": 277,
+      "physicalDrainMs": 5271,
+      "sqlAttempts": 963,
+      "groups": 963,
+      "relations": 14308,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 956,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        963,
+        0
+      ],
+      "maxSampledReady": 2,
+      "maxSampledUnacked": 74
+    },
+    {
+      "round": 1,
+      "scenario": "hot_explore",
+      "targetQps": 240,
+      "successQps": 238.23038921754465,
+      "completed": 14300,
+      "success": 14300,
+      "skippedBusyClient": 100,
+      "p95Ms": 39.2013,
+      "p99Ms": 59.7544,
+      "acceptedPending": 3247,
+      "coverageP95Ms": 20338.2324,
+      "coverageDrainMs": 22058,
+      "physicalDrainMs": 30447,
+      "sqlAttempts": 716,
+      "groups": 716,
+      "relations": 11431,
+      "coalesced": 2869,
+      "coalescingRatio": 0.20062937062937064,
+      "countUpdates": 600,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        716,
+        0
+      ],
+      "maxSampledReady": 3127,
+      "maxSampledUnacked": 20
+    },
+    {
+      "round": 2,
+      "scenario": "uniform",
+      "targetQps": 60,
+      "successQps": 59.99184530846722,
+      "completed": 3600,
+      "success": 3600,
+      "skippedBusyClient": 0,
+      "p95Ms": 42.817,
+      "p99Ms": 66.358,
+      "acceptedPending": 5,
+      "coverageP95Ms": 451.8513,
+      "coverageDrainMs": 256,
+      "physicalDrainMs": 3412,
+      "sqlAttempts": 611,
+      "groups": 611,
+      "relations": 3600,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 611,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        611,
+        0
+      ],
+      "maxSampledReady": 0,
+      "maxSampledUnacked": 20
+    },
+    {
+      "round": 2,
+      "scenario": "uniform",
+      "targetQps": 120,
+      "successQps": 119.77542100231601,
+      "completed": 7189,
+      "success": 7189,
+      "skippedBusyClient": 11,
+      "p95Ms": 38.8449,
+      "p99Ms": 65.9281,
+      "acceptedPending": 20,
+      "coverageP95Ms": 448.7269,
+      "coverageDrainMs": 265,
+      "physicalDrainMs": 5228,
+      "sqlAttempts": 895,
+      "groups": 895,
+      "relations": 7189,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 893,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        895,
+        0
+      ],
+      "maxSampledReady": 0,
+      "maxSampledUnacked": 45
+    },
+    {
+      "round": 2,
+      "scenario": "hot",
+      "targetQps": 60,
+      "successQps": 59.988303580548376,
+      "completed": 3600,
+      "success": 3600,
+      "skippedBusyClient": 0,
+      "p95Ms": 63.407,
+      "p99Ms": 92.2364,
+      "acceptedPending": 14,
+      "coverageP95Ms": 589.1901,
+      "coverageDrainMs": 260,
+      "physicalDrainMs": 5481,
+      "sqlAttempts": 298,
+      "groups": 298,
+      "relations": 3508,
+      "coalesced": 92,
+      "coalescingRatio": 0.025555555555555557,
+      "countUpdates": 277,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        298,
+        0
+      ],
+      "maxSampledReady": 10,
+      "maxSampledUnacked": 20
+    },
+    {
+      "round": 2,
+      "scenario": "hot",
+      "targetQps": 120,
+      "successQps": 119.93423646561503,
+      "completed": 7201,
+      "success": 7201,
+      "skippedBusyClient": 0,
+      "p95Ms": 37.8723,
+      "p99Ms": 59.4377,
+      "acceptedPending": 28,
+      "coverageP95Ms": 454.3714,
+      "coverageDrainMs": 263,
+      "physicalDrainMs": 5287,
+      "sqlAttempts": 362,
+      "groups": 362,
+      "relations": 5771,
+      "coalesced": 1430,
+      "coalescingRatio": 0.19858353006526872,
+      "countUpdates": 353,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        362,
+        0
+      ],
+      "maxSampledReady": 19,
+      "maxSampledUnacked": 20
+    },
+    {
+      "round": 2,
+      "scenario": "backlog",
+      "targetQps": 60,
+      "successQps": 59.78994238700941,
+      "completed": 300,
+      "success": 300,
+      "skippedBusyClient": 0,
+      "p95Ms": 51.4303,
+      "p99Ms": 61.6846,
+      "acceptedPending": 300,
+      "coverageP95Ms": 4931.4223,
+      "coverageDrainMs": 856,
+      "physicalDrainMs": 3232,
+      "sqlAttempts": 31,
+      "groups": 31,
+      "relations": 300,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 31,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        31,
+        0
+      ],
+      "maxSampledReady": 74,
+      "maxSampledUnacked": 0
+    },
+    {
+      "round": 2,
+      "scenario": "uniform_explore",
+      "targetQps": 240,
+      "successQps": 237.70006052497556,
+      "completed": 14269,
+      "success": 14269,
+      "skippedBusyClient": 132,
+      "p95Ms": 41.6195,
+      "p99Ms": 59.9726,
+      "acceptedPending": 49,
+      "coverageP95Ms": 496.8927,
+      "coverageDrainMs": 263,
+      "physicalDrainMs": 5278,
+      "sqlAttempts": 940,
+      "groups": 940,
+      "relations": 14269,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 940,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        940,
+        0
+      ],
+      "maxSampledReady": 21,
+      "maxSampledUnacked": 76
+    },
+    {
+      "round": 2,
+      "scenario": "hot_explore",
+      "targetQps": 240,
+      "successQps": 239.3198147712611,
+      "completed": 14366,
+      "success": 14366,
+      "skippedBusyClient": 35,
+      "p95Ms": 35.8121,
+      "p99Ms": 52.7909,
+      "acceptedPending": 3346,
+      "coverageP95Ms": 19998.1621,
+      "coverageDrainMs": 22090,
+      "physicalDrainMs": 25257,
+      "sqlAttempts": 719,
+      "groups": 719,
+      "relations": 11485,
+      "coalesced": 2881,
+      "coalescingRatio": 0.20054294862870667,
+      "countUpdates": 576,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        719,
+        0
+      ],
+      "maxSampledReady": 3201,
+      "maxSampledUnacked": 20
+    },
+    {
+      "round": 3,
+      "scenario": "uniform",
+      "targetQps": 60,
+      "successQps": 59.8281501612796,
+      "completed": 3591,
+      "success": 3591,
+      "skippedBusyClient": 10,
+      "p95Ms": 59.2498,
+      "p99Ms": 107.0301,
+      "acceptedPending": 4,
+      "coverageP95Ms": 490.8875,
+      "coverageDrainMs": 261,
+      "physicalDrainMs": 5759,
+      "sqlAttempts": 604,
+      "groups": 604,
+      "relations": 3591,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 603,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        604,
+        0
+      ],
+      "maxSampledReady": 0,
+      "maxSampledUnacked": 18
+    },
+    {
+      "round": 3,
+      "scenario": "uniform",
+      "targetQps": 120,
+      "successQps": 119.94829973426712,
+      "completed": 7201,
+      "success": 7201,
+      "skippedBusyClient": 0,
+      "p95Ms": 39.2955,
+      "p99Ms": 62.0837,
+      "acceptedPending": 8,
+      "coverageP95Ms": 454.3217,
+      "coverageDrainMs": 262,
+      "physicalDrainMs": 5237,
+      "sqlAttempts": 902,
+      "groups": 902,
+      "relations": 7201,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 899,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        902,
+        0
+      ],
+      "maxSampledReady": 0,
+      "maxSampledUnacked": 34
+    },
+    {
+      "round": 3,
+      "scenario": "hot",
+      "targetQps": 60,
+      "successQps": 59.989977474463345,
+      "completed": 3600,
+      "success": 3600,
+      "skippedBusyClient": 0,
+      "p95Ms": 40.9739,
+      "p99Ms": 66.4942,
+      "acceptedPending": 9,
+      "coverageP95Ms": 480.5528,
+      "coverageDrainMs": 264,
+      "physicalDrainMs": 5265,
+      "sqlAttempts": 315,
+      "groups": 315,
+      "relations": 3575,
+      "coalesced": 25,
+      "coalescingRatio": 0.006944444444444444,
+      "countUpdates": 305,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        315,
+        0
+      ],
+      "maxSampledReady": 3,
+      "maxSampledUnacked": 20
+    },
+    {
+      "round": 3,
+      "scenario": "hot",
+      "targetQps": 120,
+      "successQps": 119.7018772518041,
+      "completed": 7185,
+      "success": 7185,
+      "skippedBusyClient": 16,
+      "p95Ms": 34.8933,
+      "p99Ms": 57.2254,
+      "acceptedPending": 23,
+      "coverageP95Ms": 452.6436,
+      "coverageDrainMs": 522,
+      "physicalDrainMs": 5493,
+      "sqlAttempts": 361,
+      "groups": 361,
+      "relations": 5758,
+      "coalesced": 1427,
+      "coalescingRatio": 0.19860821155184413,
+      "countUpdates": 305,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        361,
+        0
+      ],
+      "maxSampledReady": 10,
+      "maxSampledUnacked": 20
+    },
+    {
+      "round": 3,
+      "scenario": "backlog",
+      "targetQps": 60,
+      "successQps": 59.90027682114262,
+      "completed": 300,
+      "success": 300,
+      "skippedBusyClient": 0,
+      "p95Ms": 38.3652,
+      "p99Ms": 94.2749,
+      "acceptedPending": 300,
+      "coverageP95Ms": 4863.9917,
+      "coverageDrainMs": 879,
+      "physicalDrainMs": 8692,
+      "sqlAttempts": 31,
+      "groups": 31,
+      "relations": 300,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 31,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        31,
+        0
+      ],
+      "maxSampledReady": 48,
+      "maxSampledUnacked": 76
+    },
+    {
+      "round": 3,
+      "scenario": "uniform_explore",
+      "targetQps": 240,
+      "successQps": 238.78242055908046,
+      "completed": 14338,
+      "success": 14338,
+      "skippedBusyClient": 63,
+      "p95Ms": 39.7006,
+      "p99Ms": 54.2283,
+      "acceptedPending": 49,
+      "coverageP95Ms": 489.1162,
+      "coverageDrainMs": 264,
+      "physicalDrainMs": 5508,
+      "sqlAttempts": 921,
+      "groups": 921,
+      "relations": 14338,
+      "coalesced": 0,
+      "coalescingRatio": 0.0,
+      "countUpdates": 921,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        921,
+        0
+      ],
+      "maxSampledReady": 10,
+      "maxSampledUnacked": 67
+    },
+    {
+      "round": 3,
+      "scenario": "hot_explore",
+      "targetQps": 240,
+      "successQps": 238.35035169503948,
+      "completed": 14308,
+      "success": 14308,
+      "skippedBusyClient": 93,
+      "p95Ms": 37.2363,
+      "p99Ms": 57.447,
+      "acceptedPending": 3116,
+      "coverageP95Ms": 19716.6391,
+      "coverageDrainMs": 20582,
+      "physicalDrainMs": 25078,
+      "sqlAttempts": 716,
+      "groups": 716,
+      "relations": 11443,
+      "coalesced": 2865,
+      "coalescingRatio": 0.20023762929829467,
+      "countUpdates": 660,
+      "sqlRowLockWaits": 0,
+      "sqlRowLockWaitMs": 0,
+      "pendingSamplingErrors": 0,
+      "brokerSamplingErrors": 0,
+      "instanceGroups": [
+        716,
+        0
+      ],
+      "maxSampledReady": 2937,
+      "maxSampledUnacked": 20
+    }
+  ],
+  "verifiedHttpSamples": 151506,
+  "measurementRevision": "5c317017dece41b7604a9370a3875d31315072f8",
+  "artifactRun": "20261118-022300-cde9970a",
+  "servicesStopped": true,
+  "newAudits": [
+    {
+      "sql": true,
+      "target": true
+    },
+    {
+      "sql": true,
+      "target": true
+    },
+    {
+      "sql": true,
+      "target": true
+    }
+  ]
+}
