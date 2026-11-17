@@ -14,6 +14,8 @@ public class LikeRepository {
     public LikeState lock(long user, long article) { return mapper.lock(user, article); }
     public int update(LikeState state) { return mapper.update(state); }
     public int addDelta(long article, int delta) { return mapper.addDelta(article, delta); }
+    /** 零净增量也需核验计数基线；锁保持至文章事务结束。 */
+    public Long lockCount(long article) { return mapper.lockCount(article); }
     public boolean publicArticle(long article) { return mapper.publicArticle(article); }
     public Map<Long, LikeState> states(long user, Collection<Long> ids) {
         Map<Long, LikeState> result = new LinkedHashMap<>();

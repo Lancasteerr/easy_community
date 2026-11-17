@@ -98,6 +98,22 @@ class LikeMysqlIntegrationTests {
         assertFalse(likes.counts(List.of(article)).containsKey(article));
     }
 
+    @Test void articleGroupCommitsNetChangesAndRollsBackEveryRelationOnFailure() {
+        long other = 200001L;
+        assertEquals(2, service.applyArticle(article, List.of(command(other, true, 10), command(user, true, 10))).delta());
+        assertEquals(2L, likes.counts(List.of(article)).get(article));
+        assertEquals(-1, service.applyArticle(article, List.of(command(user, false, 11), command(other, true, 11))).delta());
+        // 一增一减只推进两条关系，计数维持不变。
+        assertEquals(0, service.applyArticle(article, List.of(command(user, true, 12), command(other, false, 12))).delta());
+        assertEquals(1L, likes.counts(List.of(article)).get(article));
+        jdbc.update("DELETE FROM article_like_count WHERE article_id=?", article);
+        assertThrows(LikeInvariantException.class, () -> service.applyArticle(article,
+                List.of(command(user, false, 13), command(other, true, 13))));
+        assertEquals(12, likes.states(user, List.of(article)).get(article).version());
+        assertEquals(12, likes.states(other, List.of(article)).get(article).version());
+        assertTrue(likes.states(user, List.of(article)).get(article).liked());
+    }
+
     private LikeCommand command(long actor, boolean liked, long version) {
         return new LikeCommand(1, UUID.randomUUID().toString(), actor, article, liked, Long.toString(version), Instant.now());
     }

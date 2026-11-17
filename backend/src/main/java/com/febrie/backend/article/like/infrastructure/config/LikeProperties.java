@@ -11,11 +11,13 @@ public record LikeProperties(@DefaultValue("ec:dev:like") String namespace, @Def
         @DefaultValue("20") int prefetch, @DefaultValue("67108864") long queueBytes,
         @DefaultValue("60") int perMinute, @DefaultValue("4") int readConcurrency,
         @DefaultValue("300ms") Duration readTimeout, @DefaultValue("none") String maintenance,
-        @DefaultValue("-1") int expectedEpoch, @DefaultValue("0") int replayLimit) {
+        @DefaultValue("-1") int expectedEpoch, @DefaultValue("0") int replayLimit,
+        @DefaultValue("20") int batchSize, @DefaultValue("100ms") Duration batchWait) {
     public LikeProperties {
         if (namespace == null || !namespace.matches("ec:(dev|test|prod)[A-Za-z0-9:_-]*:like")
                 || confirmTimeout == null || confirmTimeout.isNegative() || confirmTimeout.isZero()
-                || pendingLimit < 1 || concurrency < 1 || prefetch < 1 || queueBytes < 4096
+                || pendingLimit < 1 || concurrency < 1 || batchSize < 1 || prefetch < batchSize || queueBytes < 4096
+                || batchWait == null || batchWait.toMillis() < 1
                 || perMinute < 1 || readConcurrency < 1 || readTimeout == null
                 || readTimeout.isNegative() || readTimeout.isZero()
                 || !java.util.Set.of("none", "status", "pause", "recover", "replay", "audit").contains(maintenance)) {

@@ -18,6 +18,10 @@
         UPDATE article_like_count SET like_count=like_count+#{delta}
         WHERE article_id=#{articleId} AND like_count+#{delta} &gt;= 0
     </update>
+    <!-- 零净增量也需核验计数基线；缺行由应用抛错并回滚。 -->
+    <select id="lockCount" resultType="java.lang.Long">
+        SELECT like_count FROM article_like_count WHERE article_id=#{articleId} FOR UPDATE
+    </select>
     <select id="publicArticle" resultType="boolean">
         SELECT EXISTS(SELECT 1 FROM article WHERE id=#{articleId} AND hidden=FALSE)
     </select>

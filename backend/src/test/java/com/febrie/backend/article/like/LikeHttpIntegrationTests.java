@@ -101,7 +101,7 @@ class LikeHttpIntegrationTests {
 
     @BeforeEach void seed()throws Exception{
         reset(cache,reader,publisher,likes);
-        var maintenance=new LikeProperties(properties.namespace(),properties.confirmTimeout(),128,2,20,4096,60,4,Duration.ofSeconds(2),"none",-1,0);
+        var maintenance=new LikeProperties(properties.namespace(),properties.confirmTimeout(),128,2,20,4096,60,4,Duration.ofSeconds(2),"none",-1,0,20,java.time.Duration.ofMillis(100));
         int epoch=jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1",Integer.class);
         new LikeRecoveryService(dataSource,allocator,maintenance).recover(epoch);
         if(hash==null){hash=encoder.encode(PASSWORD);}

@@ -11,6 +11,7 @@ public interface LikeMapper {
     LikeState lock(@Param("userId") long userId, @Param("articleId") long articleId);
     int update(@Param("state") LikeState state);
     int addDelta(@Param("articleId") long articleId, @Param("delta") int delta);
+    Long lockCount(@Param("articleId") long articleId);
     boolean publicArticle(@Param("articleId") long articleId);
     List<LikeState> states(@Param("userId") long userId, @Param("ids") Collection<Long> ids);
     List<CountRow> counts(@Param("ids") Collection<Long> ids);

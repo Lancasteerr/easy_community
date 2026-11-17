@@ -12,7 +12,9 @@ import static org.mockito.Mockito.*;
 /** 事务原子性另由MySQL集成测试验证；此处锁定版本裁决与净增量规则。 */
 class LikeSqlServiceTests {
     private final LikeRepository repository = mock(LikeRepository.class);
-    private final LikeSqlService service = new LikeSqlService(repository);
+    private final LikeSqlService service = new LikeSqlService(repository, LikeTestProperties.defaults());
+
+    @org.junit.jupiter.api.BeforeEach void counterBaseline() { when(repository.lockCount(2)).thenReturn(1L); }
 
     @Test void sameStateHigherVersionStillAdvancesWithoutCounterWrite() {
         when(repository.lock(1, 2)).thenReturn(new LikeState(1, 2, true, 10));
@@ -44,6 +46,43 @@ class LikeSqlServiceTests {
         assertThrows(IllegalArgumentException.class, () -> LikeVersion.parse("9007199254740992"));
         assertThrows(IllegalArgumentException.class, () -> LikeCommand.operation("1-1-1-1-1"));
         assertEquals(19, LikeVersion.cache(Long.MAX_VALUE).length());
+    }
+
+    @Test void mixedRelationsUseOneNetCounterWriteAndStableLockOrder() {
+        when(repository.lock(1, 2)).thenReturn(new LikeState(1, 2, true, 10));
+        when(repository.lock(2, 2)).thenReturn(new LikeState(2, 2, false, 0));
+        when(repository.lock(3, 2)).thenReturn(new LikeState(3, 2, false, 0));
+        when(repository.update(any())).thenReturn(1);
+        when(repository.addDelta(2, 1)).thenReturn(1);
+        var result = service.applyArticle(2, java.util.List.of(LikeBatchReducerTests.command(3, true, 12),
+                command(false, 12), LikeBatchReducerTests.command(2, true, 12)));
+        assertEquals(1, result.delta());
+        verify(repository, times(1)).addDelta(2, 1);
+        var order = inOrder(repository);
+        order.verify(repository).initializeState(1, 2); order.verify(repository).lock(1, 2);
+        order.verify(repository).update(new LikeState(1, 2, false, 12));
+        order.verify(repository).initializeState(2, 2); order.verify(repository).lock(2, 2);
+        order.verify(repository).update(new LikeState(2, 2, true, 12));
+        order.verify(repository).initializeState(3, 2); order.verify(repository).lock(3, 2);
+    }
+
+    @Test void zeroDeltaStillAdvancesVersionsAndMissingBaselineIsRejected() {
+        when(repository.lock(1, 2)).thenReturn(new LikeState(1, 2, true, 10));
+        when(repository.lock(2, 2)).thenReturn(new LikeState(2, 2, false, 0));
+        when(repository.update(any())).thenReturn(1);
+        var commands = java.util.List.of(command(false, 12), LikeBatchReducerTests.command(2, true, 12));
+        assertEquals(0, service.applyArticle(2, commands).delta());
+        verify(repository, never()).addDelta(anyLong(), anyInt());
+        when(repository.lockCount(2)).thenReturn(null);
+        assertThrows(LikeInvariantException.class, () -> service.applyArticle(2, commands));
+    }
+
+    @Test void invalidTransactionBoundariesFailBeforeTakingLocks() {
+        assertThrows(IllegalArgumentException.class, () -> service.applyArticle(2, java.util.List.of()));
+        assertThrows(IllegalArgumentException.class, () -> service.applyArticle(2, java.util.Collections.nCopies(21, command(true, 10))));
+        assertThrows(IllegalArgumentException.class, () -> service.applyArticle(2, java.util.List.of(command(true, 10), command(false, 11))));
+        assertThrows(IllegalArgumentException.class, () -> service.applyArticle(3, java.util.List.of(command(true, 10))));
+        verify(repository, never()).initializeState(anyLong(), anyLong());
     }
 
     static LikeCommand command(boolean liked, long version) {
