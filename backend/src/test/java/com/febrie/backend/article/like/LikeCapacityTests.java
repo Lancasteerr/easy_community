@@ -48,6 +48,9 @@ class LikeCapacityTests {
     private volatile List<Map<String, Object>> pendingSeries = Collections.synchronizedList(new ArrayList<>());
 
     @Test void measureUniformHotColdMixedAndBacklogAcrossTwoApplications() throws Exception {
+        if (Boolean.parseBoolean(System.getenv("IT_LIKE_HISTORY_COMPARISON"))) {
+            new LikeHistoryBenchmark().run(); return;
+        }
         String url = System.getenv("IT_DB_URL"), vhost = System.getenv("IT_RABBITMQ_VHOST");
         assertNotNull(url); assertTrue(url.matches("jdbc:mysql://[^/]+/easy_community_[a-z0-9_]*test[a-z0-9_]*(?:\\?.*)?"));
         assertNotNull(vhost); assertTrue(vhost.contains("test"));

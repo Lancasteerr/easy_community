@@ -71,3 +71,24 @@ docker compose --env-file backend/.env.resume-perf -f infra/test/performance/com
 `measured`只表示测试实际执行并完成约定一致性校验，不代表所有负载达到SLA。引用性能数据前检查：目标/实际QPS、成功/完成、dropped、P95/P99、待提交趋势、采样错误及对账；失败轮不得静默丢弃。建议简历采用三轮中最差P95/P99与最低实际QPS，降幅采用逐轮配对中位数并保留范围。只有提高负载直至出现失败并细化阶梯后才能谈容量上限。
 
 日志保留在本机，发布前需检查脱敏；不要提交凭证文件或完整Docker配置。60秒阶段结果可作为公开条件下的重复观测，投产前另做300秒以上稳态及故障/磁盘压力实验。
+
+## 点赞新版与历史结果对比
+
+```powershell
+# 短烟测只验证采集和对账，不能作为性能结论；积压阶段仍固定300请求。
+./infra/test/performance/run.ps1 -Suite Like -CompareLikeHistory -Seconds 3 -Rounds 1
+# 正式测试：3轮，每阶段60秒。只测新版，历史目录只读。
+./infra/test/performance/run.ps1 -Suite Like -CompareLikeHistory -Seconds 60 -Rounds 3 -LikeRates '60,120'
+```
+
+主对比沿用16用户、32文章、每用户一个在途请求，依次轮转文章60/120、单文章热点60/120、300请求积压恢复，最后追加240 QPS新版探索。uniform实际为每16次请求轮换文章，不是真正独立均匀随机。保留旧预热位置，不额外预热。两个应用上下文与客户端共享一个768MiB测试JVM。
+
+新模式先在非Web上下文初始化随机命名空间，再启动两实例；只注册SQL计数拦截器，不注册其他性能HTTP路由。每阶段保留旧acceptedPending及250ms版本覆盖采样，同时每秒读取Broker异步管理统计。物理排空必须满足SQL覆盖完成、ready/unacked为零及累计ACK达到受理数；管理统计默认约5秒刷新，物理排空耗时不能与历史SQL覆盖耗时混算。
+
+历史清单为20261116-113300-1b831540的round-1/2及20261116-120704-560d41cc的round-1。前一运行整体中断，但两个完整点赞轮次独立通过校验。baseline-manifest.json保存选中输入和SHA256；sources及source-hashes.json保存本次源码快照。不会修改历史verification.json或其他产物。
+
+新版CSV新增调度/起止时刻、状态、逻辑用户与文章编号、目标状态和版本；coverage.csv独立记录首次版本覆盖观察。逐阶段JSON还记录Broker序列、两实例指标差、SQL语句调用次数、组提交与合并数量。like-verification.json从原始样本复核数量、分位数、覆盖和SQL/聚合计数，不只读取汇总结果自证。
+
+historical-comparison.json/md及PNG/SVG比较各轮中位数与范围，不做强行配对。实际成功QPS中位数相差超过5%或存在错误/采样缺口时，不给单一延迟变化比例；缺失的历史MQ/SQL次数不反推。240 QPS不代表持续容量上限。
+
+成功轮次清理本轮临时数据；失败保留随机命名空间数据与部分JSON/CSV，120秒排空超时停止后续阶段。两种情况都会关闭本次应用，新模式还停止本次启动的专用容器、保留卷，原有开发服务保持原状。

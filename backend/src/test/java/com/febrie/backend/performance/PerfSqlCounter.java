@@ -20,11 +20,11 @@ public final class PerfSqlCounter implements Interceptor {
         counters.computeIfAbsent(id, ignored -> new LongAdder()).increment();
         return invocation.proceed();
     }
-    Map<String, Long> snapshot() {
+    public Map<String, Long> snapshot() {
         Map<String, Long> result = new TreeMap<>();
         counters.forEach((id, count) -> result.put(id, count.sum())); return result;
     }
-    Map<String, Long> delta(Map<String, Long> before) {
+    public Map<String, Long> delta(Map<String, Long> before) {
         Map<String, Long> result = new TreeMap<>();
         snapshot().forEach((id, count) -> {
             long difference = count - before.getOrDefault(id, 0L);
