@@ -14,6 +14,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.amqp.core.*;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -47,7 +48,7 @@ class LikeApplicationRestartTests {
         try{
             var first=start(true);var second=start(true);
             for(var app:List.of(first,second)){
-                var listener=app.getBean("likeListener", SimpleMessageListenerContainer.class);
+                var listener=app.getBean("likeListener", LikeListenerGroup.class);
                 assertTrue(listener.isAutoStartup());assertTrue(listener.isRunning());
                 assertEquals(Integer.toString(epoch),app.getBean(LikeVersionAllocator.class).status().get(0));
             }
@@ -72,11 +73,12 @@ class LikeApplicationRestartTests {
         }finally{
             // 只清本次随机队列与账号；所有监听停止后才删除关系，避免迟到消费重新插入。
             var active=applications.stream().filter(ConfigurableApplicationContext::isActive).toList();
-            for(var app:active){app.getBeansOfType(SimpleMessageListenerContainer.class).values().forEach(SimpleMessageListenerContainer::stop);}
+            for(var app:active){app.getBeansOfType(LikeListenerGroup.class).values().forEach(LikeListenerGroup::stop);
+                app.getBeansOfType(SimpleMessageListenerContainer.class).values().forEach(SimpleMessageListenerContainer::stop);}
             if(!active.isEmpty()){
                 var app=active.getLast();var jdbc=app.getBean(JdbcTemplate.class);var p=app.getBean(LikeProperties.class);
                 var admin=app.getBean(AmqpAdmin.class);
-                admin.deleteQueue(p.name("command.q"));admin.deleteQueue(p.name("dead.q"));
+                new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(p).queues().forEach(admin::deleteQueue);admin.deleteQueue(p.name("dead.q"));
                 admin.deleteExchange(p.name("command.x"));admin.deleteExchange(p.name("dead.x"));
                 var search=app.getBean(com.febrie.backend.article.search.infrastructure.config.SearchProperties.class);
                 admin.deleteQueue(search.name("work.q"));admin.deleteQueue(search.name("dead.q"));

@@ -25,7 +25,9 @@ class LikePublisherTests {
     LikePublisherTests() {
         when(rabbit.getConnectionFactory()).thenReturn(factory);
         doReturn(mock(Connection.class)).when(factory).createConnection();
-        publisher = new LikePublisher(rabbit, properties(), mock(LikeCodec.class), mock(LikeTelemetry.class));
+        var codec = mock(LikeCodec.class);
+        when(codec.decode(any())).thenReturn(LikeSqlServiceTests.command(true, 10));
+        publisher = new LikePublisher(rabbit, properties(), codec, mock(LikeTelemetry.class));
     }
 
     @Test void ackIsNotSuccessWhenMessageWasReturned() {
@@ -58,6 +60,6 @@ class LikePublisherTests {
 
     static LikeProperties properties() {
         return new LikeProperties("ec:test:unit:like", Duration.ofMillis(20),
-                128, 2, 20, 67108864, 60, 4, Duration.ofMillis(300), "none", -1, 0,20,java.time.Duration.ofMillis(100));
+                128,4, 20, 67108864, 60, 4, Duration.ofMillis(300), "none", -1, 0,20,java.time.Duration.ofMillis(100));
     }
 }

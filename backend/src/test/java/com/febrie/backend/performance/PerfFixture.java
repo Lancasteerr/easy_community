@@ -15,6 +15,7 @@ import java.net.http.*;
 import java.time.*;
 import java.util.*;
 import org.springframework.amqp.core.AmqpAdmin;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -97,7 +98,7 @@ final class PerfFixture implements AutoCloseable {
             app.getBean("articleIndexRelayScheduler", ThreadPoolTaskScheduler.class).shutdown();
             app.getBean("articleRankScheduler", ThreadPoolTaskScheduler.class).shutdown();
             app.getBean("articleIndexListener", SimpleMessageListenerContainer.class).stop();
-            app.getBean("likeListener", SimpleMessageListenerContainer.class).stop();
+            app.getBean("likeListener", LikeListenerGroup.class).stop();
             // 删除顺序遵守外键；文章范围由本轮随机账号限定，绝不清空整个库。
             for (long user : users) {
                 for (String table : List.of("article_outbox", "article_view_stat", "article_like_state", "article_like_count")) {
@@ -118,7 +119,7 @@ final class PerfFixture implements AutoCloseable {
             admin.deleteQueue(search.name("work.q")); admin.deleteQueue(search.name("dead.q"));
             admin.deleteExchange(search.name("change.x")); admin.deleteExchange(search.name("dead.x"));
             var like = app.getBean(LikeProperties.class);
-            admin.deleteQueue(like.name("command.q")); admin.deleteQueue(like.name("dead.q"));
+            new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(like).queues().forEach(admin::deleteQueue); admin.deleteQueue(like.name("dead.q"));
             admin.deleteExchange(like.name("command.x")); admin.deleteExchange(like.name("dead.x"));
             app.getBean(co.elastic.clients.elasticsearch.ElasticsearchClient.class).indices().delete(d -> d.index(indexName).ignoreUnavailable(true));
         } finally { http.close(); app.close(); }

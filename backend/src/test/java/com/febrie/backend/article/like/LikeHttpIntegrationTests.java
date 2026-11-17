@@ -32,6 +32,7 @@ import org.springframework.amqp.core.*;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.beans.factory.annotation.*;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -73,7 +74,7 @@ class LikeHttpIntegrationTests {
     @Autowired StringRedisTemplate redis;
     @Autowired AmqpAdmin admin;
     @Autowired @Qualifier("likeRabbitTemplate") RabbitTemplate rabbit;
-    @Autowired @Qualifier("likeListener") SimpleMessageListenerContainer listener;
+    @Autowired @Qualifier("likeListener") LikeListenerGroup listener;
     @MockitoBean UploadStorage storage;
     @MockitoSpyBean LikeCache cache;
     @MockitoSpyBean LikeReader reader;
@@ -101,7 +102,7 @@ class LikeHttpIntegrationTests {
 
     @BeforeEach void seed()throws Exception{
         reset(cache,reader,publisher,likes);
-        var maintenance=new LikeProperties(properties.namespace(),properties.confirmTimeout(),128,2,20,4096,60,4,Duration.ofSeconds(2),"none",-1,0,20,java.time.Duration.ofMillis(100));
+        var maintenance=new LikeProperties(properties.namespace(),properties.confirmTimeout(),128,4,20,4096,60,4,Duration.ofSeconds(2),"none",-1,0,20,java.time.Duration.ofMillis(100));
         int epoch=jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1",Integer.class);
         new LikeRecoveryService(dataSource,allocator,maintenance).recover(epoch);
         if(hash==null){hash=encoder.encode(PASSWORD);}
@@ -113,7 +114,7 @@ class LikeHttpIntegrationTests {
     @AfterEach void clean(){
         listener.stop();reset(cache,reader,publisher,likes);
         // 队列属于本类随机命名空间；清理前先停消费者，防止测试数据删后又被旧命令插入。
-        admin.purgeQueue(properties.name("command.q"),false);admin.purgeQueue(properties.name("dead.q"),false);
+        new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(properties).queues().forEach(q -> admin.purgeQueue(q, false));admin.purgeQueue(properties.name("dead.q"),false);
         jdbc.update("DELETE FROM article_like_state WHERE article_id=?",article);
         jdbc.update("DELETE FROM article_like_count WHERE article_id=?",article);
         jdbc.update("DELETE FROM article WHERE id=?",article);
@@ -121,7 +122,7 @@ class LikeHttpIntegrationTests {
         users.clear();browsers.forEach(Browser::close);browsers.clear();
     }
     @AfterAll void cleanupNamespace(){
-        admin.deleteQueue(properties.name("command.q"));admin.deleteQueue(properties.name("dead.q"));
+        new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(properties).queues().forEach(admin::deleteQueue);admin.deleteQueue(properties.name("dead.q"));
         admin.deleteExchange(properties.name("command.x"));admin.deleteExchange(properties.name("dead.x"));
         try(var keys=redis.scan(ScanOptions.scanOptions().match(PREFIX+":*").count(100).build())){while(keys.hasNext()){redis.delete(keys.next());}}
     }
@@ -225,13 +226,13 @@ class LikeHttpIntegrationTests {
         nativeFactory.setUsername(System.getenv("IT_RABBITMQ_USERNAME"));nativeFactory.setPassword(System.getenv("IT_RABBITMQ_PASSWORD"));nativeFactory.setVirtualHost(System.getenv("IT_RABBITMQ_VHOST"));
         try(var connection=nativeFactory.newConnection()){
             var channel=connection.createChannel();
-            var delivery=channel.basicGet(properties.name("command.q"),false);assertNotNull(delivery);
+            var delivery=channel.basicGet(commandQueue(),false);assertNotNull(delivery);
             sql.apply(codec.decode(delivery.getBody()));
             // 真实关闭连接而不ACK，Broker必须重新投递已经提交的同一版本。
             channel.abort();
         }
         listener.start();committed(command.number(),true,1);
-        await().atMost(Duration.ofSeconds(10)).until(()->admin.getQueueInfo(properties.name("command.q")).getMessageCount()==0);
+        await().atMost(Duration.ofSeconds(10)).until(()->admin.getQueueInfo(commandQueue()).getMessageCount()==0);
         assertEquals(1L,likes.counts(List.of(article)).get(article));
     }
 
@@ -258,7 +259,7 @@ class LikeHttpIntegrationTests {
         String executable=java.nio.file.Path.of(System.getProperty("java.home"),"bin",System.getProperty("os.name").startsWith("Windows")?"java.exe":"java").toString();
         List<String> args=new ArrayList<>(List.of(executable));
         String temporary=System.getProperty("jdk.net.unixdomain.tmpdir");if(temporary!=null){args.add("-Djdk.net.unixdomain.tmpdir="+temporary);}
-        args.addAll(List.of("-cp",System.getProperty("surefire.test.class.path",System.getProperty("java.class.path")),LikeCrashProcess.class.getName(),properties.name("command.q"),PREFIX));
+        args.addAll(List.of("-cp",System.getProperty("surefire.test.class.path",System.getProperty("java.class.path")),LikeCrashProcess.class.getName(),commandQueue(),PREFIX));
         var output=java.nio.file.Path.of("target","like-crash-child.log").toFile();
         var process=new ProcessBuilder(args).redirectErrorStream(true).redirectOutput(output).start();
         try{assertTrue(process.waitFor(40,TimeUnit.SECONDS));assertEquals(0,process.exitValue(),"检查like-crash-child.log");}
@@ -272,20 +273,20 @@ class LikeHttpIntegrationTests {
         assertEquals("17772",System.getenv("IT_RABBITMQ_PORT"));listener.stop();
         var command=command(true);publisher.publish(command);
         LikeTestContainers.restart("easy-community-like-it-rabbitmq-1");
-        await().ignoreExceptions().atMost(Duration.ofSeconds(30)).until(()->admin.getQueueInfo(properties.name("command.q")).getMessageCount()==1);
+        await().ignoreExceptions().atMost(Duration.ofSeconds(30)).until(()->admin.getQueueInfo(commandQueue()).getMessageCount()==1);
         listener.start();committed(command.number(),true,1);
     }
 
     @Test void deadLetterMissingOrFullRetainsMessagesAndReplayFailureKeepsOriginal()throws Exception{
         admin.deleteQueue(properties.name("dead.q"));
-        publisher.publish(raw("invalid-one"));
+        publishRaw(raw("invalid-one"));
         var parked=new Queue(properties.name("dead.q"),true,false,false,Map.of("x-queue-type","quorum","x-quorum-initial-group-size",1,"x-overflow","reject-publish","x-max-length-bytes",4096L,"x-delivery-limit",-1));
         admin.declareQueue(parked);admin.declareBinding(BindingBuilder.bind(parked).to(new DirectExchange(properties.name("dead.x"))).with("article.like.dead"));
         await().atMost(Duration.ofSeconds(65)).until(()->admin.getQueueInfo(properties.name("dead.q")).getMessageCount()==1);
         assertEquals("invalid-one",new String(Objects.requireNonNull(rabbit.receive(properties.name("dead.q"))).getBody(),java.nio.charset.StandardCharsets.UTF_8));
-        publisher.publish(raw("x".repeat(4096)));
+        publishRaw(raw("x".repeat(4096)));
         await().atMost(Duration.ofSeconds(15)).until(()->admin.getQueueInfo(properties.name("dead.q")).getMessageCount()==1);
-        publisher.publish(raw("second"));
+        publishRaw(raw("second"));
         assertEquals(4096,Objects.requireNonNull(rabbit.receive(properties.name("dead.q"))).getBody().length);
         await().atMost(Duration.ofSeconds(65)).until(()->admin.getQueueInfo(properties.name("dead.q")).getMessageCount()==1);
         assertEquals("second",new String(Objects.requireNonNull(rabbit.receive(properties.name("dead.q"))).getBody(),java.nio.charset.StandardCharsets.UTF_8));
@@ -299,7 +300,7 @@ class LikeHttpIntegrationTests {
     }
 
     @Test void returnedMessagesAreNotAcceptedAndMetricsStayOnManagementPort()throws Exception{
-        var binding=new Binding(properties.name("command.q"),Binding.DestinationType.QUEUE,properties.name("command.x"),"article.like.set",Map.of());
+        var binding=new Binding(commandQueue(),Binding.DestinationType.QUEUE,properties.name("command.x"),new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(properties).routingKey(new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(properties).partition(article)),Map.of());
         admin.removeBinding(binding);
         try{
             var response=owner.call("PUT",path(),null,true,UUID.randomUUID().toString());
@@ -310,6 +311,19 @@ class LikeHttpIntegrationTests {
             assertEquals(200,local.statusCode(),local.body());assertTrue(local.body().contains("article_like"));
             assertNotEquals(200,owner.call("GET","/actuator/prometheus",null,false,null).statusCode());
         }
+    }
+
+    /** 非法消息只在测试中直接注入，生产发布器必须能解析文章后再路由。 */
+    private void publishRaw(Message message) throws Exception {
+        var route = new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(properties);
+        var correlation = new CorrelationData();
+        rabbit.send(properties.name("command.x"), route.routingKey(route.partition(article)), message, correlation);
+        assertTrue(correlation.getFuture().get(3, TimeUnit.SECONDS).ack());
+        assertNull(correlation.getReturned());
+    }
+    private String commandQueue() {
+        var route = new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(properties);
+        return route.queue(route.partition(article));
     }
 
     LikeCommand command(boolean liked){return new LikeCommand(1,UUID.randomUUID().toString(),owner.user,article,liked,Long.toString(allocator.next()),Instant.now());}

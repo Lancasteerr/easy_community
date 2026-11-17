@@ -21,16 +21,22 @@ public class LikePublisher {
     private final LikeCodec codec;
     private final LikeTelemetry telemetry;
     private final Semaphore pending;
+    private final LikePartitionRouter router;
     public LikePublisher(@Qualifier("likeRabbitTemplate") RabbitTemplate rabbit, LikeProperties properties,
                          LikeCodec codec, LikeTelemetry telemetry) {
         this.rabbit = rabbit; this.properties = properties; this.codec = codec; this.telemetry = telemetry;
         this.pending = new Semaphore(properties.pendingLimit());
+        this.router = new LikePartitionRouter(properties);
     }
 
-    public void publish(LikeCommand command) { publish(message(command)); }
+    public void publish(LikeCommand command) { send(message(command), command.articleId()); }
 
     /** 死信重放保留原始body和messageId；仅更换投递目标，不重新分配版本。 */
     public void publish(Message message) {
+        send(message, codec.decode(message.getBody()).articleId());
+    }
+
+    private void send(Message message, long articleId) {
         if (!pending.tryAcquire()) { throw LikeErrors.publishUnavailable(); }
         long started = System.nanoTime();
         try {
@@ -39,7 +45,7 @@ public class LikePublisher {
             catch (RuntimeException error) { telemetry.event("publish", "unavailable"); throw LikeErrors.publishUnavailable(); }
             var correlation = new CorrelationData();
             try {
-                rabbit.send(properties.name("command.x"), "article.like.set", message, correlation);
+                rabbit.send(properties.name("command.x"), router.routingKey(router.partition(articleId)), message, correlation);
                 var confirm = correlation.getFuture().get(properties.confirmTimeout().toMillis(), TimeUnit.MILLISECONDS);
                 if (correlation.getReturned() != null) { telemetry.event("publish", "returned"); throw LikeErrors.rejected(); }
                 if (!confirm.ack()) { telemetry.event("publish", "nack"); throw LikeErrors.unknown(); }

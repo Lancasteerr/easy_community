@@ -25,6 +25,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.*;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.beans.factory.annotation.*;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -88,8 +89,8 @@ class SearchFlowIntegrationTests {
     @Autowired JdbcTemplate jdbc;
     @Autowired HikariDataSource source;
     @Autowired com.febrie.backend.article.view.application.ArticleViewFlush viewFlush;
-    @Autowired @Qualifier("articleIndexListener") SimpleMessageListenerContainer listener;
-    @Autowired @Qualifier("likeListener") SimpleMessageListenerContainer likeListener;
+    @Autowired @Qualifier("articleIndexListener") LikeListenerGroup listener;
+    @Autowired @Qualifier("likeListener") LikeListenerGroup likeListener;
     @Autowired @Qualifier("articleIndexRelayScheduler") ThreadPoolTaskScheduler relayScheduler;
     @MockitoSpyBean ArticleReader cardReader;
     @MockitoBean UploadStorage storage;
@@ -122,7 +123,7 @@ class SearchFlowIntegrationTests {
         admin.deleteExchange(p.name("change.x")); admin.deleteExchange(p.name("dead.x"));
         // 同一上下文的点赞拓扑也属于本次随机命名空间。
         var like = getLikeProperties();
-        admin.deleteQueue(like.name("command.q")); admin.deleteQueue(like.name("dead.q"));
+        new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(like).queues().forEach(admin::deleteQueue); admin.deleteQueue(like.name("dead.q"));
         admin.deleteExchange(like.name("command.x")); admin.deleteExchange(like.name("dead.x"));
         for (String target : extraIndices) { fixture.es.indices().delete(d -> d.index(target).ignoreUnavailable(true)); }
         fixture.close(); http.close(); authenticated.close();

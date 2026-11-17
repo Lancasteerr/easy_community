@@ -20,6 +20,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.beans.factory.annotation.*;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -65,7 +66,7 @@ class SearchAuthorHttpIntegrationTests {
     @Autowired ConnectionFactory connectionFactory;
     @Autowired com.febrie.backend.article.like.infrastructure.config.LikeProperties likes;
     @Autowired @Qualifier("articleIndexListener") SimpleMessageListenerContainer indexListener;
-    @Autowired @Qualifier("likeListener") SimpleMessageListenerContainer likeListener;
+    @Autowired @Qualifier("likeListener") LikeListenerGroup likeListener;
     @Autowired @Qualifier("articleIndexRelayScheduler") ThreadPoolTaskScheduler relay;
     @MockitoSpyBean ArticleViewService views;
     @MockitoBean UploadStorage storage;
@@ -206,7 +207,7 @@ class SearchAuthorHttpIntegrationTests {
         var admin = new RabbitAdmin(connectionFactory);
         admin.deleteQueue(properties.name("work.q")); admin.deleteQueue(properties.name("dead.q"));
         admin.deleteExchange(properties.name("change.x")); admin.deleteExchange(properties.name("dead.x"));
-        admin.deleteQueue(likes.name("command.q")); admin.deleteQueue(likes.name("dead.q"));
+        new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(likes).queues().forEach(admin::deleteQueue); admin.deleteQueue(likes.name("dead.q"));
         admin.deleteExchange(likes.name("command.x")); admin.deleteExchange(likes.name("dead.x"));
         fixture.close();
     }

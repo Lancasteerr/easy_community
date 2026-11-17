@@ -21,6 +21,7 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.amqp.core.AmqpAdmin;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -57,7 +58,7 @@ class LikeCapacityTests {
             var first = start();
             jdbc = first.getBean(JdbcTemplate.class); mapper = first.getBean(ObjectMapper.class);
             var properties = first.getBean(LikeProperties.class); namespace = properties.namespace();
-            var maintenance = new LikeProperties(namespace, Duration.ofSeconds(2), 128, 2, 20,
+            var maintenance = new LikeProperties(namespace, Duration.ofSeconds(2), 128,4, 20,
                     67108864, 100000, 4, Duration.ofMillis(300), "none", -1, 0,20,java.time.Duration.ofMillis(100));
             int epoch = jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1", Integer.class);
             first.getBean(LikeRecoveryService.class); // 确认实际应用装配了同一维护服务。
@@ -90,10 +91,10 @@ class LikeCapacityTests {
                 if (selected.contains("mixed")) { measurements.add(stage("mixed", 60, seconds)); }
                 await().atMost(Duration.ofSeconds(60)).until(() -> { samplePending(); return pending.isEmpty(); });
                 if (selected.contains("backlog")) {
-                    for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).stop(); }
+                    for (var app : applications) { app.getBean("likeListener", LikeListenerGroup.class).stop(); }
                     measurements.add(stage("backlog", 60, Math.min(5, seconds)));
                     long resumed = System.nanoTime();
-                    for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).start(); }
+                    for (var app : applications) { app.getBean("likeListener", LikeListenerGroup.class).start(); }
                     await().atMost(Duration.ofSeconds(60)).until(() -> { samplePending(); return pending.isEmpty(); });
                     measurements.add(Map.of("scenario", "backlog_recovery", "milliseconds", (System.nanoTime() - resumed) / 1_000_000));
                 }
@@ -240,12 +241,12 @@ class LikeCapacityTests {
     }
     private void cleanup() {
         clients.forEach(Client::close);
-        for (var app : applications) { app.getBean("likeListener", SimpleMessageListenerContainer.class).stop(); }
+        for (var app : applications) { app.getBean("likeListener", LikeListenerGroup.class).stop(); }
         if (!applications.isEmpty()) {
             var app = applications.getFirst();
             if (namespace != null) {
                 var p = app.getBean(LikeProperties.class); var admin = app.getBean(AmqpAdmin.class);
-                admin.deleteQueue(p.name("command.q")); admin.deleteQueue(p.name("dead.q"));
+                new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(p).queues().forEach(admin::deleteQueue); admin.deleteQueue(p.name("dead.q"));
                 admin.deleteExchange(p.name("command.x")); admin.deleteExchange(p.name("dead.x"));
                 var redis = app.getBean(StringRedisTemplate.class);
                 try (var keys = redis.scan(ScanOptions.scanOptions().match(prefix + ":*").count(100).build())) { while (keys.hasNext()) { redis.delete(keys.next()); } }
