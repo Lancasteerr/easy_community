@@ -2,7 +2,7 @@
 
 > Windows 命令中的 `JAVA_SOCKET_TMPDIR` 需由运行者预先设置为本机可用的短ASCII绝对路径，并确保目录已创建；其他平台可省略该JVM参数。此环境变量仅用于展开本文命令，不是应用配置。
 
-点赞是项目固定功能。正常Web应用启动即提供点赞读写并消费MQ，不需要启用开关。本文适用于单节点MySQL、Redis、RabbitMQ及多个应用实例，不提供节点级容灾或自动故障恢复。
+点赞是项目固定功能。正常Web应用启动即提供点赞读写并启动全部分区监听组，不需要启用开关。本文适用于单节点MySQL、Redis、RabbitMQ及多个应用实例，不提供节点级容灾或自动故障恢复。
 
 ## 1. 操作原则和入口控制
 
@@ -80,11 +80,26 @@ $env:RABBITMQ_VHOST = 'easy_community_dev'
 ./infra/dev/like-topology.ps1 -Namespace ec:dev:like -ManagementUrl http://127.0.0.1:15672 -VerifyOnly
 ```
 
-上述脚本从仓库根目录执行；从backend目录执行时路径改为`../infra/dev/like-topology.ps1`。两条命令均应退出0。脚本不删除消息，核验持久Direct Exchange、Quorum队列、绑定、工作队列delivery-limit=20、可靠死信、reject-publish、DLQ无限投递、容量及无过期配置。应用声明参数必须与脚本一致。
+上述脚本从仓库根目录执行；从backend目录执行时路径改为`../infra/dev/like-topology.ps1`。两条命令均应退出0。脚本不删除消息，核验持久Direct Exchange、Quorum队列、绑定、各分区Single Active Consumer、delivery-limit=20、可靠死信、reject-publish、DLQ无限投递、容量及无过期配置。应用声明参数必须与脚本一致。
 
 4. 读取SQL epoch，设置`$expectedEpoch`，执行recover。初始化PAUSED后条件激活READY，随后status必须退出0。失败不开放入口，也不手动补齐或清零签发Key。
 5. 启动业务实例，外部入口继续关闭。正常Web实例自动消费，无需再设启用参数。
 6. 完成本节末尾的开放检查后人工开放外部服务。
+
+## 4.1 从已排空的旧单队列直接切换
+
+前提是旧队列ready/unacked为零且全部后端实例已经停止。使用相同命名空间和现有签发器，不执行recover，不重置纪元或序号。先构建并完成轻量测试，再执行：
+
+```powershell
+./infra/dev/like-topology.ps1 -Namespace ec:dev:like -PartitionCount 4 -RetireLegacyBinding
+./infra/dev/like-topology.ps1 -Namespace ec:dev:like -PartitionCount 4 -VerifyOnly
+```
+
+脚本先声明并核验新分区的Quorum、单活及可靠死信参数，再检查旧队列没有消息或消费者，移除旧article.like.set绑定。旧空队列、共享dead.q及其中消息全部保留，不自动重放。VerifyOnly不会修改任何绑定。
+
+应用的LIKE_PARTITION_COUNT、脚本PartitionCount、所有发布及重放实例必须一致，旧app.like.concurrency需移除。启动新版后端后，通过管理API检查每分区仅一个active消费者，确认ready/unacked归零和轻量命令落库一致；注册消费者数不等于活跃消费者数。默认配置为4分区、每批20条、100ms收集等待、每分区prefetch20，不建立跨批次缓冲。
+
+后续分区数量或哈希算法变化仍按拓扑迁移处理，不允许混跑。普通重启沿用当前分区数即可。
 
 ## 5. 重启与宕机场景
 
@@ -101,7 +116,7 @@ $env:RABBITMQ_VHOST = 'easy_community_dev'
 | MySQL重启且持久数据完整 | SQL回源和消费失败；已有缓存不证明数据健康 | 否 | 关闭入口，修复数据库，检查消费、重试与DLQ；故障持续可停止全部应用避免反复重试 | 提交未知经重投裁决；恢复后检查积压并有限量重放 |
 | RabbitMQ重启且持久数据完整 | 发布失败或未知，消费暂时中断 | 否 | 关闭入口，恢复同一Broker数据，VerifyOnly核验拓扑，确认重连和消费 | 已确认消息保留；非确认请求可能已入队，不无限重发 |
 
-关闭入口时允许继续消费，是为了完成已经受理的命令；这不要求在依赖长期故障时维持重试。SQL错误同次投递最多5次事务尝试，退避1/2/4/8秒，耗尽进入DLQ。需要暂停时停止进程，关闭端口本身不会暂停它。
+关闭入口时允许继续消费，是为了完成已经受理的命令；这不要求在依赖长期故障时维持重试。SQL错误每文章组最多5次事务尝试，退避1/2/4/8秒，耗尽进入DLQ。需要暂停时停止进程，关闭端口本身不会暂停它。
 
 本地正常停止整个服务时，按“停止接收新请求 → 等待在途发布完成及工作队列ready/unacked归零 → 停止全部应用 → 正常关闭并持久化依赖”的顺序操作；有死信时先确认原因并保留消息。MQ排空只说明命令处理完成，不证明Redis序号已刷盘，还须确认Redis正常关闭且持久化成功。等待失败、被强制结束或无法确认关闭结果时，按异常宕机处理。
 
@@ -124,7 +139,7 @@ $env:RABBITMQ_VHOST = 'easy_community_dev'
 
 触发条件：积压持续增加、发布拒绝、重试增多、DLQ非空或转发受阻。服务影响：SQL展示落后，队列满时新发布不保证成功。仅这些情况不提升纪元。
 
-1. 关闭或限制入口，检查MySQL锁等待/连接、Broker磁盘和队列容量、消费者状态。默认工作队列及DLQ各64MiB，不能通过无限扩容掩盖消费故障。
+1. 关闭或限制入口，检查MySQL锁等待/连接、Broker磁盘和队列容量、消费者状态。默认4个分区队列及共享DLQ各64MiB，容量按每队列计算，不能通过无限扩容掩盖消费故障。
 2. 如果不能继续安全消费，停止应用；修复依赖后重新启动，外部入口仍保持关闭。DLQ缺失或已满时，at-least-once死信转发会保留待转发消息，不能先ACK后另行复制。
 3. 核验DLQ安全参数和绑定；仅在暂时错误原因消除后，执行有限量replay。保留原body、version、messageId及时间，确认重新发布后才ACK原死信。
 4. 重放确认超时或断连时，保留原消息并按未知处理，后续重复由SQL裁决。格式错误、同版本状态冲突、计数不变量错误保持隔离并检查原因，不重新编号绕过错误。

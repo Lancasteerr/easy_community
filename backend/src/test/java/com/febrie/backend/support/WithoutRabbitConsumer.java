@@ -2,7 +2,6 @@ package com.febrie.backend.support;
 
 import java.lang.annotation.*;
 import com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup;
-import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 

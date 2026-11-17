@@ -3,10 +3,16 @@ param(
     [switch]$Load,
     [switch]$Faults,
     [switch]$Verify,
+    [switch]$Light,
     [switch]$Redis72
 )
 # 所有依赖仅属于easy-community-like-it项目，禁止指向开发库或共享vhost。
 $ErrorActionPreference = 'Stop'
+if ($Light) {
+    if ($Load -or $Faults -or $Verify -or $Redis72) { throw '轻量测试不能混用容量、故障、全量验证或兼容模式' }
+    # 明确选择用例，避免Like*Tests意外启动HTTP闭环和应用重启测试。
+    $Tests = 'LikeCodecTests,LikeBatchReducerTests,LikeSqlServiceTests,LikePartitionRouterTests,LikePropertiesTests,LikePublisherTests,LikeConsumerTests,LikeCacheTests,LikeRuntimeModeTests,LikeMysqlIntegrationTests,LikePartitionMessagingIntegrationTests'
+}
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $backendPath = Join-Path $repoRoot 'backend'
 $targetPath = Join-Path $backendPath 'target'

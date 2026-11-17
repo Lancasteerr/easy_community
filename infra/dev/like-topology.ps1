@@ -76,19 +76,19 @@ foreach ($item in $items) {
 if ($RetireLegacyBinding) {
     # 直接切换只移除旧路由，不删除旧队列或死信；存在在途处理时拒绝操作。
     $legacyName = $prefix + 'command.q'
-    $queues = @(Invoke-LikeManagement GET "queues/$encodedVhost")
+    $queues = Invoke-LikeManagement GET "queues/$encodedVhost"
     $legacy = $queues | Where-Object { $_.name -eq $legacyName }
     if ($legacy) {
         if ($legacy.messages -ne 0 -or $legacy.messages_ready -ne 0 -or $legacy.messages_unacknowledged -ne 0 -or $legacy.consumers -ne 0) {
             throw '旧队列仍有消息或消费者，不能直接切换'
         }
         $encodedLegacy = [uri]::EscapeDataString($legacyName)
-        $bindings = @(Invoke-LikeManagement GET "queues/$encodedVhost/$encodedLegacy/bindings")
+        $bindings = Invoke-LikeManagement GET "queues/$encodedVhost/$encodedLegacy/bindings"
         foreach ($binding in $bindings | Where-Object { $_.source -eq $exchange -and $_.routing_key -eq 'article.like.set' }) {
             $bindingKey = [uri]::EscapeDataString($binding.properties_key)
             Invoke-LikeManagement DELETE "bindings/$encodedVhost/e/$([uri]::EscapeDataString($exchange))/q/$encodedLegacy/$bindingKey" | Out-Null
         }
-        $remaining = @(Invoke-LikeManagement GET "queues/$encodedVhost/$encodedLegacy/bindings")
+        $remaining = Invoke-LikeManagement GET "queues/$encodedVhost/$encodedLegacy/bindings"
         if ($remaining | Where-Object { $_.source -eq $exchange -and $_.routing_key -eq 'article.like.set' }) { throw '旧绑定仍然存在' }
     }
 }

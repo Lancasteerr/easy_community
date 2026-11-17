@@ -45,14 +45,48 @@ SQL迁移为`V5__create_article_like.sql`，会为公开和隐藏的已有文章
 | LIKE_PER_MINUTE | 每用户每分钟60次，仍叠加现有认证入口限流 |
 | LIKE_CONFIRM_TIMEOUT | 2s，只是确认等待预算，不是完整HTTP延迟承诺 |
 | app.like.pending-limit | 128 / 实例，超限在发送前拒绝 |
-| app.like.concurrency / prefetch | 2 / 20；两个应用实例共有4个消费者 |
-| app.like.queue-bytes | 工作队列和DLQ各64MiB；脚本QueueBytes需保持一致 |
+| LIKE_PARTITION_COUNT / app.like.partition-count | 固定4分区，全部实例和重放命令必须一致；取值1至64 |
+| LIKE_BATCH_SIZE / app.like.batch-size | 每批最多20条，单篇文章组自然不超过此值 |
+| LIKE_BATCH_WAIT / app.like.batch-wait | 100ms，同时设置接收等待和整体收集等待，不是端到端提交时限 |
+| LIKE_PREFETCH / app.like.prefetch | 每分区20条，不得小于批大小 |
+| app.like.queue-bytes | 每个分区及共享DLQ各64MiB，默认配置合计320MiB的队列正文预算；不含在途投递与Broker额外开销；脚本QueueBytes需保持一致 |
 | app.like.read-concurrency / read-timeout | 每实例4个在途回源任务 / 300ms等待预算 |
 | MANAGEMENT_PORT | 18081，本机管理端口；第二实例必须改成其他端口 |
 
 上述`app.like.*`均可通过Spring命令行属性覆盖。普通应用重启不初始化分配器或提升纪元。分配器Key无TTL，展示缓存单独位于`<namespace>:cache:v1:*`，不要通过修改namespace来清理缓存。
 
 `ALLOCATE`和`CHECK`验证Key类型、持久性、合法epoch/seq、guard纪元一致、runId非空、READY状态及可写主节点，不要求guard.runId等于当前Redis运行标识。旧runId保留初始化记录，正常Redis重启后seq继续递增，status及健康检查不消耗序号。初始化新纪元必须先暂停；激活仍要求guard、当前Redis及维护目标运行标识一致，防止迟到激活。
+
+## 分区聚合消费
+
+发布与死信重放统一使用 `floorMod(Long.hashCode(articleId), partitionCount)`，经持久Direct Exchange进入 `command.p{n}.q`，路由键为 `article.like.set.p{n}`。每队列配置Quorum和Single Active Consumer；每实例注册独立串行监听容器，多个实例提供备用消费者，全系统最多4个活跃分区消费者。活跃分区不保证均匀分布到实例。
+
+```mermaid
+flowchart TD
+    P[发布或死信重放] --> H[articleId固定哈希]
+    H --> Q[多个分区队列：每分区单活]
+    Q --> B[有界混合批次：最多20条]
+    B --> G[按文章首次出现顺序分组]
+    G --> R[关系保留最高版本；冲突关系隔离]
+    R --> T[独立文章事务：有序关系锁与版本裁决]
+    T --> C[汇总净增量；校验计数基线；最多一次计数更新]
+    C --> S[提交并释放本组锁]
+    S --> K[尽力维护关系缓存；文章计数缓存只失效一次]
+    K --> A[逐条ACK本组全部合法原消息]
+    A --> N{还有文章组}
+    N -->|是| G
+    N -->|否| B
+```
+
+同一关系任意同版本出现不同状态，会隔离该关系在本批内的全部消息，包括被更高版本覆盖的消息。合法关系在事务中按userId升序初始化、锁定并裁决；取消保留墓碑。净增量为零仍保存版本并锁定校验计数基线，计数缺行、下溢或溢出整组回滚。事务保持READ COMMITTED、5秒超时，不访问Redis/MQ。
+
+每文章组最多尝试5次，退避1/2/4/8秒；重试耗尽或SQL不变量错误只隔离当前组，下一文章继续。缓存使用数据库裁决结果，STALE跳过，APPLIED/DUPLICATE逐关系尽力CAS，一条失败不阻止其余，最后对文章计数缓存删除一次。缓存失败仍ACK已提交消息。ACK/NACK始终multiple=false；确认失败或中断关闭Channel，让Broker重新投递剩余消息，版本幂等负责消除重复计数。
+
+删除旧 `app.like.concurrency` 配置。分区数或算法变化必须停实例切换，不允许新旧规则混跑。固定分区减少同文章消费者竞争，但不能拆分单篇热点，同分区慢组重试仍会延迟其他文章。
+
+## 轻量验证
+
+仓库根目录执行 `./infra/test/run-like-tests.ps1 -Light`。入口明确选择聚合、路由、消费、缓存和配置单测，以及真实MySQL文章事务、同JVM RabbitMQ连接接管测试；不启动HTTP闭环、应用重启、容器故障或容量实验。相关旧测试仍需通过test-compile，容量实验保留显式Load入口。
 
 ## 部署、重启和故障运维
 
@@ -103,8 +137,8 @@ Redis7.2兼容实例使用17778端口；历史验证覆盖7.2和7.4的Lua INFO�
 
 容量JSON输出到`backend/target/like-capacity.json`，记录认证在内的HTTP延迟、响应分类、接受后待提交数量、SQL锁等待及对账结果。每个用户客户端串行，两个应用实例共享Session、签发器和队列。热读预热后测量，冷读从清除本实验展示缓存开始；不会清理签发器。
 
-指标标签只包含固定动作和结果，禁止用用户/文章ID作为标签。Broker队列深度和磁盘、MySQL锁等待使用原生监控；队头时间不可用时明确标记未知。消费者排队年龄是投递采样，不冒充全队列最老消息年龄。
+指标标签只包含固定动作、结果及有限分区编号，禁止用用户/文章ID作为标签。新增article.like.batch.size、article.like.group.size、article.like.coalesced、article.like.group.duration及article.like.partition.events，SQL耗时不含退避。Broker队列深度和磁盘、MySQL锁等待使用原生监控；队头时间不可用时明确标记未知。消费者排队年龄是投递采样，不冒充全队列最老消息年龄。
 
-历史双实例容量实验使用本机共享资源、MySQL tmpfs 和每阶梯30秒的短窗口：120 QPS写入待提交量基本稳定，240 QPS出现积压。该结果不代表当前版本复测或生产SLA。正式环境必须使用目标硬件、持久磁盘和长窗口重新验证，确认入口限额、队列预算及消费者配置；保持外部入口关闭直到人工验收完成。
+历史报告对应逐条消费实现，不能作为新版聚合消费者的性能结论。历史双实例容量实验使用本机共享资源、MySQL tmpfs 和每阶梯30秒的短窗口：120 QPS写入待提交量基本稳定，240 QPS出现积压。该结果不代表当前版本复测或生产SLA。正式环境必须使用目标硬件、持久磁盘和长窗口重新验证，确认入口限额、队列预算及消费者配置；保持外部入口关闭直到人工验收完成。
 
 历史验证曾取得无测试方法排除项的完整回归通过，不代表当前版本已重新执行。当前版本应按本节命令分别记录通过、跳过和真实依赖验收范围，不沿用历史媒体测试排除项。
