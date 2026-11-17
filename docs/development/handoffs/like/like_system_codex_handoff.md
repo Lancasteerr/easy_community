@@ -2,7 +2,7 @@
 
 > 实施补充（优先于下文示意代码）：已确认只交付本仓库后端，单节点依赖并验证多实例；人工停写恢复；不做HTTP去重、Redis乐观计数、消费批处理或计数分片。点赞为固定功能，不设置模块/写入/消费启用开关。关闭外部入口后允许后台消费；恢复纪元前必须停止全部业务实例。详细接口见 [like-system-implementation.md](../../../public/guides/like/zh-CN/like-system-implementation.md)，重启、宕机及人工开放流程见 [like-system-operations.md](../../../public/operations/like/zh-CN/like-system-operations.md)。
 >
-> 同版本不同状态必须隔离，不能被 `<=` 分支吞掉；关系初始化不使用 `INSERT IGNORE`。状态Hash固定600秒、计数缓存固定30秒，不滑动续期。STALE消息不得用原消息回写缓存。分配器增加绑定Redis运行标识的guard，重启后必须人工提升纪元。202只说明已可靠入队；HTTP结果未知不表示未执行。
+> 同版本不同状态必须隔离，不能被 `<=` 分支吞掉；关系初始化不使用 `INSERT IGNORE`。状态Hash固定600秒、计数缓存固定30秒，不滑动续期。STALE消息不得用原消息回写缓存。guard保留初始化时的Redis运行标识，正常关闭并持久化后重启不因此拒签；异常宕机或无法确认序号完整性时，须在业务实例启动前人工提升纪元。202只说明已可靠入队；HTTP结果未知不表示未执行。
 
 > 目标：交给 Codex 按阶段实施。栈：Spring Boot、MySQL、Redis 7.2、独立 RabbitMQ。本文约定取代此前“Redis Streams / MQ 消费时从 Redis 读取目标状态 / 每次操作留一条历史 / SQL 分片计数 / Redis 总数定时覆盖 SQL”的方案。
 
@@ -56,7 +56,10 @@ INSERT INTO like_version_epoch (id, epoch) VALUES (1, 0);
 - `epoch` 持久存于 `like_version_epoch`；`seq` 由 Redis 原子 `INCR like:version:seq` 生成；Redis 同时存 `like:version:epoch`。
 - Java 组合：`version = ((long) epoch << 43) | seq`，约束 `0 <= epoch < 2^20`、`1 <= seq < 2^43`，始终为正的 Java long。版本顺序先比较 epoch，再比较 seq，相当于直接比较单个 version。
 - 用 Redis Lua 在**同一次调用**检查 `epoch`、`seq` 两个 key 都存在且合法，再 `INCR`，返回 epoch 和 seq；若任一缺失，**拒绝签发**，不能隐式将 seq 重置为 1。
-- 实际实现同时检查无TTL的guard：纪元、READY状态与当前Redis `run_id`必须匹配；Redis进程重启即拒签，完整恢复的旧key也不能绕过停写。初始化seq=0合法，正式签发seq必须大于0。
+- 实际实现同时检查三个Key的类型、无TTL、合法epoch/seq、guard纪元一致、runId非空、READY状态及可写主节点。正常Redis重启允许guard保留旧`run_id`，不自动覆盖维护记录；初始化seq=0合法，正式签发seq必须大于0。CHECK和status不消耗序号。
+- 新纪元初始化必须先暂停，运行标识变化不能绕过暂停要求；激活必须同时匹配guard运行标识、当前Redis进程和维护目标，拒绝迟到维护请求。
+- 正常停机顺序：停止新请求 → 等待在途发布和消费完成 → 停止应用 → 正常关闭并持久化依赖。MQ排空不能替代Redis刷盘确认；正常重启沿用原epoch并继续递增seq。
+- 保持现有AOF配置，不增加每次签发的WAITAOF等待。Redis异常退出、整机断电或无法确认序号完整性时，须在业务实例启动前恢复纪元；仅应用崩溃而Redis始终正常时无须提升纪元。health/status不能证明历史序号未回退，即使ready=true也不能跳过异常恢复；应用不会自动区分停机原因或阻止此类提前写入。旧备份回滚仍按专项恢复处理。
 - 这两个 key 不设置 TTL，禁止缓存淘汰策略把它们驱逐；故障切换可能回滚 Redis 序号时也必须触发恢复流程。
 - 恢复流程（管理操作）：关闭/阻塞所有点赞版本签发 → 协调唯一恢复执行者 → MySQL `epoch=epoch+1` 提交 → 用新 epoch 初始化 Redis `epoch/seq=0` → 确认所有 API 实例只从当前分配器领取版本 → 放开写入。**Spring 实例普通重启不得自动各自增加 epoch**。
 - 对发布确认尚未返回的旧版本消息，恢复后即使到达也不会覆盖新纪元消息；消费端按 DB version 判断。
@@ -141,7 +144,7 @@ public ApplyResult apply(LikeCommand m) {
 | `like:count:{articleId}` | String | 点赞总数 | 列表/详情总数，`MGET` 批量读 | 例如 30 秒 TTL，丢失从 SQL 计数表回源 |
 | `like:version:epoch` | String | 当前纪元 | 版本分配 | **不允许静默丢失/回退** |
 | `like:version:seq` | String | 当前纪元序号 | Redis INCR | **不允许静默丢失/回退** |
-| `like:version:guard` | Hash | epoch、runId、state | 运行标识和停写栅栏 | 无TTL；仅受控维护初始化 |
+| `like:version:guard` | Hash | epoch、runId、state | 维护运行标识记录和停写状态；正常重启允许旧runId | 无TTL；仅受控维护初始化 |
 
 ### 用户状态更新（Lua CAS）
 

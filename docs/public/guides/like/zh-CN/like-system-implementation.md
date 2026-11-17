@@ -6,8 +6,8 @@
 
 - 后端闭环，文章详情和作者列表追加 `likeCount`、`likedByMe`；不修改其他工作区前端，不新增公开批量查询。
 - 每关系一行状态和最高版本，取消保留墓碑；关系与精确计数同事务。没有历史表、Outbox、计数分片和HTTP请求去重。
-- 单节点依赖，验证两个应用实例；故障停写后人工恢复纪元，已有消息继续消费。
-- Redis只是展示缓存；前端乐观计数，Redis不做INCR。状态固定600秒、计数固定30秒，不滑动续期。
+- 单节点依赖，验证两个应用实例；Redis正常关闭并持久化后重启沿用原纪元，异常宕机后在业务实例启动前人工恢复纪元，已有消息按版本裁决。
+- Redis中的点赞状态和计数只是展示缓存，签发器则是持久数据；前端乐观计数，Redis展示计数不做INCR。状态固定600秒、计数固定30秒，不滑动续期。
 - 点赞缓存失败回源SQL；没有可靠数据时整个接口503，不能伪造零或未点赞。
 
 ## 接口约定
@@ -21,7 +21,7 @@
 | 参数或UUID非法 | 400 / INVALID_LIKE_REQUEST |
 | 文章不存在或隐藏 | 404 / ARTICLE_NOT_FOUND |
 | 频率超限 | 429 / RATE_LIMITED，附Retry-After |
-| 分配器暂停、缺Key或运行标识变化 | 503 / LIKE_ALLOCATOR_UNAVAILABLE |
+| 分配器暂停、缺Key、异常TTL、纪元不一致或序号无效/耗尽 | 503 / LIKE_ALLOCATOR_UNAVAILABLE |
 | 明确未开始发布 | 503 / LIKE_PUBLISH_UNAVAILABLE |
 | 无路由 | 503 / LIKE_PUBLISH_REJECTED |
 | 发布后无法确认 | 503 / LIKE_WRITE_RESULT_UNKNOWN |
@@ -52,6 +52,8 @@ SQL迁移为`V5__create_article_like.sql`，会为公开和隐藏的已有文章
 
 上述`app.like.*`均可通过Spring命令行属性覆盖。普通应用重启不初始化分配器或提升纪元。分配器Key无TTL，展示缓存单独位于`<namespace>:cache:v1:*`，不要通过修改namespace来清理缓存。
 
+`ALLOCATE`和`CHECK`验证Key类型、持久性、合法epoch/seq、guard纪元一致、runId非空、READY状态及可写主节点，不要求guard.runId等于当前Redis运行标识。旧runId保留初始化记录，正常Redis重启后seq继续递增，status及健康检查不消耗序号。初始化新纪元必须先暂停；激活仍要求guard、当前Redis及维护目标运行标识一致，防止迟到激活。
+
 ## 部署、重启和故障运维
 
 完整操作步骤统一见[点赞运维手册](../../../operations/like/zh-CN/like-system-operations.md)，包括两个.env示例、AMQP与管理端口、首次初始化、普通应用重启、Redis/MySQL/RabbitMQ宕机、整机恢复、死信及数据回滚边界。
@@ -59,6 +61,10 @@ SQL迁移为`V5__create_article_like.sql`，会为公开和隐藏的已有文章
 正常Web应用自动提供点赞能力，不再读取旧模块、写入或消费开关。关闭外部端口时，后台消费者仍处理已受理命令；需要暂停消费时停止应用。纪元恢复前必须停止全部业务实例，恢复后在外部入口关闭期间完成本机验证，最后人工开放。
 
 普通应用启动不会自动初始化或提升纪元。分配器未就绪时写接口503且健康检查异常，但不停止消费者；不增加自动恢复、自动开网或状态修改HTTP接口。非Web维护命令不启动消费者、自动MQ拓扑或业务定时任务，只有replay显式连接MQ。
+
+本地正常停机按“停止新请求 → 等待在途发布和消费完成 → 停止应用 → 正常关闭并持久化依赖”执行；MQ排空不能替代Redis持久化确认。Redis异常退出、整机断电或无法确认序号完整性时，保持全部业务实例停止，先执行现有recover提升纪元，再检查并启动。仅应用崩溃而Redis始终正常且签发器有效时，无需提升纪元；缺Key、异常TTL、PAUSED等仍须受控恢复，旧备份回滚按专项恢复处理。
+
+保持现有AOF配置，不增加逐次WAITAOF等待。运行标识不用于自动区分正常关闭和意外宕机，health/status也无法检测历史序号回退；异常宕机后即使ready=true，仍必须先恢复纪元。这一安全边界依赖运维流程，不由应用自动阻止写入。
 
 ## 前端接入
 
@@ -69,6 +75,10 @@ operationId是追踪标识，同一个ID再次HTTP调用也会获得新版本。
 Redis Pending只是尽力展示；Hash丢失后旧回调可能短暂写回旧状态。固定600秒/30秒是单次缓存寿命，不是包含MQ积压、进程暂停或DLQ修复在内的全链路收敛时限。
 
 ## 自动化验证
+
+正常重启兼容逻辑可单独使用一个隔离临时Redis验证：设置`IT_REDIS=true`及对应的`IT_REDIS_HOST/PORT/PASSWORD`，在backend目录运行`mvn "-Dtest=LikeAllocatorIntegrationTests,LikeSqlServiceTests,LikeWriteServiceTests" test`。分配器测试仅操作随机命名空间，不需要MySQL、RabbitMQ或Web；不要将连接参数指向开发Redis。验证后清理临时Redis。
+
+2026-11-17本次修复的定向验证：临时Redis 7.4上23项真实Lua/分配器测试、4项SQL版本裁决单元测试及2项写服务单元测试全部通过，无失败或跳过。覆盖旧runId继续签发、只读健康检查、数据异常拒签、维护激活校验、回退后提升纪元及多实例并发唯一性；未执行真实Redis重启、MySQL/RabbitMQ集成、HTTP、压测或整机故障演练。原重启测试仅同步新预期并通过测试源码编译。
 
 ```powershell
 # 仅操作独立测试项目，首次自动创建随机凭证，保存在被Git忽略的backend/.env.like-it。
@@ -89,7 +99,7 @@ Redis Pending只是尽力展示；Hash丢失后旧回调可能短暂写回旧状
 
 同一个专用测试项目必须顺序执行，不能同时运行多个测试入口或旧版对照测试。Windows JDK25若本机临时目录导致`UnixDomainSockets Invalid argument`，执行实际JAR时也需在`-jar`前添加`"-Djdk.net.unixdomain.tmpdir=$env:JAVA_SOCKET_TMPDIR"`（换成已创建的本机短ASCII目录）；测试脚本已处理该参数。
 
-Redis7.2兼容实例使用17778端口；7.2和7.4均已验证Lua INFO、运行栅栏及19位字符串比较。分配器恢复用户需要INFO和CONFIG GET权限，应用用户至少需要脚本使用的INFO及相关Key读写权限；权限不足必须拒签。不要将测试凭证用于开发或生产。结束实验可使用相同Compose文件及`--env-file backend/.env.like-it --profile compatibility down -v`清理本测试项目。
+Redis7.2兼容实例使用17778端口；历史验证覆盖7.2和7.4的Lua INFO、维护校验及19位字符串比较，不代表当前版本已重新进行兼容验证。分配器恢复用户需要INFO和CONFIG GET权限，应用用户至少需要脚本使用的INFO及相关Key读写权限；权限不足必须拒签。不要将测试凭证用于开发或生产。结束实验可使用相同Compose文件及`--env-file backend/.env.like-it --profile compatibility down -v`清理本测试项目。
 
 容量JSON输出到`backend/target/like-capacity.json`，记录认证在内的HTTP延迟、响应分类、接受后待提交数量、SQL锁等待及对账结果。每个用户客户端串行，两个应用实例共享Session、签发器和队列。热读预热后测量，冷读从清除本实验展示缓存开始；不会清理签发器。
 
