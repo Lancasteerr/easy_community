@@ -74,11 +74,24 @@ public class LikeCache implements LikeProjection {
     @Override public void pending(LikeCommand command) {
         putStates(command.userId(), List.of(new LikeState(command.userId(), command.articleId(), command.desiredLiked(), command.number())), "P");
     }
-    @Override public void committed(LikeSqlService.Result result) {
-        if (result.status() == LikeSqlService.Status.STALE) { return; }
-        var state=result.state();
-        try { putStates(state.userId(), List.of(state), "C"); }
-        finally { redis.delete(countKey(state.articleId())); }
+    @Override public void committedArticle(LikeSqlService.ArticleResult article) {
+        var committed = article.results().stream().filter(r -> r.status() != LikeSqlService.Status.STALE).toList();
+        if (committed.isEmpty()) { return; }
+        RuntimeException failure = null;
+        // 不同用户的CAS相互独立，一个用户失败也继续维护剩余关系。
+        for (var result : committed) {
+            try { putStates(result.state().userId(), List.of(result.state()), "C"); }
+            catch (RuntimeException stateFailure) {
+                if (failure == null) { failure = stateFailure; }
+                else if (failure != stateFailure) { failure.addSuppressed(stateFailure); }
+            }
+        }
+        try { redis.delete(countKey(article.articleId())); }
+        catch (RuntimeException countFailure) {
+            if (failure == null) { failure = countFailure; }
+            else if (failure != countFailure) { failure.addSuppressed(countFailure); }
+        }
+        if (failure != null) { throw failure; }
     }
 
     private static LikeState decode(long user, long article, String raw) {

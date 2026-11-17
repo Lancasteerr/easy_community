@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
-import org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener;
+import org.springframework.amqp.rabbit.listener.api.ChannelAwareBatchMessageListener;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.context.SmartLifecycle;
@@ -20,8 +20,11 @@ public class LikeListenerGroup implements SmartLifecycle, InitializingBean, Disp
                              LikePartitionRouter router, LikeConsumer consumer) {
         autoStartup = !properties.maintaining();
         List<SimpleMessageListenerContainer> containers = new ArrayList<>();
-        for (String queue : router.queues()) {
+        for (int index = 0; index < properties.partitionCount(); index++) {
+            final int partition = index;
+            String queue = router.queue(partition);
             var listener = new SimpleMessageListenerContainer(factory);
+            listener.setBeanName("likePartition-" + partition);
             listener.setQueueNames(queue);
             listener.setAcknowledgeMode(AcknowledgeMode.MANUAL);
             listener.setConcurrentConsumers(1);
@@ -29,7 +32,12 @@ public class LikeListenerGroup implements SmartLifecycle, InitializingBean, Disp
             listener.setPrefetchCount(properties.prefetch());
             listener.setDefaultRequeueRejected(false);
             listener.setAutoStartup(false);
-            listener.setMessageListener((ChannelAwareMessageListener) consumer::consume);
+            listener.setConsumerBatchEnabled(true);
+            listener.setBatchSize(properties.batchSize());
+            listener.setReceiveTimeout(properties.batchWait().toMillis());
+            listener.setBatchReceiveTimeout(properties.batchWait().toMillis());
+            listener.setMessageListener((ChannelAwareBatchMessageListener)
+                    (messages, channel) -> consumer.consumeBatch(partition, messages, channel));
             containers.add(listener);
         }
         listeners = List.copyOf(containers);
