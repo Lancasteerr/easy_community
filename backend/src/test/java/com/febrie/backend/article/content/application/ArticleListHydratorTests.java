@@ -5,10 +5,13 @@ import com.febrie.backend.article.content.application.dto.LoadedArticle;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleCache;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleListCacheStore;
 import com.febrie.backend.shared.cache.CacheValue;
+import com.febrie.backend.shared.error.ApiException;
 
 import java.time.Instant;
 import java.util.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -112,7 +115,72 @@ class ArticleListHydratorTests {
         order.verify(lists).get(anyCollection());
         verify(reader, times(1)).lists(anyCollection());
     }
+
+    @Test void visibilityMissRechecksCacheUnderLockWithoutSql() {
+        when(lists.visibility(1)).thenReturn(CacheValue.State.MISS);
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss()), Map.of(1L, CacheValue.hit(view(1))));
+        when(cache.tryLock(1)).thenReturn("token");
+
+        assertTrue(hydrator.isPublic(1));
+
+        var order = inOrder(lists, cache);
+        order.verify(lists).get(anyCollection());
+        order.verify(cache).tryLock(1);
+        order.verify(lists).get(anyCollection());
+        order.verify(cache).release(1, "token");
+        verifyNoInteractions(reader);
+    }
+
+    @ParameterizedTest
+    @EnumSource(LoadedArticle.State.class)
+    void visibilityMissLoadsAndPublishesTheSqlResult(LoadedArticle.State state) {
+        when(lists.visibility(1)).thenReturn(CacheValue.State.MISS);
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss()));
+        when(cache.tryLock(1)).thenReturn("token");
+        when(reader.lists(List.of(1L))).thenReturn(Map.of(1L, switch (state) {
+            case PUBLIC -> LoadedArticle.visible(view(1));
+            case HIDDEN -> LoadedArticle.hidden();
+            case MISSING -> LoadedArticle.missing();
+        }));
+        when(cache.hide(1, "token")).thenReturn(true);
+        when(cache.missing(1, "token")).thenReturn(true);
+
+        assertEquals(state == LoadedArticle.State.PUBLIC, hydrator.isPublic(1));
+
+        verify(reader).lists(List.of(1L));
+        switch (state) {
+            case PUBLIC -> verify(lists).publish(1, "token", view(1));
+            case HIDDEN -> verify(cache).hide(1, "token");
+            case MISSING -> verify(cache).missing(1, "token");
+        }
+        verify(cache).release(1, "token");
+    }
+
+    @Test void visibilityLockContentionReturnsUnavailableWithoutSql() {
+        when(lists.visibility(1)).thenReturn(CacheValue.State.MISS);
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss()));
+
+        assertEquals("DEPENDENCY_UNAVAILABLE", assertThrows(ApiException.class, () -> hydrator.isPublic(1)).code());
+
+        verifyNoInteractions(reader);
+        verify(cache).record("contention_timeout");
+        verify(cache).record("visibility_failed");
+    }
+
+    @Test void visibilitySqlFailureReleasesLockAndReturnsUnavailable() {
+        when(lists.visibility(1)).thenReturn(CacheValue.State.MISS);
+        when(lists.get(anyCollection())).thenReturn(Map.of(1L, CacheValue.miss()));
+        when(cache.tryLock(1)).thenReturn("token");
+        when(reader.lists(List.of(1L))).thenThrow(new IllegalStateException("模拟回源失败"));
+
+        assertEquals("DEPENDENCY_UNAVAILABLE", assertThrows(ApiException.class, () -> hydrator.isPublic(1)).code());
+
+        verify(cache).release(1, "token");
+        verify(cache, never()).missing(anyLong(), anyString());
+    }
+
     @Test void publicColdReadsAreBoundedToFourWithoutLeakingSlots() throws Exception {
+        when(lists.visibility(5)).thenReturn(CacheValue.State.MISS);
         when(lists.get(anyCollection())).thenAnswer(call -> {
             Map<Long, CacheValue<ArticleBriefData>> values = new HashMap<>();
             for (long id : (Collection<Long>) call.getArgument(0)) { values.put(id, CacheValue.miss()); }
@@ -134,7 +202,9 @@ class ArticleListHydratorTests {
             }
             try {
                 assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
-                assertThrows(com.febrie.backend.shared.error.ApiException.class, () -> hydrator.publicCandidates(List.of(5L)));
+                // 点赞校验与批量列表使用同一组名额。
+                assertThrows(ApiException.class, () -> hydrator.isPublic(5L));
+                verify(cache).record("source_rejected");
             } finally { release.countDown(); }
             for (var future : futures) { future.get(5, java.util.concurrent.TimeUnit.SECONDS); }
         } finally { release.countDown(); }

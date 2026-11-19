@@ -48,6 +48,13 @@ public class ArticleCache {
         return result;
     }
     public String value(long id, String projection) { return redis.opsForValue().get(key(id, projection)); }
+
+    /** 同槽一次读取可见性相关键；墓碑优先，即使列表中残留旧投影也返回负缓存。 */
+    public String listValueUnlessHidden(long id) {
+        List<String> result = values(List.of(key(id, "hidden"), key(id, "list")));
+        return result.getFirst() == null ? result.get(1) : "M";
+    }
+
     public Map<Long, String> values(Collection<Long> ids, String projection) {
         List<Long> ordered = new ArrayList<>(ids);
         List<String> values = values(ordered.stream().map(id -> key(id, projection)).toList());

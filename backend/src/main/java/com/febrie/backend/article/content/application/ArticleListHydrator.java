@@ -6,6 +6,7 @@ import com.febrie.backend.article.content.application.dto.LoadedArticle;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleCache;
 import com.febrie.backend.article.content.infrastructure.cache.ArticleListCacheStore;
 import com.febrie.backend.shared.cache.CacheValue;
+import com.febrie.backend.shared.error.ApiException;
 
 import java.util.*;
 import com.febrie.backend.shared.cache.CacheProtocol;
@@ -24,6 +25,30 @@ public class ArticleListHydrator {
     private final java.util.concurrent.Semaphore sourceReads = new java.util.concurrent.Semaphore(4);
     public ArticleListHydrator(ArticleCache cache, ArticleListCacheStore lists, ArticleReader reader) {
         this.cache = cache; this.lists = lists; this.reader = reader;
+    }
+
+    /** 命中只读一次Redis；缺项与列表装配共享锁、回源名额和回填协议。 */
+    public boolean isPublic(long id) {
+        try {
+            var state = lists.visibility(id);
+            cache.record(switch (state) {
+                case HIT -> "visibility_hit";
+                case NEGATIVE -> "visibility_negative_hit";
+                case MISS -> "visibility_miss";
+            });
+            return switch (state) {
+                case HIT -> true;
+                case NEGATIVE -> false;
+                case MISS -> !publicCandidates(List.of(id)).isEmpty();
+            };
+        } catch (ApiException error) {
+            cache.record("visibility_failed");
+            throw error;
+        } catch (RuntimeException failure) {
+            cache.record("visibility_failed");
+            log.warn("文章可见性校验失败 articleId={} error={}", id, failure.getClass().getSimpleName());
+            throw ArticleErrors.unavailable();
+        }
     }
 
     private Assembly assemble(List<Long> ids) {
