@@ -1,5 +1,7 @@
 package com.febrie.backend.article.content.infrastructure.cache;
 
+import com.febrie.backend.article.content.application.ArticleCacheMaintenance;
+import com.febrie.backend.article.content.application.ArticleVisibilityRepairs;
 import com.febrie.backend.shared.cache.CacheValue;
 import com.febrie.backend.article.content.application.dto.ArticleDetailData;
 import com.febrie.backend.article.content.application.dto.ArticleBriefData;
@@ -109,6 +111,26 @@ class ArticleCacheIntegrationTests {
         assertThrows(RuntimeException.class, () -> cache.hide(1, token));
         assertFalse(cache.hidden(1));
         assertNull(redis.opsForValue().get(cache.key(1, "detail")));
+    }
+    @Test void visibilityRepairReplacesBothPublicProjectionsAndBlocksRefill() {
+        String token = cache.tryLock(1);
+        assertTrue(details.publish(1, token, detail()));
+        assertTrue(lists.publish(1, token, list()));
+        assertTrue(cache.unlock(1, token));
+
+        var repairs = mock(ArticleVisibilityRepairs.class);
+        var maintenance = new ArticleCacheMaintenance(cache, repairs);
+        assertTrue(maintenance.repairHidden(1));
+        verify(repairs).complete(1);
+        assertTrue(cache.hidden(1));
+        assertEquals(CacheValue.State.NEGATIVE, details.get(1).state());
+        assertEquals(CacheValue.State.NEGATIVE, lists.get(List.of(1L)).get(1L).state());
+
+        // 即使持有新租约，迟到的公开投影也无法覆盖隐藏结果。
+        String late = cache.tryLock(1);
+        assertFalse(details.publish(1, late, detail()));
+        assertFalse(lists.publish(1, late, list()));
+        assertTrue(cache.unlock(1, late));
     }
     @Test void offlineRebuildRequiresFreshNamespaceAndPersistsTombstones() {
         var articles = mock(ArticleRepository.class);

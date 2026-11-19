@@ -43,6 +43,7 @@ import static org.mockito.Mockito.*;
 class ArticleMysqlIntegrationTests {
     private static final String PREFIX = "ec:test:article:" + UUID.randomUUID();
     @Autowired ArticleCommitService commits;
+    @Autowired ArticleVisibilityRepairs visibilityRepairs;
     @Autowired ArticleService service;
     @Autowired ArticleReader reader;
     @Autowired ArticleQueryService queries;
@@ -114,6 +115,41 @@ class ArticleMysqlIntegrationTests {
         assertEquals(List.of(1L, 2L, 3L), jdbc.queryForList(
                 "SELECT meta_version FROM article_outbox WHERE article_id=? ORDER BY id", Long.class, id));
         assertEquals(3L, jdbc.queryForObject("SELECT meta_version FROM article WHERE id=?", Long.class, id));
+    }
+
+    @Test void hidingAndEnqueuingVisibilityRepairRollBackTogether() {
+        long id = commits.create(actor, content("rollback-hide", null), new ArticleCommitService.Attempt());
+        transaction.executeWithoutResult(status -> {
+            commits.hide(actor, id, new ArticleCommitService.Attempt());
+            assertTrue(articles.find(id).orElseThrow().hidden());
+            assertEquals(1, visibilityRepairCount(id));
+            status.setRollbackOnly();
+        });
+        assertFalse(articles.find(id).orElseThrow().hidden());
+        assertEquals(0, visibilityRepairCount(id));
+    }
+
+    @Test void duplicateHideKeepsOneRepairAndClaimBecomesAvailableAgain() {
+        long id = commits.create(actor, content("retry-hide", null), new ArticleCommitService.Attempt());
+        var stranger = new UserActor(actor.userId() + 100, Role.USER, 1);
+        assertThrows(ApiException.class, () -> commits.hide(stranger, id, new ArticleCommitService.Attempt()));
+        assertEquals(0, visibilityRepairCount(id));
+
+        commits.hide(actor, id, new ArticleCommitService.Attempt());
+        assertTrue(visibilityRepairs.claim().contains(id));
+        commits.hide(actor, id, new ArticleCommitService.Attempt());
+        assertEquals(1, visibilityRepairCount(id));
+        assertFalse(visibilityRepairs.claim().contains(id));
+
+        // 直接推进该待办的到期条件，避免以真实等待时间判断重试。
+        jdbc.update("UPDATE article_visibility_repair SET available_at=CURRENT_TIMESTAMP(3) WHERE article_id=?", id);
+        assertTrue(visibilityRepairs.claim().contains(id));
+        visibilityRepairs.complete(id);
+        assertEquals(0, visibilityRepairCount(id));
+    }
+
+    private int visibilityRepairCount(long id) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM article_visibility_repair WHERE article_id=?", Integer.class, id);
     }
 
     @Test void indexReaderKeepsMetadataAndTagsInSameSnapshot() throws Exception {

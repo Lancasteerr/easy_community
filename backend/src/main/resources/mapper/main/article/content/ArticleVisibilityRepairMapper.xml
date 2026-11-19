@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.febrie.backend.article.content.infrastructure.persistence.mapper.ArticleVisibilityRepairMapper">
+    <!-- 重复隐藏保留已有领取时间，避免打断正在执行的补写。 -->
+    <insert id="enqueue">
+        INSERT INTO article_visibility_repair(article_id) VALUES (#{articleId})
+        ON DUPLICATE KEY UPDATE article_id = #{articleId}
+    </insert>
+    <select id="available" resultType="long">
+        SELECT article_id FROM article_visibility_repair
+        WHERE available_at &lt;= CURRENT_TIMESTAMP(3)
+        ORDER BY available_at, article_id LIMIT 10 FOR UPDATE SKIP LOCKED
+    </select>
+    <update id="defer">
+        UPDATE article_visibility_repair SET available_at = DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 5 SECOND)
+        WHERE article_id IN
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    </update>
+    <delete id="complete">
+        DELETE FROM article_visibility_repair WHERE article_id = #{articleId}
+    </delete>
+</mapper>

@@ -19,6 +19,9 @@
     <delete id="deleteOutboxForAuthor">
         DELETE o FROM article_outbox o JOIN article a ON a.id=o.article_id WHERE a.author_id=#{author}
     </delete>
+    <delete id="deleteVisibilityRepairsForAuthor">
+        DELETE r FROM article_visibility_repair r JOIN article a ON a.id=r.article_id WHERE a.author_id=#{author}
+    </delete>
     <delete id="deleteArticleRowsForAuthor">DELETE FROM article WHERE author_id = #{author}</delete>
     <delete id="deleteTag">DELETE FROM tag WHERE id = #{id}</delete>
     <update id="lockWaitSeconds">SET SESSION innodb_lock_wait_timeout = #{seconds}</update>

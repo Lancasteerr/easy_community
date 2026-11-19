@@ -9,12 +9,14 @@ public interface ArticleFixtureMapper {
     int deleteLikeStatesForAuthor(@Param("author") long author);
     int deleteLikeCountsForAuthor(@Param("author") long author);
     int deleteTagsForAuthor(@Param("author") long author);
-    /** 先清本次作者的事务事件，避免测试遗留事件进入后续Relay用例。 */
+    /** 先清本次作者的事务待办，避免测试遗留数据进入后续领取用例。 */
     default int deleteArticlesForAuthor(long author) {
         deleteOutboxForAuthor(author);
+        deleteVisibilityRepairsForAuthor(author);
         return deleteArticleRowsForAuthor(author);
     }
     int deleteOutboxForAuthor(@Param("author") long author);
+    int deleteVisibilityRepairsForAuthor(@Param("author") long author);
     int deleteArticleRowsForAuthor(@Param("author") long author);
     int deleteTag(@Param("id") long id);
     void lockWaitSeconds(@Param("seconds") int seconds);

@@ -18,10 +18,15 @@ import org.springframework.transaction.support.*;
 public class ArticleCommitService {
     private final ArticleRepository articles;
     private final MediaReferenceService references;
+    private final ArticleVisibilityRepairs visibilityRepairs;
     private final Clock clock;
 
-    public ArticleCommitService(ArticleRepository articles, MediaReferenceService references, Clock clock) {
-        this.articles = articles; this.references = references; this.clock = clock;
+    public ArticleCommitService(ArticleRepository articles, MediaReferenceService references,
+                                ArticleVisibilityRepairs visibilityRepairs, Clock clock) {
+        this.articles = articles;
+        this.references = references;
+        this.visibilityRepairs = visibilityRepairs;
+        this.clock = clock;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -61,6 +66,7 @@ public class ArticleCommitService {
             articles.hide(id, clock.instant().truncatedTo(ChronoUnit.MILLIS));
             articles.recordIndexEvent(id, true);
         }
+        visibilityRepairs.enqueue(id);
         attempt.id = id;
         attempt.bodyCompleted = true;
     }
