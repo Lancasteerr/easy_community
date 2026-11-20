@@ -9,6 +9,7 @@ import com.febrie.backend.shared.error.ApiException;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -179,7 +180,7 @@ class ArticleListHydratorTests {
         verify(cache, never()).missing(anyLong(), anyString());
     }
 
-    @Test void publicColdReadsAreBoundedToFourWithoutLeakingSlots() throws Exception {
+    @Test void visibilityMissCanLoadWhileFourOtherArticlesAreLoading() throws Exception {
         when(lists.visibility(5)).thenReturn(CacheValue.State.MISS);
         when(lists.get(anyCollection())).thenAnswer(call -> {
             Map<Long, CacheValue<ArticleBriefData>> values = new HashMap<>();
@@ -187,28 +188,27 @@ class ArticleListHydratorTests {
             return values;
         });
         when(cache.tryLock(anyLong())).thenReturn("token");
-        var entered = new java.util.concurrent.CountDownLatch(4);
-        var release = new java.util.concurrent.CountDownLatch(1);
+        var entered = new CountDownLatch(5);
+        var release = new CountDownLatch(1);
         when(reader.lists(anyCollection())).thenAnswer(call -> {
             entered.countDown();
-            if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) { throw new IllegalStateException("回源释放超时"); }
+            assertTrue(release.await(10, TimeUnit.SECONDS), "回源释放超时");
             long id = ((Collection<Long>) call.getArgument(0)).iterator().next();
             return Map.of(id, LoadedArticle.visible(view(id)));
         });
-        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(4)) {
-            var futures = new ArrayList<java.util.concurrent.Future<?>>();
-            for (long id = 1; id <= 4; id++) {
-                long candidate = id; futures.add(executor.submit(() -> hydrator.publicCandidates(List.of(candidate))));
-            }
+        try (var executor = Executors.newFixedThreadPool(5)) {
+            var futures = new ArrayList<Future<Boolean>>();
             try {
-                assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
-                // 点赞校验与批量列表使用同一组名额。
-                assertThrows(ApiException.class, () -> hydrator.isPublic(5L));
-                verify(cache).record("source_rejected");
+                for (long id = 1; id <= 4; id++) {
+                    long candidate = id;
+                    futures.add(executor.submit(() -> hydrator.publicCandidates(List.of(candidate)).equals(List.of(view(candidate)))));
+                }
+                futures.add(executor.submit(() -> hydrator.isPublic(5L)));
+                // 前四个列表请求尚未完成时，点赞校验也必须能进入读取。
+                assertTrue(entered.await(5, TimeUnit.SECONDS));
             } finally { release.countDown(); }
-            for (var future : futures) { future.get(5, java.util.concurrent.TimeUnit.SECONDS); }
-        } finally { release.countDown(); }
-        assertEquals(1, hydrator.publicCandidates(List.of(6L)).size());
+            for (var future : futures) { assertTrue(future.get(5, TimeUnit.SECONDS)); }
+        }
     }
     private static ArticleBriefData view(long id) {
         return new ArticleBriefData(Long.toString(id), "title", "9", "summary", null, List.of(), Instant.EPOCH, Instant.EPOCH);

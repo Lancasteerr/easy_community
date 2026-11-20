@@ -22,12 +22,11 @@ public class ArticleListHydrator {
     private final ArticleCache cache;
     private final ArticleListCacheStore lists;
     private final ArticleReader reader;
-    private final java.util.concurrent.Semaphore sourceReads = new java.util.concurrent.Semaphore(4);
     public ArticleListHydrator(ArticleCache cache, ArticleListCacheStore lists, ArticleReader reader) {
         this.cache = cache; this.lists = lists; this.reader = reader;
     }
 
-    /** 命中只读一次Redis；缺项与列表装配共享锁、回源名额和回填协议。 */
+    /** 命中只读一次Redis；缺项与列表装配共享文章锁和回填协议。 */
     public boolean isPublic(long id) {
         try {
             var state = lists.visibility(id);
@@ -63,7 +62,6 @@ public class ArticleListHydrator {
             }
 
             if (misses.isEmpty()) { break; }
-            if (!sourceReads.tryAcquire()) { cache.record("source_rejected"); throw ArticleErrors.unavailable(); }
             Map<Long, String> held = new LinkedHashMap<>();
             try {
                 // 所有锁仅非阻塞尝试，不能持有A锁阻塞等待B锁。
@@ -74,7 +72,6 @@ public class ArticleListHydrator {
                 if (!held.isEmpty()) { loadLocked(held, assembly); }
             } finally {
                 held.forEach(cache::release);
-                sourceReads.release();
             }
             if (!assembly.pending.isEmpty() && !CacheProtocol.awaitRetry(deadline)) {
                 cache.record("contention_timeout");

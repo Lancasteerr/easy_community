@@ -99,31 +99,35 @@ class UserBasicQueryServiceTests {
         verify(cache, never()).missing(anyLong(), anyString());
     }
 
-    @Test void limitsSourcesBeforeCompetingForAnotherLockAndRecoversSlots() throws Exception {
+    @Test void fiveDifferentColdProfilesCanLoadConcurrently() throws Exception {
         when(cache.get(anyCollection())).thenAnswer(call -> {
             long id = ((Collection<Long>) call.getArgument(0)).iterator().next();
             return Map.of(id, CacheValue.miss());
         });
         when(cache.tryLock(anyLong())).thenReturn("token");
         when(cache.publish(anyLong(), anyString(), any())).thenReturn(true);
-        var entered = new CountDownLatch(4); var proceed = new CountDownLatch(1);
+        var entered = new CountDownLatch(5);
+        var proceed = new CountDownLatch(1);
         when(reader.load(anyCollection())).thenAnswer(call -> {
             entered.countDown();
-            if (!proceed.await(5, TimeUnit.SECONDS)) { throw new IllegalStateException("测试等待超时"); }
+            assertTrue(proceed.await(10, TimeUnit.SECONDS), "用户回源释放超时");
             long id = ((Collection<Long>) call.getArgument(0)).iterator().next();
             return Map.of(id, user(id));
         });
-        try (var executor = Executors.newFixedThreadPool(4)) {
-            var futures = new ArrayList<Future<?>>();
-            for (long id = 1; id <= 4; id++) { long userId = id; futures.add(executor.submit(() -> service.get(userId))); }
+        try (var executor = Executors.newFixedThreadPool(5)) {
+            var futures = new ArrayList<Future<Optional<UserBasicData>>>();
             try {
+                for (long id = 1; id <= 5; id++) {
+                    long userId = id;
+                    futures.add(executor.submit(() -> service.get(userId)));
+                }
+                // 所有请求使用不同的用户锁，能够同时进入读取。
                 assertTrue(entered.await(5, TimeUnit.SECONDS));
-                assertThrows(ApiException.class, () -> service.get(5));
-                verify(cache, never()).tryLock(5);
             } finally { proceed.countDown(); }
-            for (var future : futures) { future.get(5, TimeUnit.SECONDS); }
-        } finally { proceed.countDown(); }
-        assertTrue(service.get(6).isPresent());
+            for (int index = 0; index < futures.size(); index++) {
+                assertEquals(Optional.of(user(index + 1)), futures.get(index).get(5, TimeUnit.SECONDS));
+            }
+        }
     }
 
     private static UserBasicData user(long id) { return new UserBasicData(id, "user" + id, null, "简介", Instant.EPOCH); }

@@ -12,7 +12,6 @@ import com.febrie.backend.shared.cache.CacheValue;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.shared.cache.CacheProtocol;
-import java.util.concurrent.Semaphore;
 import org.slf4j.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
@@ -26,7 +25,6 @@ public class ArticleQueryService {
     private final ArticleCache cache;
     private final ArticleDetailCacheStore details;
     private final ArticleDisplayAssembler display;
-    private final Semaphore sourceReads = new Semaphore(4);
     public ArticleQueryService(ArticleReader reader, ArticleCache cache, ArticleDetailCacheStore details, ArticleDisplayAssembler display) {
         this.reader = reader; this.cache = cache; this.details = details; this.display = display;
     }
@@ -54,15 +52,14 @@ public class ArticleQueryService {
             log.debug("文章详情缓存 articleId={} state={}", id, value.state());
             if (value.state() == CacheValue.State.NEGATIVE) { throw ArticleErrors.notFound(); }
             if (value.state() == CacheValue.State.HIT) { return visible(id, value.data()); }
-            if (!sourceReads.tryAcquire()) { cache.record("source_rejected"); throw ArticleErrors.unavailable(); }
-            String token = null;
+            String token = cache.tryLock(id);
             CacheValue<ArticleDetailData> checked = CacheValue.miss();
-            try {
-                token = cache.tryLock(id);
-                if (token != null) { checked = loadDetailLocked(id, token); }
-            } finally {
-                if (token != null) { cache.release(id, token); }
-                sourceReads.release();
+            if (token != null) {
+                try {
+                    checked = loadDetailLocked(id, token);
+                } finally {
+                    cache.release(id, token);
+                }
             }
             // 可见性检查和响应组装均在释放文章锁之后执行。
             if (checked.state() == CacheValue.State.NEGATIVE) { throw ArticleErrors.notFound(); }

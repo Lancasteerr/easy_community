@@ -5,7 +5,6 @@ import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.dto.UserBasicData;
 import com.febrie.backend.user.infrastructure.cache.UserBasicCacheStore;
 import java.util.*;
-import java.util.concurrent.Semaphore;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
@@ -17,7 +16,6 @@ public class UserBasicQueryService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserBasicQueryService.class);
     private final UserBasicReader reader;
     private final UserBasicCacheStore cache;
-    private final Semaphore sourceReads = new Semaphore(4);
     public UserBasicQueryService(UserBasicReader reader, UserBasicCacheStore cache) {
         this.reader = reader; this.cache = cache;
     }
@@ -45,10 +43,9 @@ public class UserBasicQueryService {
             var cached = cache.get(pending);
             for (long id : new ArrayList<>(pending)) { accept(id, cached.get(id), pending, result); }
             if (pending.isEmpty()) { return; }
-            // 必须先取得名额再竞争Redis锁，不能持锁等待数据库并发名额。
-            if (!sourceReads.tryAcquire()) { cache.record("source_rejected"); throw unavailable(); }
             Map<Long, String> held = new LinkedHashMap<>();
             try {
+                // 逐个尝试用户锁；没拿到的项在释放本轮锁后再重读。
                 for (long id : pending) {
                     String token = cache.tryLock(id);
                     if (token != null) { held.put(id, token); }
@@ -56,7 +53,6 @@ public class UserBasicQueryService {
                 if (!held.isEmpty()) { loadLocked(held, pending, result); }
             } finally {
                 held.forEach(cache::release);
-                sourceReads.release();
             }
             if (!pending.isEmpty() && !CacheProtocol.awaitRetry(deadline)) {
                 cache.record("contention_timeout"); throw unavailable();
