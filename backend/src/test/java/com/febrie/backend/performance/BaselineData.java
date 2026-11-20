@@ -25,7 +25,8 @@ final class BaselineData {
     }
     record Article(long id, long author, String title, String html, long tag, LocalDateTime published) { }
     record Query(String kind, String q, Long tagId, long articleId, boolean empty, boolean page) { }
-    record Workload(long seed, int articles, List<List<Long>> partitions, List<Query> queries) { }
+    record Partition(int first, int step, int count) { }
+    record Workload(long seed, int articles, List<Partition> partitions, List<Query> queries) { }
 
     private BaselineData() { }
 
@@ -42,10 +43,11 @@ final class BaselineData {
     }
 
     static Workload workload(Size size) {
-        var partitions = new ArrayList<List<Long>>();
-        for (int i = 0; i < PARTITIONS; i++) { partitions.add(new ArrayList<>()); }
-        for (long id = 1; id <= size.articles(); id++) {
-            partitions.get(Math.floorMod(Long.hashCode(id), PARTITIONS)).add(id);
+        var partitions = new ArrayList<Partition>();
+        // 种子 ID 为连续正整数，Long.hashCode 在该范围内等于 ID，按等差序列传给 k6。
+        for (int partition = 0; partition < PARTITIONS; partition++) {
+            int first = partition == 0 ? PARTITIONS : partition;
+            partitions.add(new Partition(first, PARTITIONS, (size.articles() - first) / PARTITIONS + 1));
         }
         return new Workload(SEED, size.articles(), partitions, List.of(
                 new Query("hot", TOPICS[0], null, 0, false, false),
@@ -75,6 +77,8 @@ final class BaselineData {
         }
         jdbc.execute("CREATE TABLE baseline_seed_like LIKE article_like_state");
         jdbc.execute("INSERT INTO baseline_seed_like SELECT * FROM article_like_state");
+        jdbc.execute("CREATE TABLE baseline_seed_count LIKE article_like_count");
+        jdbc.execute("INSERT INTO baseline_seed_count SELECT * FROM article_like_count");
         requireCount(jdbc, "SELECT COUNT(*) FROM users", size.users());
         requireCount(jdbc, "SELECT COUNT(*) FROM article", size.articles());
         requireCount(jdbc, "SELECT COUNT(*) FROM article_like_state", size.likes());
@@ -88,23 +92,21 @@ final class BaselineData {
 
     private static void insertArticles(JdbcTemplate jdbc, Size size, List<Long> ids) {
         jdbc.batchUpdate("""
-                INSERT INTO article(id,author_id,title,summary,content_json,content_html,created_at,updated_at,published_at)
-                VALUES (?,?,?,?,'{}',?,?,?,?)
+                INSERT INTO article(id,author_id,title,summary,content_json,content_html,tag_ids,created_at,updated_at,published_at)
+                VALUES (?,?,?,?,'{}',?,JSON_ARRAY(?),?,?,?)
                 """, ids, BATCH, (ps, id) -> {
             var item = article(size, id);
             ps.setLong(1, id); ps.setLong(2, item.author()); ps.setString(3, item.title());
-            ps.setString(4, item.title()); ps.setString(5, item.html());
-            for (int column = 6; column <= 8; column++) { ps.setObject(column, item.published()); }
-        });
-        jdbc.batchUpdate("INSERT INTO article_tag(article_id,tag_id) VALUES (?,?)", ids, BATCH, (ps, id) -> {
-            ps.setLong(1, id); ps.setLong(2, 1 + (id - 1) % TAGS);
+            ps.setString(4, item.title()); ps.setString(5, item.html()); ps.setLong(6, item.tag());
+            for (int column = 7; column <= 9; column++) { ps.setObject(column, item.published()); }
         });
         jdbc.batchUpdate("INSERT INTO article_like_count(article_id,like_count) VALUES (?,?)", ids, BATCH, (ps, id) -> {
-            ps.setLong(1, id); ps.setInt(2, size.likesPerArticle());
+            ps.setLong(1, id); ps.setInt(2, likesFor(size, id));
         });
         var relations = new ArrayList<long[]>();
         for (long id : ids) {
-            for (int offset = 0; offset < size.likesPerArticle(); offset++) {
+            int likes = likesFor(size, id);
+            for (int offset = 0; offset < likes; offset++) {
                 relations.add(new long[]{1 + (id * 31 + offset) % size.users(), id});
             }
         }
@@ -112,15 +114,25 @@ final class BaselineData {
                 relations, BATCH, (ps, pair) -> { ps.setLong(1, pair[0]); ps.setLong(2, pair[1]); });
     }
 
+    static int likesFor(Size size, long id) {
+        // 从长尾每篇转移一条关系给头部，保持总量不变，且每篇关系数不超过账号数。
+        int hot = Math.max(size.articles() / 100, Math.ceilDiv(size.articles(), size.users() - size.likesPerArticle() + 1));
+        int transferable = size.articles() - hot;
+        if (id > hot) { return size.likesPerArticle() - 1; }
+        return size.likesPerArticle() + transferable / hot + (id <= transferable % hot ? 1 : 0);
+    }
+
     /** 只归位上一档改动的关系和计数，避免每档重写整份快照。 */
-    static void restore(JdbcTemplate jdbc, Size size) {
+    static void restore(JdbcTemplate jdbc) {
         jdbc.execute("""
                 UPDATE article_like_state s JOIN baseline_seed_like seed USING(user_id,article_id)
                 SET s.version=seed.version, s.liked=seed.liked, s.updated_at=seed.updated_at WHERE s.version>0
                 """);
         jdbc.update("DELETE FROM article_like_state WHERE version>0");
-        jdbc.update("UPDATE article_like_count SET like_count=? WHERE like_count<>?",
-                size.likesPerArticle(), size.likesPerArticle());
+        jdbc.update("""
+                UPDATE article_like_count c JOIN baseline_seed_count seed USING(article_id)
+                SET c.like_count=seed.like_count WHERE c.like_count<>seed.like_count
+                """);
         jdbc.update("DELETE FROM article_view_stat");
         jdbc.update("UPDATE article SET view_count=0 WHERE view_count<>0");
     }
