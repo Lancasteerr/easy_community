@@ -32,7 +32,7 @@ class LikeRedisRestartTests {
         var config=new RedisStandaloneConfiguration("127.0.0.1",17779);config.setPassword(System.getenv("IT_REDIS_PASSWORD"));
         var factory=new LettuceConnectionFactory(config);factory.afterPropertiesSet();factory.start();
         var redis=new StringRedisTemplate(factory);
-        var p=new LikeProperties("ec:test:"+UUID.randomUUID()+":like",Duration.ofSeconds(2),128,4,20,67108864,60,4,Duration.ofMillis(300),"none",-1,0,20,java.time.Duration.ofMillis(100));
+        var p=new LikeProperties("ec:test:"+UUID.randomUUID()+":like",Duration.ofSeconds(2),128,4,20,67108864,60,Duration.ofMillis(300),"none",-1,0,20,java.time.Duration.ofMillis(100));
         var allocator=new LikeVersionAllocator(redis,p,mock(LikeTelemetry.class));
         try{
             String before=allocator.recoveryRuntime();allocator.initialize(1,before);allocator.activate(1,before);

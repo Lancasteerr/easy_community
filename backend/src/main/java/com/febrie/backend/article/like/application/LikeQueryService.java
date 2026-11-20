@@ -23,10 +23,10 @@ public class LikeQueryService implements DisposableBean {
     private final BatchReadGate<StateKey,LikeState> states;
     public LikeQueryService(LikeCache cache,LikeReader reader,LikeProperties properties,LikeTelemetry telemetry) {
         this.cache=cache; this.reader=reader; this.telemetry=telemetry;
-        executor=Executors.newFixedThreadPool(properties.readConcurrency(),Thread.ofPlatform().daemon(true).name("like-read-",0).factory());
-        var slots=new Semaphore(properties.readConcurrency());
-        counts=new BatchReadGate<>(executor,slots,properties.readTimeout());
-        states=new BatchReadGate<>(executor,slots,properties.readTimeout());
+        // 每个回源批次使用一个虚拟线程，实际 SQL 并发由数据源连接池控制。
+        executor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("like-read-", 0).factory());
+        counts = new BatchReadGate<>(executor, properties.readTimeout());
+        states = new BatchReadGate<>(executor, properties.readTimeout());
     }
     public Map<Long,Summary> summaries(Long user,Collection<Long> requested) {
         var ids=new LinkedHashSet<>(requested);
@@ -43,7 +43,7 @@ public class LikeQueryService implements DisposableBean {
                 telemetry.event("read","count_sql"); return reader.counts(keys);
             });
             totals.putAll(loadedCounts);
-            // 先取得共享SQL结果并释放回源名额；慢缓存回填不能把已知SQL结果变成回源超时。
+            // SQL 等待结束后再回填 Redis，慢回填不会触发 SQL 等待超时。
             if(!loadedCounts.isEmpty()){
                 try { cache.putCounts(loadedCounts); } catch (RuntimeException ignored) { telemetry.event("cache","fill_failure"); }
             }

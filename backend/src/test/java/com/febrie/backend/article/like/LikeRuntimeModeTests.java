@@ -17,7 +17,7 @@ class LikeRuntimeModeTests {
     @Test void nonWebContextKeepsMessagingDormantWithoutFeatureSwitches() {
         var factory=mock(ConnectionFactory.class);
         var properties=new LikeProperties("ec:test:mode:like",Duration.ofSeconds(2),128,4,20,
-                67108864,60,4,Duration.ofMillis(300),"none",-1,0,20,java.time.Duration.ofMillis(100));
+                67108864,60,Duration.ofMillis(300),"none",-1,0,20,java.time.Duration.ofMillis(100));
         new ApplicationContextRunner().withUserConfiguration(LikeRabbitConfiguration.class)
                 .withBean(LikeProperties.class,()->properties).withBean(ConnectionFactory.class,()->factory)
                 .run(context->{

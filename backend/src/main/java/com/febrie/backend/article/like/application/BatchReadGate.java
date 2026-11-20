@@ -9,9 +9,11 @@ import java.util.function.Function;
 public final class BatchReadGate<K,V> {
     private final ConcurrentMap<K,CompletableFuture<V>> flights = new ConcurrentHashMap<>();
     private final Executor executor;
-    private final Semaphore slots;
     private final Duration budget;
-    public BatchReadGate(Executor executor, Semaphore slots, Duration budget) { this.executor=executor; this.slots=slots; this.budget=budget; }
+    public BatchReadGate(Executor executor, Duration budget) {
+        this.executor = executor;
+        this.budget = budget;
+    }
 
     public Map<K,V> load(Collection<K> keys, Function<Collection<K>,Map<K,V>> loader) {
         long deadline=System.nanoTime()+budget.toNanos();
@@ -23,14 +25,12 @@ public final class BatchReadGate<K,V> {
             if (previous==null) { leaders.put(key,mine); }
         }
         if (!leaders.isEmpty()) {
-            if (!slots.tryAcquire()) { finish(leaders,null,LikeErrors.unavailable()); }
-            else {
-                try { executor.execute(() -> {
-                    try { finish(leaders,loader.apply(leaders.keySet()),null); }
-                    catch (Throwable failure) { finish(leaders,null,failure); }
-                    finally { slots.release(); }
-                }); } catch (RuntimeException rejected) { slots.release(); finish(leaders,null,rejected); }
-            }
+            try {
+                executor.execute(() -> {
+                    try { finish(leaders, loader.apply(leaders.keySet()), null); }
+                    catch (Throwable failure) { finish(leaders, null, failure); }
+                });
+            } catch (RuntimeException rejected) { finish(leaders, null, rejected); }
         }
         Map<K,V> result=new LinkedHashMap<>();
         try {
@@ -41,11 +41,12 @@ public final class BatchReadGate<K,V> {
     }
 
     private void finish(Map<K,CompletableFuture<V>> leaders,Map<K,V> values,Throwable failure) {
+        // SQL 已结束或任务提交失败，先清理整批键，再唤醒调用方，确保失败后可以立即重试。
+        leaders.forEach((key, future) -> flights.remove(key, future));
         for (var entry:leaders.entrySet()) {
             V value=values==null?null:values.get(entry.getKey());
             if (failure!=null || value==null) { entry.getValue().completeExceptionally(failure==null?LikeErrors.unavailable():failure); }
             else { entry.getValue().complete(value); }
-            flights.remove(entry.getKey(),entry.getValue());
         }
     }
 }

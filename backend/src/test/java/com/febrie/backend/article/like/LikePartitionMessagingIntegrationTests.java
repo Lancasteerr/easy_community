@@ -37,7 +37,7 @@ class LikePartitionMessagingIntegrationTests {
         String vhost = System.getenv("IT_RABBITMQ_VHOST");
         assertNotNull(vhost); assertTrue(vhost.contains("test"), "只允许专用测试vhost");
         properties = new LikeProperties("ec:test:partition:" + UUID.randomUUID() + ":like", Duration.ofSeconds(2),
-                128, 4, 20, 67108864, 60, 4, Duration.ofMillis(300), "none", -1, 0, 20, Duration.ofMillis(100));
+                128, 4, 20, 67108864, 60, Duration.ofMillis(300), "none", -1, 0, 20, Duration.ofMillis(100));
         router = new LikePartitionRouter(properties);
         var connection = connection();
         admin = new RabbitAdmin(connection);

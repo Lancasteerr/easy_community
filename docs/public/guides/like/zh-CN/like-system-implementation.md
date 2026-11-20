@@ -50,7 +50,7 @@ SQL迁移为`V5__create_article_like.sql`，会为公开和隐藏的已有文章
 | LIKE_BATCH_WAIT / app.like.batch-wait | 100ms，同时设置接收等待和整体收集等待，不是端到端提交时限 |
 | LIKE_PREFETCH / app.like.prefetch | 每分区20条，不得小于批大小 |
 | app.like.queue-bytes | 每个分区及共享DLQ各64MiB，默认配置合计320MiB的队列正文预算；不含在途投递与Broker额外开销；脚本QueueBytes需保持一致 |
-| app.like.read-concurrency / read-timeout | 每实例4个在途回源任务 / 300ms等待预算 |
+| app.like.read-timeout | 每次批量回源默认等待300ms，同键在途查询由请求共享，SQL 并发由数据源连接池控制 |
 | MANAGEMENT_PORT | 18081，本机管理端口；第二实例必须改成其他端口 |
 
 上述`app.like.*`均可通过Spring命令行属性覆盖。普通应用重启不初始化分配器或提升纪元。分配器Key无TTL，展示缓存单独位于`<namespace>:cache:v1:*`，不要通过修改namespace来清理缓存。
