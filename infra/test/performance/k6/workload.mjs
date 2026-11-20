@@ -36,16 +36,16 @@ export function detailArticle(count, random) {
   return hot + 1 + Math.floor(random() * (count - hot));
 }
 
-export function searchPath(query, cursor) {
-  const args = ['size=5'];
+export function searchPath(query, cursor, size = 5) {
+  const args = ['size=' + size];
   if (query.q) args.push('q=' + encodeURIComponent(query.q));
   if (query.tagId) args.push('tagId=' + query.tagId);
   if (cursor) args.push('cursor=' + encodeURIComponent(cursor));
   return '/api/articles/search?' + args.join('&');
 }
 
-export function validSearch(body, query, previous = []) {
-  if (!body || !Array.isArray(body.items) || body.items.length > 5 ||
+export function validSearch(body, query, previous = [], size = 5) {
+  if (!body || !Array.isArray(body.items) || body.items.length > size ||
       (body.nextCursor !== null && typeof body.nextCursor !== 'string')) return false;
   const ids = body.items.map(item => item.articleId);
   if (new Set(ids).size !== ids.length || ids.some(id => previous.includes(id))) return false;

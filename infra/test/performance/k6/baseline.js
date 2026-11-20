@@ -57,8 +57,8 @@ function send(name, method, path, session, validator, details = {}) {
 }
 
 function search(query, session, cursor, previous) {
-  const result = send(cursor ? 'search-page' : 'search-first', 'GET', searchPath(query, cursor), session,
-    body => validSearch(body, query, previous), { variant: query.kind });
+  const result = send(cursor ? 'search-page' : 'search-first', 'GET', searchPath(query, cursor, config.pageSize), session,
+    body => validSearch(body, query, previous, config.pageSize), { variant: query.kind });
   return result.ok ? result.body : null;
 }
 

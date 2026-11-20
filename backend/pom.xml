@@ -28,6 +28,8 @@
     </scm>
     <properties>
         <java.version>25</java.version>
+        <!-- 长时间压测使用独立构建目录，开发测试重编译时不会替换正在使用的类。 -->
+        <community.build.directory>${project.basedir}/target</community.build.directory>
         <!-- 统一 MyBatis-Plus 主组件与分页解析组件的版本，避免组件版本不一致。 -->
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <!-- 固定SDK版本，MinIO仅使用标准S3客户端和签名器，不引入第二套S3依赖。 -->
@@ -143,6 +145,7 @@
     </dependencies>
 
     <build>
+        <directory>${community.build.directory}</directory>
         <plugins>
             <!-- Java 25 需要显式声明注解处理器，版本沿用 Spring Boot 管理的 Lombok 版本。 -->
             <plugin>

@@ -4,10 +4,17 @@ param(
     [ValidateRange(1, 5)][int]$Rounds = 3,
     [ValidateSet('All', 'Core', 'Like')][string]$Suite = 'All',
     [string]$LikeRates = '60,120',
-    [switch]$CompareLikeHistory
+    [switch]$CompareLikeHistory,
+    [ValidateSet('Smoke', 'Standard', 'Exploration')][string]$Baseline,
+    [ValidateSet('All', 'Search', 'Detail', 'Like', 'Mixed')][string]$Scenario = 'All'
 )
 # 所有性能实验统一入口；仅使用resume-perf专用Compose与测试库，逐轮归档到target之外。
 $ErrorActionPreference = 'Stop'
+if ($Baseline -and ($CompareLikeHistory -or $PSBoundParameters.ContainsKey('Suite') -or
+        $PSBoundParameters.ContainsKey('LikeRates') -or $PSBoundParameters.ContainsKey('Seconds') -or
+        $PSBoundParameters.ContainsKey('Rounds'))) { throw '基线模式使用固定场景参数，请勿混用历史参数' }
+if (-not $Baseline -and $PSBoundParameters.ContainsKey('Scenario')) { throw 'Scenario 需要同时指定 Baseline' }
+if ($Baseline -eq 'Exploration' -and $Scenario -notin @('All', 'Like')) { throw '探索档包含 240 RPS 点赞场景' }
 if ($CompareLikeHistory -and ($Suite -ne 'Like' -or $LikeRates -ne '60,120')) { throw '历史对比仅支持Suite Like及60,120主阶梯；240探索固定追加' }
 if ($CompareLikeHistory -and -not (Get-Command python -ErrorAction SilentlyContinue)) { throw '历史对比需要Python及matplotlib' }
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -16,7 +23,9 @@ $artifactRoot = Join-Path $repoRoot 'artifacts/performance'
 $jvmDirectory = if ($IsWindows) { Join-Path ([IO.Path]::GetPathRoot($repoRoot)) 'temp' }
     else { Join-Path $artifactRoot 'jvm-tmp' }
 New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
-foreach ($command in @('git', 'java', 'mvn', 'docker')) {
+$commands = @('git', 'java', 'mvn', 'docker')
+if ($Baseline) { $commands += 'k6' }
+foreach ($command in $commands) {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) { throw "缺少命令：$command" }
 }
 if ($LikeRates -notmatch '^\d+(,\d+)*$') { throw 'LikeRates需为逗号分隔的正整数' }
@@ -36,6 +45,15 @@ $metadata = [ordered]@{
     docker = (& docker info --format 'Engine={{.ServerVersion}} CPUs={{.NCPU}} Memory={{.MemTotal}}')
     applicationLimit = '每个测试JVM Xmx768m；未施加操作系统CPU上限；客户端与应用同机'
     results = @()
+}
+if ($Baseline) {
+    $metadata.baseline = $Baseline
+    $metadata.scenario = $Scenario
+    $metadata.purpose = if ($Baseline -eq 'Smoke') { 'smoke' } else { 'measurement' }
+    $metadata.seconds = if ($Baseline -eq 'Smoke') { 8 } else { 300 }
+    $metadata.rounds = if ($Baseline -eq 'Smoke') { 1 } else { 3 }
+    $metadata.k6 = (& k6 version | Out-String).Trim()
+    $metadata.applicationLimit = '单应用进程，JVM Xmx768m；k6 为独立进程，与应用同机'
 }
 function Set-TestVariable([string]$Name, [string]$Value) {
     if (-not $previous.ContainsKey($Name)) { $previous[$Name] = [Environment]::GetEnvironmentVariable($Name, 'Process') }
@@ -110,6 +128,25 @@ try {
         ConvertTo-Json -InputObject $hashes -Depth 4 | Set-Content -LiteralPath (Join-Path $output 'source-hashes.json') -Encoding utf8
     }
     New-Item -ItemType Directory -Force -Path $jvmDirectory | Out-Null
+    if ($Baseline) {
+        Set-TestVariable 'IT_BASELINE' $Baseline
+        Set-TestVariable 'IT_BASELINE_SCENARIO' $Scenario
+        Set-TestVariable 'IT_BASELINE_OUTPUT' $output
+        Set-TestVariable 'IT_BASELINE_SCRIPT' (Join-Path $sources 'scripts/k6/baseline.js')
+        Copy-Item -LiteralPath (Join-Path $backend 'pom.xml') -Destination $sources
+        $build = Join-Path $output 'build'
+        $arguments = @('-q', '-Dtest=BaselinePerformanceTests', "-Dcommunity.build.directory=$build",
+            "-DargLine=-Xmx768m -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -Djdk.net.unixdomain.tmpdir=$jvmDirectory", 'test')
+        Write-Output "k6 基线 $Baseline / $Scenario，结果：$output"
+        Push-Location $backend
+        try {
+            & mvn @arguments *> (Join-Path $output 'baseline.log')
+            if ($LASTEXITCODE -ne 0) { throw '基线有失败，详见 report.md 和 baseline.log' }
+        } finally { Pop-Location }
+        if (-not (Test-Path -LiteralPath (Join-Path $output 'report.md'))) { throw '基线未生成报告' }
+        $metadata.status = 'measured'
+        return
+    }
     Push-Location $backend
     try {
         for ($round = 1; $round -le $Rounds; $round++) {
@@ -125,7 +162,7 @@ try {
     } finally { Pop-Location }
     $metadata.status = 'measured'
 } finally {
-    if ($CompareLikeHistory) {
+    if ($CompareLikeHistory -or $Baseline) {
         # 只停止本次启动的专用服务，不删除卷，不停止运行前已有的服务。
         $owned = @(& docker ps --filter label=com.docker.compose.project=easy-community-resume-perf --format '{{.ID}}' | Where-Object { $_ -notin $previousContainers })
         if ($owned.Count -gt 0) {
@@ -134,6 +171,10 @@ try {
         } else { $metadata.testServicesStopped = $true }
     }
     $metadata.finishedAt = [DateTimeOffset]::UtcNow.ToString('o')
+    if ($Baseline -and -not (Test-Path -LiteralPath (Join-Path $output 'report.md'))) {
+        '# k6 压测报告', '', '本次尚未完成测量。请核对 metadata.json 与 baseline.log（若已生成）。' |
+            Set-Content -LiteralPath (Join-Path $output 'report.md') -Encoding utf8
+    }
     $metadata | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $output 'metadata.json') -Encoding utf8
     foreach ($entry in $previous.GetEnumerator()) { [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process') }
     $lock.Dispose()

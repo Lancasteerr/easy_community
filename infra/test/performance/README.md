@@ -1,4 +1,31 @@
-# 简历性能补测
+# 社区压测入口
+
+[压测报告索引与历史证据](../../../docs/development/reports/performance/README.md)
+
+## k6 日常基线
+
+从仓库根目录使用 PowerShell 7、Java 25、Maven、Docker Compose 和 k6 2.1.0。
+
+```powershell
+./infra/test/performance/run.ps1 -Baseline Smoke
+./infra/test/performance/run.ps1 -Baseline Standard -Scenario Search
+./infra/test/performance/run.ps1 -Baseline Standard
+./infra/test/performance/run.ps1 -Baseline Exploration -Scenario Like
+```
+
+`-Scenario` 可取 `All`、`Search`、`Detail`、`Like`、`Mixed`，默认 `All`。Smoke 使用 32 账号、96 篇文章、384 条点赞关系。正式基线固定种子，导入 1 万账号、5 万篇文章、50 万条关系并核验 ES 和 SQL，运行三轮。每档预热 60 秒、测量 5 分钟；冷详情有独立缓存命名空间，直接采首分钟。等待自然 PV 刷盘或异步点赞排空最多 120 秒。全量正式基线的测量和预热窗口本身约 4 小时，另计导入、启动和排空。
+
+- 搜索和详情为 50／100／200 RPS，搜索正式档用默认 20 条分页。点赞分散和单篇热点为 60／120 RPS，探索档为 240 RPS。混合旅程为 50／100／200 VU，游客占 30%。登录与 CSRF 在窗口外完成。混合保留每账号 120 请求／分钟、60 点赞／分钟；独立详情放宽认证请求上限，点赞容量档放宽两种上限。配置逐档保存。
+- 单 JVM 应用与独立 k6 进程同机。数据库和 ES 索引为本次随机生成，Redis 和 MQ 按档隔离。每档还原上档修改的点赞与 PV 数据，复用已验证的种子和 ES 索引。rank 定时任务停用，PV 定时刷盘及点赞消费照常启用。
+- HTTP 保留客户端起止、状态和校验结果。RabbitMQ 管理 API 按分区采样，计数有刷新延迟，排空是采样观察时间。积压趋势把稳态样本分成三段，均值逐段升高且首尾相差至少 10 条时标记持续增长。SQL 锁观测包含 InnoDB 实例增量和专用库当前阻塞。覆盖时序按最近 32 个触达关系有界采样，最终对账覆盖全部受理关系与受影响计数。PV 核对本档预热和测量期间的全部详情 200，搜索档核验零 PV。
+- 全部产物都写入 `artifacts/performance/<run-id>/`。先看 `report.md`，详细口径和现场数据见 `summary.json`、`seed.json`、`metadata.json` 及阶段目录中的 `telemetry.jsonl`、k6 汇总、压缩原始指标与请求日志。预热和测量分文件保存，Maven 构建与开发目录隔离。HTTP 请求日志只含固定测试标识、状态与时间，临时会话文件在运行后删除。
+
+```powershell
+node --test infra/test/performance/k6/workload.test.mjs
+mvn -f backend/pom.xml -Dtest=BaselineToolTests test
+```
+
+## Java 历史对照及复现
 
 本目录统一管理性能环境、运行和汇总入口。业务代码不因基准改动；测试专用HTTP路由只存在于 `backend/src/test` 且受 `resume-perf` profile 限制，不进入生产JAR。既有功能/故障测试入口仍留在 `infra/test`，不移动以免破坏运维文档链接。
 
