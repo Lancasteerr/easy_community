@@ -57,6 +57,6 @@
 ## 数据来源与历史结果
 
 - 最新数据：[三轮逐项CSV](../performance/2026-11-16/measurements.csv)、[完整实测报告](../performance/resume-performance-2026-11-16.md)、[环境快照](../performance/2026-11-16/environment-details.json)。执行分两次补齐，首次归档时间解析异常与续测记录见完整报告；本汇总未重新发压。
-- 复现与复核：[统一压测脚本说明](../../../../infra/test/performance/README.md)。原始JSON、复核结果及本机产物出处见[分析清单](../reports/performance/2026-11-16/analysis-manifest.json)。
+- 复现与复核：[统一压测脚本说明](../../../../infra/test/performance/README.md)。原始JSON、复核结果及本机产物出处见[分析清单](../performance/2026-11-16/analysis-manifest.json)，其他历史结果见[压测报告索引](../performance/README.md)。
 - [2026-11-05点赞历史实验](../like/like-capacity-2026-11-05.md)：MySQL使用tmpfs、每阶段30秒，均匀120 QPS实际119.89 QPS，P95/P99为53.86/71.10ms，阶段末待提交1条；与本次持久卷实验条件不同，不能据此认定当前版本性能回退，也不沿用旧限流建议。
 - [2026-11-08搜索历史观测](../search/article-search-validation-2026-11-08.md)：热缓存/每次清缓存/同期全量算分分别30/10/30次顺序请求，P95为60.68/211.14/101.12ms；仅作路径成本参考，不作为高并发容量或缓存优化比例。

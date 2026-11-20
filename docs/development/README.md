@@ -6,7 +6,7 @@
 
 ## 当前阅读入口
 
-- 压测数据、可能的性能瓶颈与建议见[压测结果汇总](loadtest/README.md)。
+- 压测基线、历史报告及原始产物出处见[压测报告索引](reports/performance/README.md)。
 - 简历四条主亮点、三轮真实性能与脚本见[最终简历稿](reviews/resume/resume-final-2026-11-16.md)、[2026-11-16实测报告](reports/performance/resume-performance-2026-11-16.md)及[统一压测文档](../../infra/test/performance/README.md)。
 
 - 当前功能说明以[公开文档](../public/README.md)为入口。
