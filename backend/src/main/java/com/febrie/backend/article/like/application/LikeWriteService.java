@@ -3,7 +3,6 @@ package com.febrie.backend.article.like.application;
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 import com.febrie.backend.article.like.infrastructure.messaging.LikePublisher;
 import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
-import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository;
 import com.febrie.backend.article.like.infrastructure.redis.LikeVersionAllocator;
 
 import com.febrie.backend.article.common.ArticleErrors;
@@ -13,7 +12,6 @@ import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.shared.ratelimit.FixedWindowCounter;
 import java.time.*;
 import org.slf4j.*;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
 
@@ -25,9 +23,7 @@ import org.springframework.transaction.annotation.*;
 public class LikeWriteService {
     private static final Logger log = LoggerFactory.getLogger(LikeWriteService.class);
     private final LikeProperties properties;
-    private final LikeRepository repository;
     private final ArticleListHydrator visibility;
-    private final boolean visibilityCacheEnabled;
     private final LikeVersionAllocator allocator;
     private final LikePublisher publisher;
     private final LikeProjection projection;
@@ -35,14 +31,11 @@ public class LikeWriteService {
     private final Clock clock;
     private final LikeTelemetry telemetry;
 
-    public LikeWriteService(LikeProperties properties, LikeRepository repository, ArticleListHydrator visibility,
+    public LikeWriteService(LikeProperties properties, ArticleListHydrator visibility,
                             LikeVersionAllocator allocator, LikePublisher publisher, LikeProjection projection,
-                            FixedWindowCounter windows, Clock clock, LikeTelemetry telemetry,
-                            @Value("${app.like.article-visibility-cache-enabled:false}") boolean visibilityCacheEnabled) {
+                            FixedWindowCounter windows, Clock clock, LikeTelemetry telemetry) {
         this.properties = properties;
-        this.repository = repository;
         this.visibility = visibility;
-        this.visibilityCacheEnabled = visibilityCacheEnabled;
         this.allocator = allocator;
         this.publisher = publisher;
         this.projection = projection;
@@ -60,9 +53,8 @@ public class LikeWriteService {
         }
         long started = System.nanoTime();
         try {
-            // 已通过校验的命令按现有版本规则入队；灰度开关选择本次校验的数据源。
-            boolean publicArticle = visibilityCacheEnabled ? visibility.isPublic(article) : repository.publicArticle(article);
-            if (!publicArticle) {
+            // 缓存校验结束后才签发命令，已入队的命令由消费者按版本处理。
+            if (!visibility.isPublic(article)) {
                 throw ArticleErrors.notFound();
             }
             long second = clock.instant().getEpochSecond(), remaining = 60 - second % 60;

@@ -7,7 +7,6 @@ import com.febrie.backend.article.like.application.LikeWriteService;
 import com.febrie.backend.article.like.domain.LikeCommand;
 import com.febrie.backend.article.like.infrastructure.messaging.LikePublisher;
 import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
-import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository;
 import com.febrie.backend.article.like.infrastructure.redis.LikeVersionAllocator;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.shared.ratelimit.FixedWindowCounter;
@@ -24,7 +23,6 @@ import static org.mockito.Mockito.*;
 
 /** 验证受理前的可见性门槛与成功入队后的投影边界。 */
 class LikeWriteServiceTests {
-    private final LikeRepository repository = mock(LikeRepository.class);
     private final ArticleListHydrator visibility = mock(ArticleListHydrator.class);
     private final LikeVersionAllocator allocator = mock(LikeVersionAllocator.class);
     private final LikePublisher publisher = mock(LikePublisher.class);
@@ -32,12 +30,13 @@ class LikeWriteServiceTests {
     private final FixedWindowCounter limits = mock(FixedWindowCounter.class);
     private final LikeTelemetry telemetry = mock(LikeTelemetry.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-05T00:00:05Z"), ZoneOffset.UTC);
+    private final LikeWriteService service = new LikeWriteService(LikePublisherTests.properties(), visibility,
+            allocator, publisher, projection, limits, clock, telemetry);
 
     @Test void reusedOperationIdAllocatesNewVersionAndPendingFailureIsHarmless() {
-        when(repository.publicArticle(2)).thenReturn(true);
+        when(visibility.isPublic(2)).thenReturn(true);
         when(allocator.next()).thenReturn(10L, 11L);
         doThrow(new IllegalStateException()).when(projection).pending(any());
-        var service = service(false);
         String operation = UUID.randomUUID().toString();
 
         assertEquals("10", service.set(1, 2, true, operation).version());
@@ -45,15 +44,13 @@ class LikeWriteServiceTests {
 
         var commands = ArgumentCaptor.forClass(LikeCommand.class);
         verify(publisher, times(2)).publish(commands.capture());
-        verify(repository, times(2)).publicArticle(2);
-        verifyNoInteractions(visibility);
+        verify(visibility, times(2)).isPublic(2);
         assertEquals(operation, commands.getAllValues().get(1).operationId());
     }
 
     @Test void rateLimitPrecedesVersionAllocationAndInvalidOperationIsRejected() {
-        var service = service(true);
         assertEquals(400, assertThrows(ApiException.class, () -> service.set(1, 2, true, "bad")).status().value());
-        verifyNoInteractions(visibility, repository);
+        verifyNoInteractions(visibility);
 
         when(visibility.isPublic(2)).thenReturn(true);
         when(limits.increment(anyString(), any())).thenReturn(61L);
@@ -65,11 +62,11 @@ class LikeWriteServiceTests {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void cacheEnabledChecksVisibilityBeforePublishingForBothCommands(boolean desired) {
+    void checksVisibilityBeforePublishingForBothCommands(boolean desired) {
         when(visibility.isPublic(2)).thenReturn(true);
         when(allocator.next()).thenReturn(10L);
 
-        var accepted = service(true).set(1, 2, desired, UUID.randomUUID().toString());
+        var accepted = service.set(1, 2, desired, UUID.randomUUID().toString());
 
         assertTrue(accepted.accepted());
         assertEquals(desired, accepted.liked());
@@ -79,23 +76,16 @@ class LikeWriteServiceTests {
         order.verify(allocator).next();
         order.verify(publisher).publish(command.capture());
         assertEquals(desired, command.getValue().desiredLiked());
-        verifyNoInteractions(repository);
     }
 
     @Test void hiddenMissingAndUnavailableArticlesNeverReachThePublisher() {
         when(visibility.isPublic(2)).thenReturn(false);
         when(visibility.isPublic(3)).thenReturn(false);
         when(visibility.isPublic(4)).thenThrow(ArticleErrors.unavailable());
-        var service = service(true);
 
         assertEquals(404, assertThrows(ApiException.class, () -> service.set(1, 2, true, UUID.randomUUID().toString())).status().value());
         assertEquals(404, assertThrows(ApiException.class, () -> service.set(1, 3, false, UUID.randomUUID().toString())).status().value());
         assertEquals(503, assertThrows(ApiException.class, () -> service.set(1, 4, true, UUID.randomUUID().toString())).status().value());
-        verifyNoInteractions(repository, limits, allocator, publisher, projection);
-    }
-
-    private LikeWriteService service(boolean visibilityCacheEnabled) {
-        return new LikeWriteService(LikePublisherTests.properties(), repository, visibility, allocator,
-                publisher, projection, limits, clock, telemetry, visibilityCacheEnabled);
+        verifyNoInteractions(limits, allocator, publisher, projection);
     }
 }

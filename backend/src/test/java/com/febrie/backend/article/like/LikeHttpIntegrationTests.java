@@ -12,6 +12,7 @@ import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository
 import com.febrie.backend.article.like.infrastructure.redis.LikeCache;
 import com.febrie.backend.article.like.infrastructure.redis.LikeVersionAllocator;
 
+import com.febrie.backend.article.content.application.ArticleListHydrator;
 import com.febrie.backend.article.content.application.dto.PreparedArticle;
 import com.febrie.backend.article.content.infrastructure.persistence.ArticleRepository;
 import com.febrie.backend.article.like.domain.*;
@@ -60,6 +61,7 @@ class LikeHttpIntegrationTests {
     @Autowired LikeProperties properties;
     @Autowired LikeVersionAllocator allocator;
     @MockitoSpyBean LikeRepository likes;
+    @MockitoSpyBean ArticleListHydrator visibility;
     @Autowired LikeSqlService sql;
     @Autowired LikeCodec codec;
     @Autowired LikeDeadLetterReplay replay;
@@ -100,7 +102,7 @@ class LikeHttpIntegrationTests {
     }
 
     @BeforeEach void seed()throws Exception{
-        reset(cache,reader,publisher,likes);
+        reset(cache,reader,publisher,likes,visibility);
         var maintenance=new LikeProperties(properties.namespace(),properties.confirmTimeout(),128,4,20,4096,60,4,Duration.ofSeconds(2),"none",-1,0,20,java.time.Duration.ofMillis(100));
         int epoch=jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1",Integer.class);
         new LikeRecoveryService(dataSource,allocator,maintenance).recover(epoch);
@@ -111,11 +113,13 @@ class LikeHttpIntegrationTests {
     }
 
     @AfterEach void clean(){
-        listener.stop();reset(cache,reader,publisher,likes);
+        listener.stop();reset(cache,reader,publisher,likes,visibility);
         // 队列属于本类随机命名空间；清理前先停消费者，防止测试数据删后又被旧命令插入。
         new com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter(properties).queues().forEach(q -> admin.purgeQueue(q, false));admin.purgeQueue(properties.name("dead.q"),false);
         jdbc.update("DELETE FROM article_like_state WHERE article_id=?",article);
         jdbc.update("DELETE FROM article_like_count WHERE article_id=?",article);
+        jdbc.update("DELETE FROM article_visibility_repair WHERE article_id=?",article);
+        jdbc.update("DELETE FROM article_outbox WHERE article_id=?",article);
         jdbc.update("DELETE FROM article WHERE id=?",article);
         for(long user:users){jdbc.update("DELETE FROM user_auth_identity WHERE user_id=?",user);jdbc.update("DELETE FROM users WHERE id=?",user);}
         users.clear();browsers.forEach(Browser::close);browsers.clear();
@@ -156,7 +160,8 @@ class LikeHttpIntegrationTests {
         String limit=properties.key("limit:"+owner.user+":"+(Instant.now().getEpochSecond()/60));
         redis.opsForValue().set(limit,"999",Duration.ofMinutes(2));
         var limited=owner.call("PUT",path(),null,true,UUID.randomUUID().toString());assertEquals(429,limited.statusCode());assertTrue(limited.headers().firstValue("Retry-After").isPresent());
-        redis.delete(limit);jdbc.update("UPDATE article SET hidden=TRUE WHERE id=?",article);
+        redis.delete(limit);
+        assertEquals(204,owner.call("DELETE","/api/articles/"+article,null,true,null).statusCode());
         assertEquals(404,owner.call("PUT",path(),null,true,UUID.randomUUID().toString()).statusCode());
     }
 
@@ -196,19 +201,19 @@ class LikeHttpIntegrationTests {
         assertEquals(503,owner.call("GET","/api/articles/"+article,null,false,null).statusCode());
     }
 
-    @Test void hideAfterExistenceCheckAndDeletionAfterAcceptanceDoNotRevokeCommand()throws Exception{
+    @Test void hideAfterVisibilityCheckAndDeletionAfterAcceptanceDoNotRevokeCommand()throws Exception{
         listener.stop();
         var checked=new CountDownLatch(1);var release=new CountDownLatch(1);
         doAnswer(call->{
             boolean visible=(boolean)call.callRealMethod();checked.countDown();
             assertTrue(release.await(5,TimeUnit.SECONDS));return visible;
-        }).when(likes).publicArticle(article);
+        }).when(visibility).isPublic(article);
         try(var requests=Executors.newSingleThreadExecutor()){
             var response=requests.submit(()->owner.call("PUT",path(),null,true,UUID.randomUUID().toString()));
             try{
                 assertTrue(checked.await(5,TimeUnit.SECONDS));
-                // 写侧存在性检查已完成，隐藏不持有也不等待点赞事务中的article行锁。
-                jdbc.update("UPDATE article SET hidden=TRUE WHERE id=?",article);
+                // 可见性检查和回源已结束，隐藏接口可以提交并写入墓碑。
+                assertEquals(204,owner.call("DELETE","/api/articles/"+article,null,true,null).statusCode());
             }finally{release.countDown();}
             var accepted=response.get(10,TimeUnit.SECONDS);assertEquals(202,accepted.statusCode(),accepted.body());
             jdbc.update("UPDATE users SET status='DELETED',auth_version=auth_version+1 WHERE id=?",owner.user);

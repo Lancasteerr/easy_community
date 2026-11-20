@@ -22,9 +22,6 @@
     <select id="lockCount" resultType="java.lang.Long">
         SELECT like_count FROM article_like_count WHERE article_id=#{articleId} FOR UPDATE
     </select>
-    <select id="publicArticle" resultType="boolean">
-        SELECT EXISTS(SELECT 1 FROM article WHERE id=#{articleId} AND hidden=FALSE)
-    </select>
     <select id="states" resultType="com.febrie.backend.article.like.domain.LikeState">
         SELECT user_id, article_id, liked, version FROM article_like_state WHERE user_id=#{userId} AND article_id IN
         <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
