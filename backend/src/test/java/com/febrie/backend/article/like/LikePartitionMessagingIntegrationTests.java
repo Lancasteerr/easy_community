@@ -10,12 +10,14 @@ import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.core.*;
+import org.springframework.dao.TransientDataAccessResourceException;
 import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -27,6 +29,7 @@ import static org.awaitility.Awaitility.await;
 class LikePartitionMessagingIntegrationTests {
     final List<CachingConnectionFactory> connections = new ArrayList<>();
     final List<LikeListenerGroup> groups = new ArrayList<>();
+    final LikeArticleExecutor executor = new LikeArticleExecutor(mock(LikeTelemetry.class));
     LikeProperties properties;
     LikePartitionRouter router;
     RabbitAdmin admin;
@@ -52,6 +55,7 @@ class LikePartitionMessagingIntegrationTests {
 
     @AfterEach void cleanup() {
         groups.forEach(LikeListenerGroup::stop); groups.forEach(LikeListenerGroup::destroy);
+        executor.close();
         if (admin != null) {
             router.queues().forEach(admin::deleteQueue); admin.deleteQueue(properties.name("dead.q"));
             admin.deleteExchange(properties.name("command.x")); admin.deleteExchange(properties.name("dead.x"));
@@ -69,7 +73,7 @@ class LikePartitionMessagingIntegrationTests {
                             new LikeState(c.userId(), article, c.desiredLiked(), c.number()))).toList(), 0);
         });
         var projection = mock(LikeProjection.class);
-        var consumer = new LikeConsumer(codec, sql, projection, mock(LikeTelemetry.class), properties);
+        var consumer = new LikeConsumer(codec, sql, projection, mock(LikeTelemetry.class), properties, executor);
         // 先堆积同分区的两篇文章，使原生批次必然包含重复关系和混合文章。
         publisher.publish(command(1, 1, true, 10)); publisher.publish(command(1, 1, false, 11));
         publisher.publish(command(2, 5, true, 10));
@@ -77,7 +81,9 @@ class LikePartitionMessagingIntegrationTests {
         verify(sql, timeout(5000)).applyArticle(eq(1L), argThat(c -> c.size() == 1 && c.getFirst().number() == 11));
         verify(sql, timeout(5000)).applyArticle(eq(5L), anyList());
         verify(projection, timeout(5000).times(2)).committedArticle(any());
-        // 单条新消息不需要等到20条才提交。
+        // 暂停和恢复复用同一个执行器；单条新消息无需攒满整批才提交。
+        group.stop();
+        group.start();
         publisher.publish(command(3, 9, true, 10));
         verify(sql, timeout(2000)).applyArticle(eq(9L), anyList());
         group.stop();
@@ -110,6 +116,54 @@ class LikePartitionMessagingIntegrationTests {
         activeConnection.resetConnection(); active.stop();
         assertTrue(takenOver.await(5, TimeUnit.SECONDS)); assertTrue(redelivered.get());
         standby.stop(); assertEquals(0, admin.getQueueInfo(queue).getMessageCount());
+    }
+
+    @Test void stopRequeuesInFlightArticleAndRestartReusesExecutor() throws Exception {
+        var sql = mock(LikeSqlService.class);
+        var projection = mock(LikeProjection.class);
+        var attempts = new AtomicInteger();
+        var backingOff = new CountDownLatch(1);
+        var interrupted = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var result = new LikeSqlService.ArticleResult(1,
+                List.of(new LikeSqlService.Result(LikeSqlService.Status.APPLIED, new LikeState(1, 1, true, 10))), 1);
+        when(sql.applyArticle(eq(1L), anyList())).thenAnswer(call -> {
+            if (attempts.incrementAndGet() == 1) {
+                throw new TransientDataAccessResourceException("等待重试");
+            }
+            return result;
+        });
+        var consumer = new LikeConsumer(codec, sql, projection, mock(LikeTelemetry.class), properties, executor, ignored -> {
+            backingOff.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException cancellation) {
+                interrupted.countDown();
+                throw cancellation;
+            }
+        });
+
+        var group = group(connection(), consumer);
+        String queue = router.queue(router.partition(1));
+        group.start();
+        publisher.publish(command(1, 1, true, 10));
+        try {
+            assertTrue(backingOff.await(5, TimeUnit.SECONDS));
+            // 用真实Broker验证停机宽限耗尽后，未确认消息回到队列且本地任务被取消。
+            group.stop();
+            assertTrue(interrupted.await(5, TimeUnit.SECONDS));
+            await().atMost(Duration.ofSeconds(5)).until(() -> admin.getQueueInfo(queue).getMessageCount() == 1);
+            verifyNoInteractions(projection);
+
+            group.start();
+            verify(projection, timeout(5000)).committedArticle(result);
+            group.stop();
+            assertEquals(2, attempts.get());
+            assertEquals(0, admin.getQueueInfo(queue).getMessageCount());
+            assertEquals(0, admin.getQueueInfo(properties.name("dead.q")).getMessageCount());
+        } finally {
+            release.countDown();
+        }
     }
 
     private LikeListenerGroup group(CachingConnectionFactory factory, LikeConsumer consumer) {

@@ -1,6 +1,7 @@
 package com.febrie.backend.article.like.infrastructure.messaging;
 
 import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
+import java.util.Collection;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
@@ -39,9 +40,14 @@ public final class LikeArticleExecutor implements AutoCloseable {
         }
     }
 
-    void cancel(FutureTask<?> task) {
-        task.cancel(true);
-        if (pool.remove(task)) {
+    void cancelAll(Collection<? extends FutureTask<?>> tasks) {
+        // 先移除排队任务，再中断运行中的任务，避免释放的工作线程捡到本批已放弃的任务。
+        boolean removed = false;
+        for (var task : tasks) {
+            removed |= pool.remove(task);
+        }
+        tasks.forEach(task -> task.cancel(true));
+        if (removed) {
             signalChange();
         }
     }

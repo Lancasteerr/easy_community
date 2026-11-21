@@ -5,10 +5,17 @@ import com.febrie.backend.article.like.domain.*;
 import com.febrie.backend.article.like.infrastructure.messaging.*;
 import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
 import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.ShutdownListener;
+import com.rabbitmq.client.ShutdownSignalException;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.*;
 import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.transaction.TransactionSystemException;
@@ -16,26 +23,55 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/** 通过可控SQL和确认故障验证组间独立，不启动Web或真实等待退避。 */
+/** 用屏障控制组间顺序、执行器饱和与重投边界。 */
 class LikeConsumerTests {
     final LikeCodec codec = mock(LikeCodec.class);
     final LikeSqlService sql = mock(LikeSqlService.class);
     final LikeProjection projection = mock(LikeProjection.class);
     final Channel channel = mock(Channel.class);
-    final List<Long> delays = new ArrayList<>();
-    final LikeConsumer consumer = new LikeConsumer(codec, sql, projection, mock(LikeTelemetry.class),
-            LikeTestProperties.defaults(), delays::add);
+    final SimpleMeterRegistry meters = new SimpleMeterRegistry();
+    final LikeArticleExecutor executor = new LikeArticleExecutor(new LikeTelemetry(meters));
+    final LikeConsumer consumer = consumer(ignored -> { });
 
-    @Test void oneArticleRetryExhaustionDoesNotBlockFollowingArticle() throws Exception {
+    @BeforeEach void openChannel() {
+        when(channel.isOpen()).thenReturn(true);
+    }
+
+    @AfterEach void closeExecutor() {
+        executor.close();
+        meters.close();
+    }
+
+    @Test void fastArticleIsAcknowledgedWhileAnotherArticleRetries() throws Exception {
         var a = message(1, 2, 1, true, 10);
         var b = message(2, 6, 2, true, 10);
+        var backingOff = new CountDownLatch(1);
+        var resumeRetry = new CountDownLatch(1);
+        var fastAck = new CountDownLatch(1);
+        var delays = new ArrayList<Long>();
+        var retrying = consumer(delay -> {
+            delays.add(delay);
+            backingOff.countDown();
+            await(resumeRetry);
+        });
         when(sql.applyArticle(eq(2L), anyList())).thenThrow(new TransientDataAccessResourceException("test"));
-        when(sql.applyArticle(eq(6L), anyList())).thenReturn(result(6, 2, LikeSqlService.Status.APPLIED));
-        consumer.consumeBatch(2, List.of(a, b), channel);
+        when(sql.applyArticle(eq(6L), anyList())).thenAnswer(call -> {
+            await(backingOff);
+            return result(6, 2, LikeSqlService.Status.APPLIED);
+        });
+        doAnswer(call -> { fastAck.countDown(); return null; }).when(channel).basicAck(2, false);
+
+        var batch = startBatch(() -> retrying.consumeBatch(2, List.of(a, b), channel));
+        try {
+            await(fastAck);
+            verify(channel, never()).basicNack(1, false, false);
+        } finally {
+            resumeRetry.countDown();
+        }
+        batch.get(5, TimeUnit.SECONDS);
         assertEquals(List.of(1000L, 2000L, 4000L, 8000L), delays);
         verify(sql, times(5)).applyArticle(eq(2L), anyList());
         verify(channel).basicNack(1, false, false);
-        verify(channel).basicAck(2, false);
     }
 
     @Test void groupsCommitAndAcknowledgeInterleavedOriginalTagsIndependently() throws Exception {
@@ -47,13 +83,16 @@ class LikeConsumerTests {
         when(sql.applyArticle(eq(6L), anyList())).thenThrow(new LikeInvariantException("test"));
         when(sql.applyArticle(eq(10L), anyList())).thenReturn(result(10, 3, LikeSqlService.Status.APPLIED));
         consumer.consumeBatch(2, List.of(a1, b, a2, c), channel);
-        var order = inOrder(sql, projection, channel);
-        order.verify(sql).applyArticle(eq(2L), argThat(commands -> commands.size() == 1 && commands.getFirst().number() == 11));
-        order.verify(projection).committedArticle(any());
-        order.verify(channel).basicAck(11, false); order.verify(channel).basicAck(13, false);
-        order.verify(sql).applyArticle(eq(6L), anyList()); order.verify(channel).basicNack(12, false, false);
-        order.verify(sql).applyArticle(eq(10L), anyList()); order.verify(projection).committedArticle(any());
-        order.verify(channel).basicAck(14, false);
+
+        verify(sql).applyArticle(eq(2L), argThat(commands -> commands.size() == 1 && commands.getFirst().number() == 11));
+        verify(channel).basicNack(12, false, false);
+        var orderA = inOrder(projection, channel);
+        orderA.verify(projection).committedArticle(argThat(result -> result.articleId() == 2));
+        orderA.verify(channel).basicAck(11, false);
+        orderA.verify(channel).basicAck(13, false);
+        var orderC = inOrder(projection, channel);
+        orderC.verify(projection).committedArticle(argThat(result -> result.articleId() == 10));
+        orderC.verify(channel).basicAck(14, false);
         verify(channel, never()).basicAck(anyLong(), eq(true));
     }
 
@@ -83,28 +122,171 @@ class LikeConsumerTests {
         verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
     }
 
-    @Test void partialAckFailureClosesChannelWithoutProcessingRemainingArticle() throws Exception {
+    @Test void partialAckFailureCancelsOtherArticlesAndLeavesTheirDeliveryUnconfirmed() throws Exception {
         Message a1 = message(1, 2, 1, true, 10), a2 = message(2, 2, 1, true, 11), b = message(3, 6, 2, true, 10);
-        when(sql.applyArticle(eq(2L), anyList())).thenReturn(result(2, 1, LikeSqlService.Status.APPLIED));
+        var slowStarted = new CountDownLatch(1);
+        var slowStopped = new CountDownLatch(1);
+        var slowRelease = new CountDownLatch(1);
+        var retrying = consumer(ignored -> {
+            slowStarted.countDown();
+            try {
+                await(slowRelease);
+            } catch (InterruptedException interrupted) {
+                slowStopped.countDown();
+                throw interrupted;
+            }
+        });
+        when(sql.applyArticle(eq(6L), anyList())).thenThrow(new TransientDataAccessResourceException("test"));
+        when(sql.applyArticle(eq(2L), anyList())).thenAnswer(call -> {
+            await(slowStarted);
+            return result(2, 1, LikeSqlService.Status.APPLIED);
+        });
         doThrow(new IOException("断连")).when(channel).basicAck(2, false);
-        consumer.consumeBatch(2, List.of(a1, a2, b), channel);
-        verify(channel).basicAck(1, false); verify(channel).abort();
-        verify(sql, never()).applyArticle(eq(6L), anyList());
+        try {
+            retrying.consumeBatch(2, List.of(a1, a2, b), channel);
+            await(slowStopped);
+        } finally {
+            slowRelease.countDown();
+        }
+        var order = inOrder(channel);
+        order.verify(channel).basicAck(1, false);
+        order.verify(channel).basicAck(2, false);
+        order.verify(channel).abort();
+        verify(channel, never()).basicAck(3, false);
         verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
     }
 
-    @Test void interruptionRetainsUnconfirmedMessagesAndRestoresFlag() throws Exception {
+    @Test void listenerInterruptionRestoresFlagAndCancelsWorker() throws Exception {
         var a = message(1, 2, 1, true, 10);
+        var retryStarted = new CountDownLatch(1);
+        var retryInterrupted = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
         when(sql.applyArticle(eq(2L), anyList())).thenThrow(new TransientDataAccessResourceException("test"));
-        var interrupted = new LikeConsumer(codec, sql, projection, mock(LikeTelemetry.class),
-                LikeTestProperties.defaults(), ignored -> { throw new InterruptedException(); });
+        var retrying = consumer(ignored -> {
+            retryStarted.countDown();
+            try {
+                await(release);
+            } catch (InterruptedException interrupted) {
+                retryInterrupted.countDown();
+                throw interrupted;
+            }
+        });
+
+        var batch = new FutureTask<>(() -> {
+            retrying.consumeBatch(2, List.of(a), channel);
+            return Thread.currentThread().isInterrupted();
+        });
+        var listener = Thread.ofVirtual().start(batch);
         try {
-            interrupted.consumeBatch(2, List.of(a), channel);
-            assertTrue(Thread.currentThread().isInterrupted());
-            verify(channel).abort();
+            await(retryStarted);
+            listener.interrupt();
+            assertTrue(batch.get(5, TimeUnit.SECONDS));
+            await(retryInterrupted);
+        } finally {
+            release.countDown();
+        }
+        verify(channel).abort();
+        verify(channel, never()).basicAck(anyLong(), anyBoolean());
+        verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
+    }
+
+    @Test void saturatedPoolKeepsBoundedQueueAndAcknowledgesOnListenerThread() throws Exception {
+        var eightStarted = new CountDownLatch(8);
+        var releaseFirst = new CountDownLatch(1);
+        var releaseRest = new CountDownLatch(1);
+        var firstAck = new CountDownLatch(1);
+        var messages = messagesAcrossArticles(13);
+        when(sql.applyArticle(anyLong(), anyList())).thenAnswer(call -> {
+            long article = call.getArgument(0);
+            eightStarted.countDown();
+            await(article == 2 ? releaseFirst : releaseRest);
+            return result(article, 1, LikeSqlService.Status.APPLIED);
+        });
+        var ackThreads = new ConcurrentLinkedQueue<Thread>();
+        doAnswer(call -> {
+            ackThreads.add(Thread.currentThread());
+            if (call.<Long>getArgument(0) == 1L) {
+                firstAck.countDown();
+            }
+            return null;
+        }).when(channel).basicAck(anyLong(), eq(false));
+
+        var batch = new FutureTask<>(() -> consumer.consumeBatch(2, messages, channel), null);
+        var listener = Thread.ofVirtual().start(batch);
+        try {
+            await(eightStarted);
+            assertEquals(8, meters.get("article.like.executor.active").gauge().value());
+            assertEquals(4, meters.get("article.like.executor.queued").gauge().value());
+            // 其他工作线程仍然阻塞时，已完成消息必须能越过队列饱和及时确认。
+            releaseFirst.countDown();
+            await(firstAck);
+        } finally {
+            releaseFirst.countDown();
+            releaseRest.countDown();
+        }
+        batch.get(5, TimeUnit.SECONDS);
+        verify(sql, times(13)).applyArticle(anyLong(), anyList());
+        verify(channel, times(13)).basicAck(anyLong(), eq(false));
+        assertTrue(ackThreads.stream().allMatch(thread -> thread == listener));
+    }
+
+    @Test void channelShutdownRemovesQueuedTasksWithoutStartingThem() throws Exception {
+        var eightStarted = new CountDownLatch(8);
+        var eightStopped = new CountDownLatch(8);
+        var release = new CountDownLatch(1);
+        var messages = messagesAcrossArticles(13);
+        when(sql.applyArticle(anyLong(), anyList())).thenAnswer(call -> {
+            eightStarted.countDown();
+            try {
+                await(release);
+                return result(call.getArgument(0), 1, LikeSqlService.Status.APPLIED);
+            } catch (InterruptedException interrupted) {
+                eightStopped.countDown();
+                throw interrupted;
+            }
+        });
+
+        var batch = startBatch(() -> consumer.consumeBatch(2, messages, channel));
+        try {
+            await(eightStarted);
+            assertEquals(4, meters.get("article.like.executor.queued").gauge().value());
+            var shutdown = ArgumentCaptor.forClass(ShutdownListener.class);
+            verify(channel).addShutdownListener(shutdown.capture());
+            when(channel.isOpen()).thenReturn(false);
+            // 模拟Broker主动断开，监听器仍在等待任务，未发出任何ACK。
+            shutdown.getValue().shutdownCompleted(new ShutdownSignalException(false, false, null, channel));
+            batch.get(5, TimeUnit.SECONDS);
+            await(eightStopped);
+            assertEquals(0, meters.get("article.like.executor.queued").gauge().value());
+            verify(sql, times(8)).applyArticle(anyLong(), anyList());
             verify(channel, never()).basicAck(anyLong(), anyBoolean());
             verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
-        } finally { Thread.interrupted(); }
+        } finally {
+            release.countDown();
+        }
+    }
+
+    private List<Message> messagesAcrossArticles(int count) {
+        List<Message> messages = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            messages.add(message(index + 1, 2 + 4L * index, 1, true, 10));
+        }
+        return messages;
+    }
+
+    private LikeConsumer consumer(LikeConsumer.Delay delay) {
+        return new LikeConsumer(codec, sql, projection, mock(LikeTelemetry.class),
+                LikeTestProperties.defaults(), executor, delay);
+    }
+
+    private static FutureTask<Void> startBatch(Runnable batch) {
+        var task = new FutureTask<Void>(batch, null);
+        Thread.ofVirtual().start(task);
+        return task;
+    }
+
+    private static void await(CountDownLatch latch) throws InterruptedException {
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "等待消费屏障超时");
     }
 
     private Message message(long tag, long article, long user, boolean liked, long version) {

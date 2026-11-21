@@ -1,5 +1,7 @@
 package com.febrie.backend.article.like.infrastructure.messaging;
 
+import com.febrie.backend.article.like.application.LikeProjection;
+import com.febrie.backend.article.like.application.LikeSqlService;
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
 import java.util.ArrayList;
@@ -25,6 +27,10 @@ public class LikeRabbitConfiguration {
     static class WebMessaging {
         @Bean LikeArticleExecutor likeArticleExecutor(LikeTelemetry telemetry) {
             return new LikeArticleExecutor(telemetry);
+        }
+        @Bean LikeConsumer likeConsumer(LikeCodec codec, LikeSqlService sql, LikeProjection projection,
+                                        LikeTelemetry telemetry, LikeProperties p, LikeArticleExecutor executor) {
+            return new LikeConsumer(codec, sql, projection, telemetry, p, executor);
         }
         @Bean LikeListenerGroup likeListener(ConnectionFactory factory, LikeProperties p,
                                              LikePartitionRouter router, LikeConsumer consumer) {
