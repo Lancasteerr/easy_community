@@ -1,6 +1,7 @@
 package com.febrie.backend.article.like.infrastructure.messaging;
 
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
 import java.util.ArrayList;
 import java.util.Map;
 import org.springframework.amqp.core.*;
@@ -22,6 +23,9 @@ public class LikeRabbitConfiguration {
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     static class WebMessaging {
+        @Bean LikeArticleExecutor likeArticleExecutor(LikeTelemetry telemetry) {
+            return new LikeArticleExecutor(telemetry);
+        }
         @Bean LikeListenerGroup likeListener(ConnectionFactory factory, LikeProperties p,
                                              LikePartitionRouter router, LikeConsumer consumer) {
             return new LikeListenerGroup(factory, p, router, consumer);

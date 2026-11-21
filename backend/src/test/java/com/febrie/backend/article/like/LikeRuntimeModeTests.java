@@ -1,6 +1,7 @@
 package com.febrie.backend.article.like;
 
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
+import com.febrie.backend.article.like.infrastructure.messaging.LikeArticleExecutor;
 import com.febrie.backend.article.like.infrastructure.messaging.LikeRabbitConfiguration;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,7 @@ class LikeRuntimeModeTests {
                     assertNotNull(context.getBean("likeRabbitTemplate",RabbitTemplate.class));
                     assertTrue(context.getBeansOfType(SimpleMessageListenerContainer.class).isEmpty());
                     assertTrue(context.getBeansOfType(com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup.class).isEmpty());
+                    assertTrue(context.getBeansOfType(LikeArticleExecutor.class).isEmpty());
                     assertTrue(context.getBeansOfType(Declarables.class).isEmpty());
                     verify(factory,never()).createConnection();
                 });

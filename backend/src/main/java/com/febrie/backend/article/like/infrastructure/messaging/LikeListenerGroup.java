@@ -32,6 +32,8 @@ public class LikeListenerGroup implements SmartLifecycle, InitializingBean, Disp
             listener.setPrefetchCount(properties.prefetch());
             listener.setDefaultRequeueRejected(false);
             listener.setAutoStartup(false);
+            // 停机完成当前批次即可，尚未进入回调的预取消息交还Broker。
+            listener.setForceStop(true);
             listener.setConsumerBatchEnabled(true);
             listener.setBatchSize(properties.batchSize());
             listener.setReceiveTimeout(properties.batchWait().toMillis());

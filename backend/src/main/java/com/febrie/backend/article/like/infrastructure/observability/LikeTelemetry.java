@@ -1,6 +1,7 @@
 package com.febrie.backend.article.like.infrastructure.observability;
 
 import io.micrometer.core.instrument.*;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,11 @@ public class LikeTelemetry {
     public void articleTime(int partition, long started) {
         registry.timer("article.like.group.duration", "partition", Integer.toString(partition))
                 .record(System.nanoTime() - started, TimeUnit.NANOSECONDS);
+    }
+    /** 单实例共享池指标，无需按分区或文章增加标签。 */
+    public void articleExecutor(ThreadPoolExecutor executor) {
+        registry.gauge("article.like.executor.active", executor, ThreadPoolExecutor::getActiveCount);
+        registry.gauge("article.like.executor.queued", executor, pool -> pool.getQueue().size());
     }
     public void queueAge(java.time.Instant occurredAt) {
         var age=java.time.Duration.between(occurredAt,java.time.Instant.now());
