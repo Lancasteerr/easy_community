@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.febrie.backend.article.like.infrastructure.persistence.mapper.CommentLikeMapper">
+    <!-- 不使用IGNORE，不把数据错误转换成成功；无操作更新不会清除墓碑。 -->
+    <insert id="initializeState">
+        INSERT INTO comment_like_state(user_id, comment_id, liked, version) VALUES (#{userId}, #{articleId}, 0, 0)
+        ON DUPLICATE KEY UPDATE version = comment_like_state.version
+    </insert>
+    <select id="lock" resultType="com.febrie.backend.article.like.domain.LikeState">
+        SELECT user_id, comment_id AS article_id, liked, version FROM comment_like_state
+        WHERE user_id = #{userId} AND comment_id = #{articleId} FOR UPDATE
+    </select>
+    <update id="update">
+        UPDATE comment_like_state SET liked=#{state.liked}, version=#{state.version}, updated_at=NOW(3)
+        WHERE user_id=#{state.userId} AND comment_id=#{state.articleId}
+    </update>
+    <update id="addDelta">
+        UPDATE comment_like_count SET like_count=like_count+#{delta}
+        WHERE comment_id=#{articleId} AND like_count+#{delta} &gt;= 0
+    </update>
+    <!-- 零净增量也需核验计数基线；缺行由应用抛错并回滚。 -->
+    <select id="lockCount" resultType="java.lang.Long">
+        SELECT like_count FROM comment_like_count WHERE comment_id=#{articleId} FOR UPDATE
+    </select>
+    <select id="states" resultType="com.febrie.backend.article.like.domain.LikeState">
+        SELECT user_id, comment_id AS article_id, liked, version FROM comment_like_state WHERE user_id=#{userId} AND comment_id IN
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    </select>
+    <select id="counts" resultType="com.febrie.backend.article.like.infrastructure.persistence.mapper.LikeMapper$CountRow">
+        SELECT comment_id AS article_id, like_count FROM comment_like_count WHERE comment_id IN
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    </select>
+</mapper>

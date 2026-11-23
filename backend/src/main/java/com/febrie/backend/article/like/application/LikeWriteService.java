@@ -8,6 +8,7 @@ import com.febrie.backend.article.like.infrastructure.redis.LikeVersionAllocator
 import com.febrie.backend.article.common.ArticleErrors;
 import com.febrie.backend.article.content.application.ArticleListHydrator;
 import com.febrie.backend.article.like.domain.LikeCommand;
+import com.febrie.backend.article.like.domain.LikeTarget;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.shared.ratelimit.FixedWindowCounter;
 import java.time.*;
@@ -45,6 +46,11 @@ public class LikeWriteService {
     }
 
     public Accepted set(long user, long article, boolean desired, String operationId) {
+        return set(user, new LikeTarget(LikeTarget.Type.ARTICLE, article), desired, operationId);
+    }
+
+    /** 目标由所属业务模块校验，签发与发布只处理已校验的目标。 */
+    public Accepted set(long user, LikeTarget target, boolean desired, String operationId) {
         String operation;
         try {
             operation = LikeCommand.operation(operationId);
@@ -53,8 +59,7 @@ public class LikeWriteService {
         }
         long started = System.nanoTime();
         try {
-            // 缓存校验结束后才签发命令，已入队的命令由消费者按版本处理。
-            if (!visibility.isPublic(article)) {
+            if (target.type() == LikeTarget.Type.ARTICLE && !visibility.isPublic(target.id())) {
                 throw ArticleErrors.notFound();
             }
             long second = clock.instant().getEpochSecond(), remaining = 60 - second % 60;
@@ -68,7 +73,7 @@ public class LikeWriteService {
                 throw new ApiException(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "点赞过于频繁，请稍后重试", remaining);
             }
             long version = allocator.next();
-            var command = new LikeCommand(1, operation, user, article, desired, Long.toString(version), clock.instant());
+            var command = new LikeCommand(1, operation, user, target, desired, Long.toString(version), clock.instant());
             publisher.publish(command);
             try {
                 projection.pending(command);

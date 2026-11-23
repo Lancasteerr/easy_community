@@ -3,7 +3,7 @@ package com.febrie.backend.article.like.application;
 import com.febrie.backend.article.like.domain.LikeCommand;
 import java.util.*;
 
-/** 归并单篇文章的有界批次；输入下标用于关联全部原始投递。 */
+/** 归并单个点赞目标的有界批次；输入下标用于关联全部原始投递。 */
 public final class LikeBatchReducer {
     public Reduction reduce(List<LikeCommand> commands) {
         Map<Long, List<Integer>> indices = new LinkedHashMap<>();

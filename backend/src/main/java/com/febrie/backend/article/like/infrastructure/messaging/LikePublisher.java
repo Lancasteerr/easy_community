@@ -29,11 +29,11 @@ public class LikePublisher {
         this.router = new LikePartitionRouter(properties);
     }
 
-    public void publish(LikeCommand command) { send(message(command), command.articleId()); }
+    public void publish(LikeCommand command) { send(message(command), command.target().id()); }
 
     /** 死信重放保留原始body和messageId；仅更换投递目标，不重新分配版本。 */
     public void publish(Message message) {
-        send(message, codec.decode(message.getBody()).articleId());
+        send(message, codec.decode(message.getBody()).target().id());
     }
 
     private void send(Message message, long articleId) {

@@ -2,6 +2,7 @@ package com.febrie.backend.article.like.infrastructure.messaging;
 
 import com.febrie.backend.article.like.application.*;
 import com.febrie.backend.article.like.domain.LikeCommand;
+import com.febrie.backend.article.like.domain.LikeTarget;
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetry;
 import com.rabbitmq.client.Channel;
@@ -19,7 +20,7 @@ import org.springframework.amqp.core.Message;
 import org.springframework.dao.*;
 import org.springframework.transaction.TransactionException;
 
-/** 每批按文章并行提交；只有监听线程可以确认当前Channel的原始投递。 */
+/** 每批按点赞目标并行提交；只有监听线程可以确认当前Channel的原始投递。 */
 public class LikeConsumer {
     private static final Logger log = LoggerFactory.getLogger(LikeConsumer.class);
     private final LikeCodec codec;
@@ -77,7 +78,7 @@ public class LikeConsumer {
     }
 
     private List<ArticleWork> prepareArticles(int partition, List<Message> messages, Channel channel) throws IOException {
-        Map<Long, List<Delivery>> articles = new LinkedHashMap<>();
+        Map<LikeTarget, List<Delivery>> articles = new LinkedHashMap<>();
         for (Message message : messages) {
             long deliveryTag = tag(message);
             LikeCommand command;
@@ -87,12 +88,12 @@ public class LikeConsumer {
                 isolate(partition, channel, deliveryTag, "invalid_message");
                 continue;
             }
-            if (router.partition(command.articleId()) != partition) {
+            if (router.partition(command.target().id()) != partition) {
                 isolate(partition, channel, deliveryTag, "wrong_partition");
                 continue;
             }
             telemetry.queueAge(command.occurredAt());
-            articles.computeIfAbsent(command.articleId(), ignored -> new ArrayList<>())
+            articles.computeIfAbsent(command.target(), ignored -> new ArrayList<>())
                     .add(new Delivery(deliveryTag, command));
         }
 
@@ -152,7 +153,10 @@ public class LikeConsumer {
             checkInterrupted();
             long started = System.nanoTime();
             try {
-                result = sql.applyArticle(work.articleId(), work.commands());
+                // 归并和提交都以完整目标为单位，防止不同类型的同 ID 命令相互覆盖。
+                result = work.target().type() == LikeTarget.Type.ARTICLE
+                        ? sql.applyArticle(work.target().id(), work.commands())
+                        : sql.applyTarget(work.target(), work.commands());
                 break;
             } catch (TransientDataAccessException | RecoverableDataAccessException | DataAccessResourceFailureException | TransactionException retryable) {
                 telemetry.event("consume", "retry");
@@ -161,7 +165,7 @@ public class LikeConsumer {
                     return ArticleOutcome.RETRY_EXHAUSTED;
                 }
             } catch (RuntimeException fatal) {
-                log.error("点赞文章事务失败 articleId={} errorType={}", work.articleId(), fatal.getClass().getSimpleName());
+                log.error("点赞目标事务失败 target={} errorType={}", work.target(), fatal.getClass().getSimpleName());
                 return ArticleOutcome.SQL_INVARIANT_OR_ERROR;
             } finally {
                 telemetry.time("sql", started);
@@ -243,7 +247,7 @@ public class LikeConsumer {
 
     private static long tag(Message message) { return message.getMessageProperties().getDeliveryTag(); }
     private record Delivery(long tag, LikeCommand command) { }
-    private record ArticleWork(long articleId, List<LikeCommand> commands, List<Long> tags) { }
+    private record ArticleWork(LikeTarget target, List<LikeCommand> commands, List<Long> tags) { }
     private enum ArticleOutcome { COMMITTED, RETRY_EXHAUSTED, SQL_INVARIANT_OR_ERROR }
     @FunctionalInterface public interface Delay { void await(long milliseconds) throws InterruptedException; }
 }

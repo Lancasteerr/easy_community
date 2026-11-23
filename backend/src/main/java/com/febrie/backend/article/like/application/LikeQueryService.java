@@ -5,6 +5,8 @@ import com.febrie.backend.article.like.infrastructure.observability.LikeTelemetr
 import com.febrie.backend.article.like.infrastructure.redis.LikeCache;
 
 import com.febrie.backend.article.like.domain.LikeState;
+import com.febrie.backend.article.like.domain.LikeTarget;
+import com.febrie.backend.article.like.domain.LikeTarget.Type;
 import java.util.*;
 import java.util.concurrent.*;
 import org.springframework.beans.factory.DisposableBean;
@@ -19,7 +21,7 @@ public class LikeQueryService implements DisposableBean {
     private final LikeReader reader;
     private final LikeTelemetry telemetry;
     private final ExecutorService executor;
-    private final BatchReadGate<Long,Long> counts;
+    private final BatchReadGate<LikeTarget,Long> counts;
     private final BatchReadGate<StateKey,LikeState> states;
     public LikeQueryService(LikeCache cache,LikeReader reader,LikeProperties properties,LikeTelemetry telemetry) {
         this.cache=cache; this.reader=reader; this.telemetry=telemetry;
@@ -29,41 +31,55 @@ public class LikeQueryService implements DisposableBean {
         states = new BatchReadGate<>(executor, properties.readTimeout());
     }
     public Map<Long,Summary> summaries(Long user,Collection<Long> requested) {
-        var ids=new LinkedHashSet<>(requested);
+        return summaries(Type.ARTICLE, user, requested);
+    }
+
+    /** 查询与并发回源的键都带类型，防止同 ID 的不同目标串值。 */
+    public Map<Long,Summary> summaries(Type type, Long user, Collection<Long> requested) {
+        var ids = new LinkedHashSet<>(requested);
+        boolean article = type == Type.ARTICLE;
         if (ids.size()>50 || ids.stream().anyMatch(id -> id==null || id<=0)) { throw LikeErrors.invalid(); }
         if (ids.isEmpty()) { return Map.of(); }
         long started=System.nanoTime();
         try {
             Map<Long,Long> totals=new LinkedHashMap<>();
-            try { totals.putAll(cache.counts(ids)); }
+            try { totals.putAll(article ? cache.counts(ids) : cache.counts(type, ids)); }
             catch (RuntimeException unavailable) { telemetry.event("cache","count_failure"); }
-            var missing=ids.stream().filter(id -> !totals.containsKey(id)).toList();
+            var missing = ids.stream().filter(id -> !totals.containsKey(id))
+                    .map(id -> new LikeTarget(type, id)).toList();
             telemetry.event("cache",missing.isEmpty()?"count_hit":"count_miss");
-            var loadedCounts=counts.load(missing,keys -> {
-                telemetry.event("read","count_sql"); return reader.counts(keys);
+            var loaded = counts.load(missing, keys -> {
+                telemetry.event("read", "count_sql");
+                var targetIds = keys.stream().map(LikeTarget::id).toList();
+                var values = article ? reader.counts(targetIds) : reader.counts(type, targetIds);
+                Map<LikeTarget, Long> batch = new LinkedHashMap<>();
+                keys.forEach(key -> batch.put(key, values.get(key.id())));
+                return batch;
             });
+            Map<Long, Long> loadedCounts = new LinkedHashMap<>();
+            loaded.forEach((key, count) -> loadedCounts.put(key.id(), count));
             totals.putAll(loadedCounts);
             // SQL 等待结束后再回填 Redis，慢回填不会触发 SQL 等待超时。
             if(!loadedCounts.isEmpty()){
-                try { cache.putCounts(loadedCounts); } catch (RuntimeException ignored) { telemetry.event("cache","fill_failure"); }
+                try { if (article) cache.putCounts(loadedCounts); else cache.putCounts(type, loadedCounts); } catch (RuntimeException ignored) { telemetry.event("cache","fill_failure"); }
             }
             Map<Long,LikeState> mine=new LinkedHashMap<>();
             if (user!=null) {
-                try { mine.putAll(cache.states(user,ids)); }
+                try { mine.putAll(article ? cache.states(user, ids) : cache.states(type, user, ids)); }
                 catch (RuntimeException unavailable) { telemetry.event("cache","state_failure"); }
-                var needed=ids.stream().filter(id -> !mine.containsKey(id)).map(id -> new StateKey(user,id)).toList();
-                var loaded=states.load(needed,keys -> {
+                var needed=ids.stream().filter(id -> !mine.containsKey(id)).map(id -> new StateKey(type, user, id)).toList();
+                var loadedStates=states.load(needed,keys -> {
                     // 一次请求的领导者只属于同一用户，缺失关系由Reader补成version=0。
                     var articles=keys.stream().map(StateKey::article).toList();
-                    telemetry.event("read","state_sql"); var sql=reader.states(user,articles);
+                    telemetry.event("read","state_sql"); var sql = article ? reader.states(user, articles) : reader.states(type, user, articles);
                     Map<StateKey,LikeState> result=new LinkedHashMap<>();
                     for (var key:keys) { result.put(key,sql.get(key.article())); }
                     return result;
                 });
                 Map<Long,LikeState> sqlStates=new LinkedHashMap<>();
-                loaded.forEach((key,state) -> sqlStates.put(key.article(),state));
+                loadedStates.forEach((key,state) -> sqlStates.put(key.article(),state));
                 if(!sqlStates.isEmpty()){
-                    try { mine.putAll(cache.putStates(user,sqlStates.values(),"C")); }
+                    try { mine.putAll(article ? cache.putStates(user,sqlStates.values(),"C") : cache.putStates(type, user, sqlStates.values(), "C")); }
                     catch(RuntimeException ignored){telemetry.event("cache","fill_failure");mine.putAll(sqlStates);}
                 }
             }
@@ -74,5 +90,5 @@ public class LikeQueryService implements DisposableBean {
     }
     @Override public void destroy() { executor.shutdownNow(); }
     public record Summary(long likeCount,boolean likedByMe) { }
-    private record StateKey(long user,long article) { }
+    private record StateKey(Type type, long user,long article) { }
 }

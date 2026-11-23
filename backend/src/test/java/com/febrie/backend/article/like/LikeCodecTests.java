@@ -21,7 +21,7 @@ class LikeCodecTests {
     @Test void wrongTypesRangesAndTimestampAreRejected() {
         String json = new String(codec.encode(command), StandardCharsets.UTF_8);
         for (String invalid : java.util.List.of(json.replace("\"desiredLiked\":true", "\"desiredLiked\":\"true\""),
-                json.replace("\"userId\":1", "\"userId\":1.5"), json.replace("\"articleId\":2", "\"articleId\":-2"),
+                json.replace("\"userId\":1", "\"userId\":1.5"), json.replace("\"targetId\":2", "\"targetId\":-2"),
                 json.replace("\"version\":\"10\"", "\"version\":10"), json.replace(command.occurredAt().toString(), "yesterday"),
                 json.replace("\"schemaVersion\":1", "\"schemaVersion\":2"), json.replace("{", "{\"extra\":1,"))) {
             assertThrows(RuntimeException.class, () -> codec.decode(invalid.getBytes(StandardCharsets.UTF_8)), invalid);
