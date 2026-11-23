@@ -1,5 +1,6 @@
 package com.febrie.backend.article.search;
 
+import com.febrie.backend.article.comment.CommentValues;
 import com.febrie.backend.article.content.application.dto.*;
 import com.febrie.backend.article.content.application.ArticleDisplayAssembler;
 import com.febrie.backend.article.like.application.LikeQueryService;
@@ -24,7 +25,7 @@ class ArticleSearchHttpTests {
         when(service.page(new ArticleSearchQuery("feed", null, null, null, "recommended", 20), null))
                 .thenReturn(new ArticleSearchService.Page(List.of(), null));
         when(views.totals(List.of())).thenReturn(Map.of()); when(likes.summaries(null, List.of())).thenReturn(Map.of());
-        var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes, display)))
+        var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes, display, comments())))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
         mvc.perform(get("/api/articles/feed")).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
         verify(service).page(new ArticleSearchQuery("feed", null, null, null, "recommended", 20), null);
@@ -40,7 +41,7 @@ class ArticleSearchHttpTests {
         when(display.lists(anyList())).thenReturn(List.of(card));
         when(views.totals(List.of(1L))).thenReturn(Map.of(1L, 10L));
         when(likes.summaries(null, List.of(1L))).thenReturn(Map.of(1L, new LikeQueryService.Summary(3, false)));
-        var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes, display)))
+        var mvc = MockMvcBuilders.standaloneSetup(new ArticleSearchController(service, new ArticleSearchAssembler(views, likes, display, comments())))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
         mvc.perform(get("/api/articles/search").param("q", "Java").param("authorId", "2"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].articleId").value("1"))
@@ -51,4 +52,15 @@ class ArticleSearchHttpTests {
                 .andExpect(jsonPath("$.items[0].likedByMe").value(false));
         verify(views).totals(List.of(1L)); verify(likes).summaries(null, List.of(1L));
     }
+    private static CommentValues comments() {
+        var comments = mock(CommentValues.class);
+        when(comments.counts(anyCollection())).thenAnswer(call -> {
+            java.util.Collection<Long> ids = call.getArgument(0);
+            var counts = new java.util.HashMap<Long, Long>();
+            ids.forEach(id -> counts.put(id, 3L));
+            return counts;
+        });
+        return comments;
+    }
 }
+

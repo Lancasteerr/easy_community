@@ -1,5 +1,6 @@
 package com.febrie.backend.article.content.web;
 
+import com.febrie.backend.article.comment.CommentValues;
 import com.febrie.backend.article.common.ArticleErrors;
 import com.febrie.backend.article.content.application.ArticleQueryService;
 import com.febrie.backend.article.content.application.ArticleService;
@@ -37,7 +38,7 @@ class ArticleDetailHttpTests {
     @BeforeEach void prepare() {
         SecurityContextHolder.clearContext();
         var controller = new ArticleController(mock(ArticleService.class), queries, new ObjectMapper(),
-                new ArticleDetailResponseAssembler(likes, views), views);
+                new ArticleDetailResponseAssembler(likes, views, comments()), views);
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new ApiExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
@@ -139,4 +140,15 @@ class ArticleDetailHttpTests {
                 .andExpect(jsonPath("$.contentHtml").value("<p>正文</p>"))
                 .andExpect(jsonPath("$.authorAvatarUrl").value("https://avatars.test/2"));
     }
+    private static CommentValues comments() {
+        var comments = mock(CommentValues.class);
+        when(comments.counts(anyCollection())).thenAnswer(call -> {
+            java.util.Collection<Long> ids = call.getArgument(0);
+            var counts = new java.util.HashMap<Long, Long>();
+            ids.forEach(id -> counts.put(id, 3L));
+            return counts;
+        });
+        return comments;
+    }
 }
+
