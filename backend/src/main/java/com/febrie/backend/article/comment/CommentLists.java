@@ -1,0 +1,113 @@
+package com.febrie.backend.article.comment;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.stereotype.Service;
+
+/** 每次请求读取一个索引快照，再把候选批量装配为公开评论。 */
+@Service
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+public class CommentLists {
+    private static final int MAX_BATCHES = 8;
+    private final CommentAccess access;
+    private final CommentSnapshots snapshots;
+    private final CommentSnapshotCache cache;
+    private final CommentRefreshes refreshes;
+    private final CommentValues values;
+    private final CommentCursorCodec cursors;
+    private final CommentViews views;
+    private final Clock clock;
+
+    public CommentLists(CommentAccess access, CommentSnapshots snapshots, CommentSnapshotCache cache,
+                        CommentRefreshes refreshes, CommentValues values, CommentCursorCodec cursors,
+                        CommentViews views, Clock clock) {
+        this.access = access;
+        this.snapshots = snapshots;
+        this.cache = cache;
+        this.refreshes = refreshes;
+        this.values = values;
+        this.cursors = cursors;
+        this.views = views;
+        this.clock = clock;
+    }
+
+    public Response page(CommentListKey key, int size, String encoded, Long user) {
+        if (size < 1 || size > 50) throw CommentErrors.invalid();
+        access.article(key.articleId());
+        if (key.rootId() != 0) access.root(key.articleId(), key.rootId(), false);
+        var cursor = decode(key, encoded);
+        boolean hot = key.sort() == CommentListKey.Sort.HOT;
+        boolean pinned = hot && cursor != null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            var snapshot = pinned ? cache.snapshot(key, cursor.snapshotId()) : snapshots.current(key);
+            if (pinned && (snapshot == null || !snapshot.version().equals(cursor.rankVersion()))) throw expired();
+            String start = cursor == null ? (hot ? "0" : "") : cursor.position();
+            // 后台可立即接手，但本页继续使用这里已经选中的快照。
+            if (snapshots.stale(snapshot)) refreshes.offer(key, snapshot.id());
+            var page = scan(key, snapshot, start, size);
+            if (page == null) {
+                if (pinned) throw expired();
+                continue;
+            }
+            var items = views.items(page.rows(), user);
+            String next = null;
+            if ((page.more() || key.sort() == CommentListKey.Sort.REPLIES) && !page.position().isEmpty()) {
+                long deadline = cursor == null
+                        ? (hot ? Math.min(clock.millis() + 120_000, snapshot.hardAt()) : clock.millis() + 600_000)
+                        : cursor.expiresAt();
+                if (deadline <= clock.millis()) throw expired();
+                next = cursors.encode(new CommentCursorCodec.Cursor(key, hot ? snapshot.id() : null,
+                        hot ? snapshot.version() : null, page.position(), deadline));
+            }
+            return new Response(items, next, page.more(), hot ? snapshot.version() : null);
+        }
+        throw CommentErrors.unavailable();
+    }
+
+    private CommentCursorCodec.Cursor decode(CommentListKey key, String encoded) {
+        try {
+            return encoded == null ? null : cursors.decode(key, encoded);
+        } catch (com.febrie.backend.shared.error.ApiException failure) {
+            if (failure.status() == org.springframework.http.HttpStatus.CONFLICT) snapshots.event("cursor_expired");
+            throw failure;
+        }
+    }
+
+    private com.febrie.backend.shared.error.ApiException expired() {
+        snapshots.event("cursor_expired");
+        return CommentErrors.expired();
+    }
+
+    private Page scan(CommentListKey key, CommentSnapshot snapshot, String start, int size) {
+        var found = new ArrayList<CommentRow>(size);
+        String position = start;
+        boolean hot = key.sort() == CommentListKey.Sort.HOT;
+        for (int batch = 0; batch < MAX_BATCHES; batch++) {
+            var members = cache.page(key, snapshot, position, size + 1);
+            if (members == null) return null;
+            if (members.isEmpty()) return new Page(found, position, false);
+            var rows = values.objects(members.stream().map(CommentSnapshot::commentId).toList());
+            for (String member : members) {
+                var row = rows.get(CommentSnapshot.commentId(member));
+                if (row != null && row.articleId() == key.articleId() && row.rootId() == key.rootId()
+                        && (key.rootId() == 0 || !row.deleted())) {
+                    // 多读一条只用于判定下一页，位置停在该条之前。
+                    if (found.size() == size) return new Page(found, position, true);
+                    found.add(row);
+                }
+                position = hot ? Long.toString(Long.parseLong(position) + 1) : member;
+            }
+            if (members.size() < size + 1) return new Page(found, position, false);
+        }
+        // 有界扫描允许空页继续前进，避免大量已删回复拖住 Servlet。
+        return new Page(found, position, true);
+    }
+
+    private record Page(List<CommentRow> rows, String position, boolean more) { }
+
+    public record Response(List<CommentViews.Item> items, String nextCursor, boolean hasMore,
+                           @JsonInclude(JsonInclude.Include.NON_NULL) String rankVersion) { }
+}

@@ -96,6 +96,25 @@ class LikeConsumerTests {
         verify(channel, never()).basicAck(anyLong(), eq(true));
     }
 
+    @Test void articleAndCommentWithTheSameIdCommitAsSeparateTargets() throws Exception {
+        var article = message(20, 2, 1, true, 10);
+        var comment = message(21, 2, 1, false, 11);
+        var target = new LikeTarget(LikeTarget.Type.COMMENT, 2);
+        var command = new LikeCommand(1, java.util.UUID.randomUUID().toString(), 1L, target, false, "11", Instant.now());
+        when(codec.decode(comment.getBody())).thenReturn(command);
+        when(sql.applyArticle(eq(2L), anyList())).thenReturn(result(2, 1, LikeSqlService.Status.APPLIED));
+        var applied = new LikeSqlService.Result(LikeSqlService.Status.APPLIED, new LikeState(1, 2, false, 11));
+        when(sql.applyTarget(target, List.of(command))).thenReturn(new LikeSqlService.ArticleResult(target, List.of(applied), 0));
+
+        consumer.consumeBatch(2, List.of(article, comment), channel);
+
+        verify(sql).applyArticle(eq(2L), argThat(commands -> commands.size() == 1 &&
+                commands.getFirst().target().type() == LikeTarget.Type.ARTICLE));
+        verify(sql).applyTarget(target, List.of(command));
+        verify(channel).basicAck(20, false);
+        verify(channel).basicAck(21, false);
+    }
+
     @Test void invalidWrongPartitionAndConflictingRelationAreIsolatedOnly() throws Exception {
         var bad = new Message(new byte[]{99}, new MessageProperties()); bad.getMessageProperties().setDeliveryTag(9);
         when(codec.decode(bad.getBody())).thenThrow(new IllegalArgumentException("bad"));

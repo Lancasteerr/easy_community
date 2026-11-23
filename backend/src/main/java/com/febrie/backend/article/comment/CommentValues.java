@@ -1,7 +1,6 @@
 package com.febrie.backend.article.comment;
 
 import com.febrie.backend.shared.cache.CacheProtocol;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -49,7 +48,9 @@ public class CommentValues {
     }
 
     public Map<Long, Long> counts(Collection<Long> ids) {
-        return load("article-count", ids, 10_000, store::counts, Object::toString, Long::valueOf);
+        var counts = load("article-count", ids, 10_000, store::counts, Object::toString, Long::valueOf);
+        if (!counts.keySet().containsAll(ids)) throw CommentErrors.unavailable();
+        return counts;
     }
 
     Map<Long, CommentRow> objects(Collection<Long> ids) {
@@ -96,8 +97,11 @@ public class CommentValues {
                     // 拿锁后重新批量确认，只有缺失项进入 SQL。
                     var missing = new LinkedHashSet<>(held.keySet());
                     read(kind, held.keySet(), missing, results, decode);
-                    for (long id : held.keySet()) {
-                        if (!missing.contains(id)) pending.remove(id);
+                    for (long id : List.copyOf(held.keySet())) {
+                        if (!missing.contains(id)) {
+                            pending.remove(id);
+                            release(key(kind, id), held.remove(id));
+                        }
                     }
                     if (!missing.isEmpty()) {
                         var loaded = query.apply(missing);
@@ -108,6 +112,7 @@ public class CommentValues {
                                 if (value != null) results.put(id, value);
                                 pending.remove(id);
                             }
+                            held.remove(id);
                         }
                     }
                 }
@@ -135,7 +140,7 @@ public class CommentValues {
 
     private String tryLock(String key) {
         String token = UUID.randomUUID().toString();
-        return Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(key + ":lock", token, Duration.ofSeconds(5)))
+        return Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(key + ":lock", token, CacheProtocol.LOCK_TTL))
                 ? token : null;
     }
 
