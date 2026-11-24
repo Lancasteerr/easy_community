@@ -44,7 +44,7 @@ class ArticleDetailHttpTests {
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver()).build();
         when(queries.detail(1)).thenReturn(new ArticleDetailView("1", "Java", "2", "author", "summary",
                 "cover-id", "https://images.test/cover", List.of(), Instant.EPOCH, Instant.EPOCH,
-                "<p>正文</p>", "https://avatars.test/2"));
+                "<p>正文</p>", "https://avatars.test/2", "作者的公开简介"));
     }
 
     @AfterEach void clearIdentity() {
@@ -138,7 +138,8 @@ class ArticleDetailHttpTests {
                 .andExpect(jsonPath("$.publishedAt").value("1970-01-01T00:00:00Z"))
                 .andExpect(jsonPath("$.updatedAt").value("1970-01-01T00:00:00Z"))
                 .andExpect(jsonPath("$.contentHtml").value("<p>正文</p>"))
-                .andExpect(jsonPath("$.authorAvatarUrl").value("https://avatars.test/2"));
+                .andExpect(jsonPath("$.authorAvatarUrl").value("https://avatars.test/2"))
+                .andExpect(jsonPath("$.authorBio").value("作者的公开简介"));
     }
     private static CommentValues comments() {
         var comments = mock(CommentValues.class);

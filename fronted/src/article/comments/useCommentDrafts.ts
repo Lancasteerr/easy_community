@@ -16,11 +16,16 @@ export interface CommentDraft {
 
 const ROOT_DRAFT = 'root';
 const emptyDraft: CommentDraft = { text: '', state: 'editing' };
+export const MAX_COMMENT_LENGTH = 300;
 
-/** 与后端按码点计数的限制保持一致，表情不会按两个字符计。 */
+/** 计数器与发布校验共用口径，去掉首尾空白后按 Unicode 码点计数。 */
+export function commentLength(text: string) {
+  return Array.from(text.trim()).length;
+}
+
 export function validCommentText(text: string) {
-  const content = text.trim();
-  return content.length > 0 && Array.from(content).length <= 300;
+  const length = commentLength(text);
+  return length > 0 && length <= MAX_COMMENT_LENGTH;
 }
 
 async function confirm(articleId: string, id: string, signal: AbortSignal): Promise<CommentSubmission | undefined> {

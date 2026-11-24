@@ -7,7 +7,7 @@ import { useArticleDetail } from './useArticleDetail';
 
 vi.mock('../api/articles', () => ({ getArticleDetail: vi.fn() }));
 const read = vi.mocked(getArticleDetail);
-const data = (id: string): ArticleDetailData => ({ ...article(id), coverMediaId: null, contentHtml: '<p>正文</p>' });
+const data = (id: string): ArticleDetailData => ({ ...article(id), authorBio: '', coverMediaId: null, contentHtml: '<p>正文</p>' });
 beforeEach(() => read.mockReset());
 
 it('切换文章后隔离忽略取消的旧响应，并保留字符串大整数', async () => {

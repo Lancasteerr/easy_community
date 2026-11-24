@@ -46,6 +46,8 @@ export interface FeedPage {
 
 /** 公开详情直接复用文章展示字段；阅读数由服务端返回，前端不补计本次 PV。 */
 export interface ArticleDetailData extends ArticleCardData {
+  /** 作者公开简介，未填写时为空字符串。 */
+  authorBio: string;
   coverMediaId: string | null;
   contentHtml: string;
 }

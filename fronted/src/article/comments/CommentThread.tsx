@@ -7,6 +7,7 @@ import { Icon } from '../../components/Icon';
 import { useToast } from '../../components/Toast';
 import { useCooldown } from '../../hooks/useCooldown';
 import { useArticleLike } from '../useArticleLike';
+import { CommentContent } from './CommentContent';
 
 interface ThreadProps {
   articleId: string;
@@ -115,7 +116,7 @@ export function CommentThread({ articleId, authorId, root, onLogin, onReply, can
     </div>
     <div className="comment-thread-body">
       <Name item={root} authorId={authorId} />
-      <p className="comment-content">{root.content}</p>
+      <CommentContent content={root.content} maxLines={10} />
       <div className="comment-meta"><CommentTime value={root.createdAt} />
         {replyButton(root)}
         <CommentLike articleId={articleId} root={root} onLogin={onLogin} /></div>
@@ -124,7 +125,7 @@ export function CommentThread({ articleId, authorId, root, onLogin, onReply, can
         {visibleReplies?.length ? <ul className="comment-list">
           {visibleReplies.map((item) => <li key={item.id} className="comment-reply">
             <Name item={item} authorId={authorId} />
-            <p className="comment-content">{item.content}</p>
+            <CommentContent content={item.content} maxLines={3} />
             <div className="comment-meta"><CommentTime value={item.createdAt} />{replyButton(item)}</div>
             {editingId === item.id && editor}
           </li>)}

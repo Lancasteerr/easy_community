@@ -42,6 +42,17 @@ class ArticleDisplayAssemblerTests {
         assertThrows(ApiException.class, () -> assembler.lists(List.of(brief("1"))));
     }
 
+    @Test void detailReadsCurrentBioWithoutChangingArticleData() {
+        var detail = new ArticleDetailData("1", "title", "9", "summary", null, List.of(),
+                Instant.EPOCH, Instant.EPOCH, "<p>正文</p>");
+        when(users.get(9L)).thenReturn(Optional.of(new UserBasicData(9, "author", null, "", Instant.EPOCH)),
+                Optional.of(new UserBasicData(9, "author", null, "更新后的简介", Instant.EPOCH)));
+
+        // 同一份文章缓存数据，在用户资料更新前后分别组装响应。
+        assertEquals("", assembler.detail(detail).authorBio());
+        assertEquals("更新后的简介", assembler.detail(detail).authorBio());
+    }
+
     @Test void cachePayloadDoesNotCarryAuthorDisplayOrGeneratedUrls() {
         String payload = new ObjectMapper().writeValueAsString(brief("9007199254740995"));
         assertFalse(payload.contains("authorName"));

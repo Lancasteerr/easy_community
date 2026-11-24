@@ -13,7 +13,9 @@ const credentials = vi.mocked(getCsrf);
 const notify = vi.fn();
 const unauthorized = vi.fn();
 const token = { token: 'token', headerName: 'X-CSRF-TOKEN' };
-const data = (id = '1'): ArticleDetailData => ({ ...article(id), likedByMe: false, likeCount: 128, coverMediaId: null, contentHtml: '<p>正文</p>' });
+const data = (id = '1'): ArticleDetailData => ({
+  ...article(id), authorBio: '', likedByMe: false, likeCount: 128, coverMediaId: null, contentHtml: '<p>正文</p>',
+});
 const options = { enabled: true, userId: 'user', notify, onUnauthorized: unauthorized };
 beforeEach(() => {
   credentials.mockReset().mockResolvedValue(token);

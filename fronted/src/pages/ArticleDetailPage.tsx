@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { errorMessage } from '../api/client';
-import type { ArticleDetailData } from '../api/types';
+import type { ArticleDetailData, PublicUserProfile } from '../api/types';
 import { useArticleDetail } from '../article/useArticleDetail';
+import { useAuth } from '../auth/AuthContext';
 import { useCooldown } from '../hooks/useCooldown';
 import { Header } from '../components/Header';
 import { Avatar } from '../components/Avatar';
@@ -19,6 +20,7 @@ import { CommentSection } from '../article/comments/CommentSection';
 import { articleCommentsPath, commentsAnchor } from '../article/routes';
 import './detail.css';
 import { profilePath } from '../profile/routes';
+import { usePublicProfile } from '../profile/usePublicProfile';
 
 /** 详情读取不依赖登录初始化，公开文章允许游客直接阅读。 */
 export function ArticleDetailPage() {
@@ -33,6 +35,11 @@ function DetailSession({ id }: { id: string | undefined }) {
   const topInset = useDetailViewport(scroll, top);
   const geometry = { contentRef: body, topInset };
   const detail = useArticleDetail(id);
+  const auth = useAuth();
+  const viewerId = auth.status === 'authenticated' ? auth.identity?.userId : undefined;
+  const { profile } = usePublicProfile(viewerId);
+  // 导航和评论共用资料，只展示当前会话所对应的账号。
+  const viewerProfile = profile?.userId === viewerId ? profile : null;
   const seconds = useCooldown(detail.retryAt);
   const navigate = useNavigate();
   useEffect(() => { document.title = `${detail.article?.title ?? '文章详情'} · Easy Community`; }, [detail.article?.title]);
@@ -44,9 +51,9 @@ function DetailSession({ id }: { id: string | undefined }) {
       <div className="detail-scroll-canvas">
         {/* 与主页保持相同的吸顶遮挡边界，卡片整体从导航背景下方经过。 */}
         <div className="detail-top-frame" ref={top}>
-          <Header onLogin={login} />
+          <Header onLogin={login} viewerProfile={viewerProfile} />
         </div>
-        {detail.article ? <ArticleReader article={detail.article} scroll={scroll} body={body} topInset={topInset} />
+        {detail.article ? <ArticleReader article={detail.article} scroll={scroll} body={body} topInset={topInset} viewerProfile={viewerProfile} />
           : <main className="detail-columns" aria-label="文章详情" aria-busy={detail.status === 'loading'}>
             <div className="detail-reader detail-state">
               {detail.status === 'loading' && <div className="feed-skeleton" role="status" aria-label="正在加载文章">
@@ -63,8 +70,9 @@ function DetailSession({ id }: { id: string | undefined }) {
 }
 
 /** 正文自然撑开文章卡片；目录与位置恢复显式区分内容范围及外层滚动框。 */
-function ArticleReader({ article, scroll, body, topInset }: {
+function ArticleReader({ article, scroll, body, topInset, viewerProfile }: {
   article: ArticleDetailData; scroll: RefObject<HTMLDivElement | null>; body: RefObject<HTMLElement | null>; topInset: number;
+  viewerProfile: PublicUserProfile | null;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -94,7 +102,7 @@ function ArticleReader({ article, scroll, body, topInset }: {
       commentCount={commentCount} onComments={jumpToComments} /></div>
     <section className="detail-reader" aria-label="文章阅读区域">
       <article className="detail-flow" ref={body}><ArticleHero article={article} /><ArticleBody content={content} /></article>
-      <CommentSection articleId={article.articleId} authorId={article.authorId} count={commentCount}
+      <CommentSection articleId={article.articleId} authorId={article.authorId} count={commentCount} viewerProfile={viewerProfile}
         anchor={comments} onCount={setCommentCount} onLogin={loginToComment} />
     </section>
     <aside className="detail-sidebar" aria-label="作者与目录">
@@ -104,7 +112,7 @@ function ArticleReader({ article, scroll, body, topInset }: {
         </Link>
           {/* 作者卡片始终保留关注入口，目前仅提供未开放反馈。 */}
           <button className="follow-button" onClick={unavailable}>+ 关注</button></div>
-        <p>作者简介暂未开放</p>
+        <p>{article.authorBio || '暂无简介'}</p>
       </section>
       <ArticleToc entries={content.entries} active={toc.active} onJump={(id) => { stopRestoring(); toc.jump(id); }} />
     </aside>

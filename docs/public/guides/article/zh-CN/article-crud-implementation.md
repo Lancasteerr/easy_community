@@ -14,7 +14,7 @@
 |---|---|
 | POST /api/articles | articleId 缺失/null 新增，正 BIGINT 字符串修改；200 + articleId |
 | DELETE /api/articles/{id} | 作者、ADMIN、PATROLLER 可隐藏；204，授权成立的重复删除仍成功 |
-| GET /api/articles/{id} | 游客可读，隐藏/不存在 404 |
+| GET /api/articles/{id} | 游客可读，返回作者公开简介 `authorBio`（未填写时为空字符串），隐藏/不存在 404 |
 | GET /api/articles/{id}/edit | 仅作者，主库直读，隐藏 409 |
 | GET /api/users/me/articles | 登录身份来自Session；仅本人公开文章；size默认20、最大50，cursor续页；发布时间/ID倒序 |
 | GET /api/tags | 登录后本地搜索；q为空返回[]，limit默认10、范围1～20 |

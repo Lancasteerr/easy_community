@@ -44,9 +44,10 @@ public class ArticleDisplayAssembler {
         try {
             var author = requireAuthor(users.get(Long.parseLong(a.authorId())).orElse(null));
             var directory = tags.resolve(a.tagIds());
+            // 简介与署名使用同一份用户展示资料，编辑简介时只需刷新用户缓存。
             return new ArticleDetailView(a.articleId(), a.title(), a.authorId(), author.username(), a.summary(),
                     a.coverMediaId(), url(a.coverMediaId()), tagViews(a.tagIds(), directory), a.publishedAt(), a.updatedAt(), a.contentHtml(),
-                    url(author.avatarMediaId()));
+                    url(author.avatarMediaId()), author.bio());
         } catch (RuntimeException error) {
             log.warn("文章详情展示组装失败 articleId={} error={}", a.articleId(), error.getClass().getSimpleName());
             throw ArticleErrors.unavailable();

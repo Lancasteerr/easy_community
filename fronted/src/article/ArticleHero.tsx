@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import type { ArticleDetailData } from '../api/types';
-import { Link } from 'react-router-dom';
-import { profilePath } from '../profile/routes';
 
 const numbers = new Intl.NumberFormat('en-US');
 
@@ -14,7 +12,7 @@ export function ArticleHero({ article }: { article: ArticleDetailData }) {
     <div className="detail-title"><h1>{article.title}</h1><p>
       <span>更新于 <time dateTime={article.updatedAt} title={new Date(article.updatedAt).toLocaleString('zh-CN')}>
         {new Date(article.updatedAt).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replaceAll('/', '-')}</time></span>
-      <span>作者 <Link to={profilePath(article.authorId)}>{article.authorName}</Link></span><span>阅读 {numbers.format(article.viewCount)}</span>
+      <span>阅读 {numbers.format(article.viewCount)}</span>
     </p></div>
   </header>;
 }

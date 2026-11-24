@@ -1,6 +1,7 @@
 .article-comments { min-height: var(--detail-content-height); padding: 32px 42px 40px; border-top: 1px solid rgb(255 255 255 / 10%); color: #e4e7ed; }
 .article-comments:focus { outline: none; }
 .comment-login { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid #444953; border-radius: 12px; color: #b7bdc9; background: #202329; }
+.comment-login-text { flex: 1; }
 .comment-primary { padding: 7px 16px; border: 1px solid #9bceff; border-radius: 8px; color: #19232e; background: #9bceff; font-weight: 600; }
 .comment-primary:disabled { opacity: .55; cursor: not-allowed; }
 .comment-list-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 24px 0 6px; }
@@ -17,6 +18,13 @@
 .comment-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
 .comment-author { flex-shrink: 0; border-radius: 4px; padding: 1px 5px; color: #9bceff; background: #344254; font-size: 12px; }
 .comment-content { margin: 6px 0; font-size: 15px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment-content-wrap { position: relative; }
+/* 测量区沿用正文宽度及排版，裁掉溢出以免增加页面滚动高度。 */
+.comment-content-measure { position: absolute; inset: 0 0 auto; height: 0; overflow: hidden; visibility: hidden; }
+.comment-content-measure .comment-content { margin: 0; }
+.comment-content-toggle { padding: 0 4px; white-space: nowrap; }
+.comment-content-toggle:not([hidden]) { display: inline-block; }
+.comment-content-toggle[aria-expanded="true"]:not([hidden]) { display: block; margin-inline-start: auto; }
 .comment-meta { display: flex; align-items: center; gap: 8px; min-height: 26px; color: #a8adba; font-size: 13px; }
 .comment-like { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
 .comment-replies { margin-top: 10px; padding: 4px 12px; border-radius: 8px; background: #2d313a; }
@@ -24,11 +32,16 @@
 .comment-reply + .comment-reply { border-top: 1px solid rgb(255 255 255 / 8%); }
 .comment-status { margin: 12px 0; text-align: center; color: #b7bdc9; font-size: 14px; }
 .comment-composer { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: start; gap: 12px; }
+.comment-composer .comment-avatar { width: 36px; height: 36px; }
 .comment-thread-body .comment-composer { margin: 10px 0; }
 .comment-editor { padding: 12px; border: 1px solid #444953; border-radius: 12px; background: #202329; }
 .comment-editor:focus-within { border-color: #799fbf; }
-.comment-editor textarea { display: block; width: 100%; min-height: 64px; padding: 2px 4px; resize: vertical; border: 0; outline: 0; color: #e4e7ed; background: transparent; font: inherit; }
+.comment-editor textarea { display: block; width: 100%; min-height: 64px; padding: 2px 4px; resize: none; overflow-y: hidden; border: 0; outline: 0; color: #e4e7ed; background: transparent; font: inherit; }
 .comment-editor textarea::placeholder { color: #a8adba; }
 .comment-editor-target { margin: 0 4px 6px; color: #9bceff; font-size: 13px; overflow-wrap: anywhere; }
-.comment-editor-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+/* 计数留在左侧，按钮空间不足时在右侧换行。 */
+.comment-editor-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.comment-count { padding-left: 4px; color: #a8adba; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.comment-count[data-over-limit="true"] { color: #ffaeaa; }
+.comment-editor-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .comment-feedback { margin: 6px 4px 0; color: #ffaeaa; font-size: 13px; }

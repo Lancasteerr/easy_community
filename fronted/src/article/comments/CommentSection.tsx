@@ -1,6 +1,8 @@
 import { useRef, useState, type RefObject } from 'react';
 import type { CommentItem, CommentSort } from '../../api/comments';
+import type { PublicUserProfile } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
+import { Avatar } from '../../components/Avatar';
 import { useToast } from '../../components/Toast';
 import { CommentComposer } from './CommentComposer';
 import { CommentThread } from './CommentThread';
@@ -12,13 +14,14 @@ interface CommentSectionProps {
   articleId: string;
   authorId: string;
   count: number;
+  viewerProfile: PublicUserProfile | null;
   anchor: RefObject<HTMLElement | null>;
   onCount: (count: number) => void;
   onLogin: () => void;
 }
 
 /** 评论卡片先挂载定位锚点，列表请求独立于文章阅读。 */
-export function CommentSection({ articleId, authorId, count, anchor, onCount, onLogin }: CommentSectionProps) {
+export function CommentSection({ articleId, authorId, count, viewerProfile, anchor, onCount, onLogin }: CommentSectionProps) {
   const [sort, setSort] = useState<CommentSort>('hot');
   const [threadSubmissions, setThreadSubmissions] = useState<Record<string, string>>({});
   const countRevision = useRef(0);
@@ -43,7 +46,7 @@ export function CommentSection({ articleId, authorId, count, anchor, onCount, on
   }
 
   function composer(target: ReplyTarget | null) {
-    return <CommentComposer draft={drafts.getDraft(target)} target={target ?? undefined} enabled={canPublish}
+    return <CommentComposer draft={drafts.getDraft(target)} target={target ?? undefined} viewerProfile={viewerProfile} enabled={canPublish}
       onChange={(text) => drafts.edit(target, text)} onPublish={(mode) => { void drafts.publish(target, mode); }}
       onCancel={target ? () => drafts.setTarget(null) : undefined} />;
   }
@@ -51,7 +54,9 @@ export function CommentSection({ articleId, authorId, count, anchor, onCount, on
   return <section id="comments" className="article-comments" ref={anchor} tabIndex={-1} aria-labelledby="comments-heading">
     {auth.status === 'authenticated' && composer(null)}
     {auth.status === 'guest' && <div className="comment-login">
-      <span>登录后参与讨论</span><button type="button" className="comment-primary" onClick={onLogin}>登录</button>
+      <Avatar size={36} />
+      <span className="comment-login-text">登录后参与讨论</span>
+      <button type="button" className="comment-primary" onClick={onLogin}>登录</button>
     </div>}
     <div className="comment-list-header">
       <h2 id="comments-heading">全部评论 <span>{count.toLocaleString()}</span></h2>

@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 import { useToast } from './Toast';
 import { useAuth } from '../auth/AuthContext';
 import { errorMessage } from '../api/client';
+import type { PublicUserProfile } from '../api/types';
 import { usePublicProfile } from '../profile/usePublicProfile';
 import { AvatarMenu } from './AvatarMenu';
 import type { LogoutOptions } from '../auth/useLogout';
@@ -11,11 +12,17 @@ import { SearchForm } from '../search/SearchForm';
 import { searchPath } from '../search/routes';
 
 /** 导航统一解释登录态；阅读位置和编辑器退出确认仍由使用页面提供。 */
-export function Header({ onLogin, hideSearch = false, ...logoutOptions }: LogoutOptions & { onLogin?: () => void; hideSearch?: boolean }) {
+export function Header({ onLogin, hideSearch = false, viewerProfile, ...logoutOptions }: LogoutOptions & {
+  onLogin?: () => void;
+  hideSearch?: boolean;
+  viewerProfile?: PublicUserProfile | null;
+}) {
   const notify = useToast();
   const auth = useAuth();
   const navigate = useNavigate();
-  const { profile } = usePublicProfile(auth.identity?.userId);
+  // 详情页传入 null 时也由页面负责读取，导航不发起重复请求。
+  const { profile: ownProfile } = usePublicProfile(viewerProfile === undefined ? auth.identity?.userId : undefined);
+  const profile = viewerProfile === undefined ? ownProfile : viewerProfile;
   const login = () => { if (onLogin) onLogin(); else navigate('/login'); };
   const checkIdentity = () => { notify(auth.status === 'error' ? errorMessage(auth.error) : '正在确认登录状态，请稍后重试'); void auth.refresh(); };
   return <header className="home-header glass-panel">
