@@ -4,7 +4,6 @@ import com.febrie.backend.shared.cache.CacheProtocol;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.util.UUID;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +18,6 @@ public class CommentSnapshots {
     private final CommentSnapshotCache cache;
     private final Clock clock;
     private final MeterRegistry metrics;
-    private final Semaphore coldBuilds = new Semaphore(2);
 
     public CommentSnapshots(CommentStore store, CommentSnapshotCache cache, Clock clock,
                             MeterRegistry metrics) {
@@ -40,13 +38,9 @@ public class CommentSnapshots {
                 try {
                     snapshot = cache.current(key);
                     if (cache.available(key, snapshot)) return snapshot;
-                    if (!coldBuilds.tryAcquire()) throw CommentErrors.unavailable();
-                    try {
-                        var published = rebuild(key, snapshot, token, false);
-                        if (published != null) return published;
-                    } finally {
-                        coldBuilds.release();
-                    }
+                    // 构建锁按楼层隔离，不同楼层独立回源。
+                    var published = rebuild(key, snapshot, token, false);
+                    if (published != null) return published;
                 } finally {
                     release(key, token);
                 }

@@ -68,6 +68,40 @@ class CommentRefreshConcurrencyTests {
     }
 
     @Test
+    void threeDifferentColdReplyListsCanRebuildConcurrently() throws Exception {
+        var store = mock(CommentStore.class);
+        var cache = mock(CommentSnapshotCache.class);
+        var keys = List.of(
+                new CommentListKey(1, 3, CommentListKey.Sort.REPLIES),
+                new CommentListKey(1, 4, CommentListKey.Sort.REPLIES),
+                new CommentListKey(2, 5, CommentListKey.Sort.REPLIES));
+        var rebuilding = new CountDownLatch(keys.size());
+        var finish = new CountDownLatch(1);
+        when(cache.lock(any(CommentListKey.class))).thenReturn("leader");
+        when(cache.publish(any(CommentListKey.class), isNull(), anyString(), eq("leader"), eq(0L), anyLong(), eq(false)))
+                .thenAnswer(call -> new CommentSnapshot(call.getArgument(2), 1, 2, 0));
+        // 三个楼层必须同时到达查询，才能证明后来的请求未被其他楼层挡住。
+        when(store.indexBatch(any(CommentListKey.class), isNull(), anyInt())).thenAnswer(call -> {
+            rebuilding.countDown();
+            assertTrue(finish.await(4, TimeUnit.SECONDS));
+            return List.of();
+        });
+
+        var snapshots = new CommentSnapshots(store, cache, Clock.systemUTC(), meters);
+        try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+            var requests = keys.stream().map(key -> threads.submit(() -> snapshots.current(key))).toList();
+            try {
+                assertTrue(rebuilding.await(2, TimeUnit.SECONDS));
+            } finally {
+                finish.countDown();
+            }
+            for (var request : requests) {
+                assertEquals(0, request.get(2, TimeUnit.SECONDS).count());
+            }
+        }
+    }
+
+    @Test
     void saturatedPublisherNeverRunsRabbitOrRedisWorkOnTheCallingThread() {
         var publisher = mock(ThreadPoolTaskExecutor.class);
         doThrow(new TaskRejectedException("测试队列饱和")).when(publisher).execute(any(Runnable.class));
