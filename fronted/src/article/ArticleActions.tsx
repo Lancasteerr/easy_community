@@ -16,8 +16,9 @@ export function compactLikes(value: number) {
 }
 
 /** 左侧操作独立于正文；登录回跳只携带阅读位置，不携带待重放命令。 */
-export function ArticleActions({ article, reader, geometry }: {
+export function ArticleActions({ article, reader, geometry, commentCount, onComments }: {
   article: ArticleDetailData; reader: RefObject<HTMLElement | null>; geometry?: ReadingGeometry;
+  commentCount: number; onComments: () => void;
 }) {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ export function ArticleActions({ article, reader, geometry }: {
       aria-busy={like.busy} disabled={blocked || like.busy || seconds > 0}
       onClick={() => { if (auth.status === 'guest') login(); else void like.toggle(); }}><Icon name="like" size={24} /></button>
       <span title={String(like.count)}>{compactLikes(like.count)}</span></div>
-    <div><button aria-label="评论暂未开放" onClick={() => notify('评论暂未开放')}><Icon name="comment" size={24} /></button><span>—</span></div>
+    <div><button aria-label={`查看评论 ${commentCount}`} onClick={onComments}><Icon name="comment" size={24} /></button>
+      <span title={String(commentCount)}>{compactLikes(commentCount)}</span></div>
   </aside>;
 }

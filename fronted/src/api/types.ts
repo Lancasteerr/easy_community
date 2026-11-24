@@ -35,6 +35,8 @@ export interface ArticleCardData {
   viewCount: number;
   likeCount: number;
   likedByMe: boolean;
+  /** 只统计一级评论。 */
+  commentCount: number;
 }
 
 export interface FeedPage {

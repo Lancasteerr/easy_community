@@ -6,11 +6,13 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { ApiError, getCsrf, getSession, getPublicProfile, postLogin } from '../api/client';
 import { getArticleDetail, setArticleLike } from '../api/articles';
+import { getComments } from '../api/comments';
 import { article, profile } from '../test/fixtures';
 
 vi.mock('../api/client', async (original) => ({ ...await original<typeof import('../api/client')>(),
   getSession: vi.fn(), getPublicProfile: vi.fn(), getCsrf: vi.fn(), postLogin: vi.fn() }));
 vi.mock('../api/articles', () => ({ getArticleDetail: vi.fn(), setArticleLike: vi.fn() }));
+vi.mock('../api/comments', () => ({ getComments: vi.fn() }));
 
 function LocationProbe() {
   const location = useLocation();
@@ -24,17 +26,25 @@ beforeEach(() => {
   vi.mocked(postLogin).mockReset().mockResolvedValue(profile);
   vi.mocked(getArticleDetail).mockReset().mockResolvedValue({ ...article('9007199254740995'), coverMediaId: null, contentHtml: '<p>真实正文</p>' });
   vi.mocked(setArticleLike).mockReset();
+  vi.mocked(getComments).mockReset().mockResolvedValue({ items: [], nextCursor: null, hasMore: false, commentCount: 14 });
 });
 
-it('游客可以阅读，无标题不渲染目录，评论按钮只提示未开放', async () => {
+it('详情评论按钮聚焦评论卡片，游客可从卡片登录', async () => {
   const user = userEvent.setup();
   render(<MemoryRouter initialEntries={['/articles/9007199254740995']}><App /></MemoryRouter>);
   await screen.findByText('真实正文');
   expect(screen.queryByRole('navigation', { name: '文章目录' })).toBeNull();
   expect(screen.getByText('作者简介暂未开放')).toBeVisible();
-  await user.click(screen.getByRole('button', { name: '评论暂未开放' }));
-  expect(screen.getByRole('status')).toHaveTextContent('评论暂未开放');
+  await user.click(screen.getByRole('button', { name: '查看评论 14' }));
+  expect(screen.getByRole('region', { name: '全部评论 14' })).toHaveFocus();
+  expect(screen.getByText('登录后参与讨论')).toBeVisible();
+  expect(getComments).toHaveBeenCalledWith('9007199254740995', 'hot', null, expect.any(AbortSignal));
   expect(getArticleDetail).toHaveBeenCalledTimes(1);
+});
+
+it('详情锚点在文章加载后定位评论卡片', async () => {
+  render(<MemoryRouter initialEntries={['/articles/9007199254740995#comments']}><App /></MemoryRouter>);
+  expect(await screen.findByRole('region', { name: '全部评论 14' })).toHaveFocus();
 });
 
 it('游客点赞登录后回原文章重新读取状态，不自动补发点赞', async () => {

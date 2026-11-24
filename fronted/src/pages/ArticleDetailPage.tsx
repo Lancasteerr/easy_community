@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { errorMessage } from '../api/client';
 import type { ArticleDetailData } from '../api/types';
@@ -15,6 +15,8 @@ import { useArticleToc } from '../article/useArticleToc';
 import { capturePosition, useScrollMemory, type ReadingPosition } from '../navigation/useScrollMemory';
 import { ArticleActions } from '../article/ArticleActions';
 import { useDetailViewport } from '../article/useDetailViewport';
+import { CommentSection } from '../article/comments/CommentSection';
+import { articleCommentsPath, commentsAnchor } from '../article/routes';
 import './detail.css';
 import { profilePath } from '../profile/routes';
 
@@ -65,16 +67,35 @@ function ArticleReader({ article, scroll, body, topInset }: {
   article: ArticleDetailData; scroll: RefObject<HTMLDivElement | null>; body: RefObject<HTMLElement | null>; topInset: number;
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const unavailable = useUnavailable();
+  const comments = useRef<HTMLElement>(null);
+  const [commentCount, setCommentCount] = useState(article.commentCount);
   const content = useMemo(() => prepareContent(article.contentHtml), [article.contentHtml]);
   const geometry = { contentRef: body, topInset };
   const toc = useArticleToc(scroll, body, content.entries, topInset);
   const stopRestoring = useScrollMemory(scroll, `detail:${location.key}`, true,
     location.state?.readingPosition as ReadingPosition | undefined, undefined, 0, geometry);
+  const jumpToComments = useCallback(() => {
+    const reader = scroll.current;
+    const target = comments.current;
+    if (!reader || !target) return;
+    // 修改阅读容器的纵向坐标，保留页面及栏位的横向位置。
+    stopRestoring();
+    reader.scrollTop += target.getBoundingClientRect().top - reader.getBoundingClientRect().top - topInset - 24;
+    target.focus({ preventScroll: true });
+  }, [scroll, stopRestoring, topInset]);
+  useLayoutEffect(() => {
+    if (location.hash === commentsAnchor) jumpToComments();
+  }, [location.key, location.hash, jumpToComments]);
+  const loginToComment = () => navigate('/login', { state: { returnTo: articleCommentsPath(article.articleId) } });
   return <main className="detail-columns" aria-label="文章详情">
-    <div className="detail-actions-track"><ArticleActions article={article} reader={scroll} geometry={geometry} /></div>
+    <div className="detail-actions-track"><ArticleActions article={article} reader={scroll} geometry={geometry}
+      commentCount={commentCount} onComments={jumpToComments} /></div>
     <section className="detail-reader" aria-label="文章阅读区域">
       <article className="detail-flow" ref={body}><ArticleHero article={article} /><ArticleBody content={content} /></article>
+      <CommentSection articleId={article.articleId} authorId={article.authorId} count={commentCount}
+        anchor={comments} onCount={setCommentCount} onLogin={loginToComment} />
     </section>
     <aside className="detail-sidebar" aria-label="作者与目录">
       <section className="detail-author glass-panel" aria-label="文章作者">

@@ -1,6 +1,13 @@
 import { validUserId } from '../profile/routes';
 import { readSearchQuery, searchKeywordError, searchPath } from '../search/routes';
 
+export const commentsAnchor = '#comments';
+
+/** 列表入口与登录回跳共享同一个详情锚点。 */
+export function articleCommentsPath(articleId: string) {
+  return `/articles/${articleId}${commentsAnchor}`;
+}
+
 /** 与后端正 BIGINT 范围一致，全程使用字符串，避免精度损失。 */
 export function validArticleId(value: string | undefined): value is string {
   return !!value && /^[1-9]\d{0,18}$/.test(value)
@@ -23,6 +30,6 @@ export function loginDestination(value: unknown) {
   }
   const user = /^\/users\/([^/]+)$/.exec(value);
   if (user && validUserId(user[1])) return value;
-  const match = /^\/articles\/([^/]+)(\/edit)?$/.exec(value);
+  const match = /^\/articles\/([^/#?]+)(\/edit|#comments)?$/.exec(value);
   return match && validArticleId(match[1]) ? value : '/';
 }

@@ -11,6 +11,13 @@ it('登录白名单接受合法详情和原有入口，拒绝外链、越界及�
   }
 });
 
+it('登录回跳只放行文章详情的评论锚点', () => {
+  expect(loginDestination('/articles/1#comments')).toBe('/articles/1#comments');
+  for (const target of ['/articles/1#other', '/articles/1/edit#comments', '/articles/1?q=x#comments', '/articles/01#comments']) {
+    expect(loginDestination(target)).toBe('/');
+  }
+});
+
 it('向阅读页面传回有限位置，不向编辑页传递或接受非数值位置', () => {
   expect(readingReturnState('/articles/1', { top: 200, anchor: '3', offset: -20 })).toEqual({ readingPosition: { top: 200, anchor: '3', offset: -20 } });
   expect(readingReturnState('/articles/1', { top: Infinity })).toBeUndefined();

@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { useUnavailable } from './Toast';
 import { ArticleCardLikeButton } from './ArticleCardLikeButton';
 import { profilePath } from '../profile/routes';
+import { articleCommentsPath } from '../article/routes';
 
 const number = new Intl.NumberFormat('en-US');
 
@@ -47,7 +48,8 @@ export function ArticleCard({ article, onLogin, context = 'feed' }: { article: A
     </Link>}
     <div className="article-interactions">
       <ArticleCardLikeButton article={article} onLogin={onLogin} />
-      <button className="interaction-button" aria-label="评论暂未开放" onClick={unavailable}><Icon name="comment" /><span>—</span></button>
+      <Link className="interaction-button" to={articleCommentsPath(article.articleId)}
+        aria-label={`查看评论 ${article.commentCount}`}><Icon name="comment" /><span>{number.format(article.commentCount)}</span></Link>
     </div>
   </article>;
 }

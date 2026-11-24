@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { capturePage } from '../auth/pageLifetime';
 import { setArticleLike } from '../api/articles';
 import { isAuthenticationFailure, ApiError, errorMessage, getCsrf } from '../api/client';
-import type { ArticleCardData, CsrfToken } from '../api/types';
+import type { ArticleCardData, ArticleLikeAccepted, CsrfToken } from '../api/types';
 
 interface LikeOptions {
   enabled: boolean;
   userId?: string;
   onUnauthorized: () => void;
   notify: (message: string) => void;
+  /** 评论复用相同的目标状态提交和按钮防重。 */
+  write?: (id: string, liked: boolean, operationId: string, csrf: CsrfToken, signal: AbortSignal)
+    => Promise<Pick<ArticleLikeAccepted, 'accepted' | 'liked' | 'operationId'>>;
 }
 
 /** 成功受理后才更新展示；超时保留原状态，校正留给用户手动刷新页面。 */
@@ -43,7 +46,8 @@ export function useArticleLike(article: Pick<ArticleCardData, 'articleId' | 'lik
       if (!fresh() || !callbacks.current.enabled) return;
       const operationId = crypto.randomUUID();
       writing = true;
-      const accepted = await setArticleLike(article.articleId, !previous.liked, operationId, csrf.current, controller.signal);
+      const write = callbacks.current.write ?? setArticleLike;
+      const accepted = await write(article.articleId, !previous.liked, operationId, csrf.current, controller.signal);
       if (!fresh()) return;
       if (accepted.accepted !== true || accepted.operationId !== operationId || typeof accepted.liked !== 'boolean') {
         // 无法识别的受理响应也不能推断写入失败，更不能再次提交。

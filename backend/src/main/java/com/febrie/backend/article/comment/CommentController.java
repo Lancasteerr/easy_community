@@ -1,13 +1,17 @@
 package com.febrie.backend.article.comment;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.febrie.backend.article.common.ArticleIds;
 import com.febrie.backend.article.like.application.LikeWriteService;
 import com.febrie.backend.article.like.domain.LikeTarget;
 import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.dto.UserActor;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,9 +39,11 @@ public class CommentController {
     private final LikeWriteService likes;
     private final CommentCommands commands;
     private final CommentRootLists rootLists;
+    private final CommentValues values;
 
     public CommentController(CommentLists lists, CommentWrites writes, CommentViews views,
-                             CommentAccess access, LikeWriteService likes, CommentCommands commands, CommentRootLists rootLists) {
+                             CommentAccess access, LikeWriteService likes, CommentCommands commands,
+                             CommentRootLists rootLists, CommentValues values) {
         this.lists = lists;
         this.writes = writes;
         this.views = views;
@@ -45,10 +51,11 @@ public class CommentController {
         this.likes = likes;
         this.commands = commands;
         this.rootLists = rootLists;
+        this.values = values;
     }
 
     @GetMapping
-    public CommentLists.Response comments(@PathVariable String articleId, @RequestParam(defaultValue = "latest") String sort,
+    public RootPage comments(@PathVariable String articleId, @RequestParam(defaultValue = "latest") String sort,
                                           @RequestParam(defaultValue = "20") int size, @RequestParam(required = false) String cursor,
                                           @AuthenticationPrincipal SessionPrincipal principal) {
         var ordering = switch (sort) {
@@ -57,7 +64,13 @@ public class CommentController {
             default -> throw CommentErrors.invalid();
         };
         var key = new CommentListKey(ArticleIds.parse(articleId), 0, ordering);
-        return rootLists.page(key, size, cursor, user(principal));
+        var page = rootLists.page(key, size, cursor, user(principal));
+        // 只有首页需要刷新标题和左侧入口共享的一级评论数。
+        try {
+            return new RootPage(page, cursor == null ? values.counts(List.of(key.articleId())).get(key.articleId()) : null);
+        } catch (DataAccessException failure) {
+            throw CommentErrors.unavailable();
+        }
     }
 
     @GetMapping("/{rootId}/replies")
@@ -151,4 +164,7 @@ public class CommentController {
         if (principal == null) throw ApiException.unauthorized();
         return new UserActor(principal.userId(), principal.role(), principal.authVersion());
     }
+
+    public record RootPage(@JsonUnwrapped CommentLists.Response page,
+                           @JsonInclude(JsonInclude.Include.NON_NULL) Long commentCount) { }
 }

@@ -34,6 +34,12 @@ beforeEach(() => {
   login.mockReset(); expireSession.mockReset();
 });
 
+it('文章列表评论入口链接到详情评论卡片', () => {
+  renderCards();
+  const first = screen.getByRole('article', { name: '文章 1' });
+  expect(within(first).getByRole('link', { name: '查看评论 14' })).toHaveAttribute('href', '/articles/1#comments');
+});
+
 it('卡片只在受理后高亮和更新数量，写入期间阻止重复点击，其他卡片仍可操作', async () => {
   const pending = deferred<ArticleLikeAccepted>();
   write.mockReturnValueOnce(pending.promise);
