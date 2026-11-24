@@ -59,10 +59,14 @@ class CommentHttpIntegrationTests {
         properties.add("app.auth.redis-prefix", () -> PREFIX);
         properties.add("app.search.query-enabled", () -> false);
         properties.add("app.search.rank-scheduling-enabled", () -> false);
+        // 这个既有用例专门覆盖滚动升级期间的 Redis 一级兼容入口。
+        properties.add("app.comment.root-es", () -> false);
+        properties.add("app.comment.async-writes", () -> false);
+        properties.add("app.comment.index-sync", () -> false);
     }
 
     @Test
-    void guestRankingSurvivesRealRefreshAndTombstone() throws Exception {
+    void guestRankingSurvivesRealRefreshAndDeletion() throws Exception {
         String authorName = "comment_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         sql.update("INSERT INTO users(username, role) VALUES (?, 'USER')", authorName);
         long owner = sql.queryForObject("SELECT id FROM users WHERE username = ?", Long.class, authorName);
@@ -78,7 +82,7 @@ class CommentHttpIntegrationTests {
         var actor = new UserActor(owner, Role.USER, 1);
         var first = writes.create(article, actor, null, "较早");
         var second = writes.create(article, actor, null, "较晚");
-        var reply = writes.create(article, actor, first.id(), "回复");
+        writes.create(article, actor, first.id(), "回复");
         var key = new CommentListKey(article, 0, CommentListKey.Sort.HOT);
         String route = "/api/articles/" + article + "/comments";
         String hotRoute = route + "?sort=hot&size=1";
@@ -119,14 +123,13 @@ class CommentHttpIntegrationTests {
                 send(ownerBrowser, "DELETE", route + "/" + first.id(), null, csrf, 204);
                 send(ownerBrowser, "DELETE", route + "/" + first.id(), null, csrf, 204);
             }
-            var tombstone = get(http, hotRoute, 200).at("/items/0");
-            assertEquals("DELETED", tombstone.path("status").asString());
-            assertFalse(tombstone.has("content"));
-            assertEquals(Long.toString(reply.id()), get(http, route + "/" + first.id() + "/replies", 200).at("/items/0/id").asString());
+            assertEquals(Long.toString(second.id()), get(http, hotRoute, 200).at("/items/0/id").asString());
+            get(http, route + "/" + first.id() + "/replies", 404);
             assertEquals(1L, get(http, "/api/articles/" + article, 200).path("commentCount").asLong());
             get(http, route + "/" + first.id(), 401);
         } finally {
-            sql.update("DELETE r FROM comment_visibility_repair r JOIN article_comment c ON c.id=r.comment_id WHERE c.article_id=?", article);
+            sql.update("DELETE o FROM comment_index_outbox o JOIN article_comment c ON c.id=o.comment_id WHERE c.article_id=?", article);
+            sql.update("DELETE o FROM comment_like_index_outbox o JOIN article_comment c ON c.id=o.comment_id WHERE c.article_id=?", article);
             sql.update("DELETE l FROM comment_like_state l JOIN article_comment c ON c.id=l.comment_id WHERE c.article_id=?", article);
             sql.update("DELETE l FROM comment_like_count l JOIN article_comment c ON c.id=l.comment_id WHERE c.article_id=?", article);
             sql.update("DELETE FROM article_comment WHERE article_id=?", article);

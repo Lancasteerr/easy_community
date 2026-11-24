@@ -24,7 +24,8 @@ class CommentListsTests {
     private final CommentValues values = mock(CommentValues.class);
     private final CommentViews views = mock(CommentViews.class);
     private final CommentCursorCodec cursors = new CommentCursorCodec(new JsonMapper(), clock, "");
-    private final CommentLists lists = new CommentLists(access, snapshots, cache, refreshes, values, cursors, views, clock);
+    private final CommentStore store = mock(CommentStore.class);
+    private final CommentLists lists = new CommentLists(access, snapshots, cache, refreshes, values, cursors, views, clock, store);
 
     @Test
     void staleFirstPageAndContinuationUseOriginalHotVersion() {
@@ -81,7 +82,47 @@ class CommentListsTests {
         assertFalse(tail.hasMore());
         assertEquals(member(12), cursors.decode(key, tail.nextCursor()).position());
         verify(views).items(List.of(second), null);
-        verify(access, times(2)).root(1, 3, true);
+        verify(access, times(2)).root(1, 3);
+    }
+
+    @Test
+    void coldPreviewDisplaysTwoAndDoesNotConsumeThirdReply() {
+        var key = new CommentListKey(1, 3, CommentListKey.Sort.REPLIES);
+        var first = row(11, 3, false);
+        var second = row(12, 3, false);
+        var third = row(13, 3, false);
+        when(store.previews(1, List.of(3L))).thenReturn(Map.of(3L, List.of(first, second, third)));
+        when(views.items(List.of(first, second), null)).thenReturn(List.of(item(11), item(12)));
+
+        var preview = lists.previews(List.of(row(3, 0, false)), null).get(3L);
+        assertEquals(List.of("11", "12"), preview.items().stream().map(CommentViews.Item::id).toList());
+        assertTrue(preview.hasMore());
+        assertEquals(CommentSnapshot.member(clock.millis(), 12), cursors.decode(key, preview.nextCursor()).position());
+        verifyNoInteractions(snapshots);
+    }
+
+    @Test
+    void emptyTailCanContinueAfterSnapshotRefresh() {
+        var key = new CommentListKey(1, 3, CommentListKey.Sort.REPLIES);
+        var empty = snapshot("0", 0);
+        var next = snapshot("0", 1);
+        when(snapshots.current(key)).thenReturn(empty, next);
+        when(cache.page(key, empty, "", 11)).thenReturn(List.of());
+        when(cache.page(key, next, "", 11)).thenReturn(List.of(member(11)));
+        var reply = row(11, 3, false);
+        when(values.objects(List.of(11L))).thenReturn(Map.of(11L, reply));
+        when(views.items(List.of(reply), null)).thenReturn(List.of(item(11)));
+
+        var initial = lists.page(key, 10, null, null);
+        assertFalse(initial.hasMore());
+        assertEquals("", cursors.decode(key, initial.nextCursor()).position());
+        var continued = lists.page(key, 10, initial.nextCursor(), null);
+        assertFalse(continued.hasMore());
+        assertEquals(List.of("11"), continued.items().stream().map(CommentViews.Item::id).toList());
+    }
+
+    private CommentViews.Item item(long id) {
+        return new CommentViews.Item(Long.toString(id), "3", "3", null, "正文", clock.instant(), "ACTIVE", null, null, null);
     }
 
     private CommentSnapshot snapshot(String version, long count) {

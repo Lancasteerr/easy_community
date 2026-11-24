@@ -1,7 +1,9 @@
 package com.febrie.backend.article.comment;
 
 import com.febrie.backend.article.content.application.ArticleListHydrator;
+import com.febrie.backend.shared.error.ApiException;
 import java.util.List;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 /** 公开读和点赞先使用已有文章可见性缓存，再按需解析局部评论。 */
@@ -16,11 +18,22 @@ public class CommentAccess {
     }
 
     public void article(long id) {
-        if (!articles.isPublic(id)) throw CommentErrors.missing();
+        try {
+            if (!articles.isPublic(id)) throw CommentErrors.missing();
+        } catch (DataAccessException failure) {
+            throw CommentErrors.unavailable();
+        } catch (ApiException failure) {
+            if (failure.status().is5xxServerError()) throw CommentErrors.unavailable();
+            throw failure;
+        }
     }
 
-    public void root(long article, long id, boolean requireActive) {
-        var row = CommentWrites.belonging(article, values.objects(List.of(id)).get(id));
-        if (row.rootId() != 0 || (requireActive && row.deleted())) throw CommentErrors.missing();
+    public void root(long article, long id) {
+        try {
+            var row = CommentWrites.belonging(article, values.objects(List.of(id)).get(id));
+            if (row.rootId() != 0 || row.deleted()) throw CommentErrors.missing();
+        } catch (DataAccessException failure) {
+            throw CommentErrors.unavailable();
+        }
     }
 }

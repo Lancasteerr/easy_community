@@ -110,7 +110,8 @@ class CommentIndex {
                 .allowPartialSearchResults(false).timeout("2s")
                 .sort(s -> s.field(f -> f.field(key.sort() == CommentListKey.Sort.HOT ? "likeCount" : "createdAt")
                         .order(SortOrder.Desc)))
-                .sort(s -> s.field(f -> f.field("commentId").order(SortOrder.Desc)));
+                .sort(s -> s.field(f -> f.field("commentId").order(SortOrder.Desc)))
+                .sort(s -> s.field(f -> f.field("_shard_doc").order(SortOrder.Asc)));
         if (!after.isEmpty()) search.searchAfter(after.stream().map(SearchCursor.Value::field).toList());
         var result = es.search(search.build(), Void.class);
         if (result.timedOut() || result.shards().failed().intValue() > 0) throw new IOException("评论 ES 查询不完整");

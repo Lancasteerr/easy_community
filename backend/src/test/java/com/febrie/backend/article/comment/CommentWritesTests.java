@@ -32,7 +32,7 @@ class CommentWritesTests {
         var active = row(1);
         when(store.lockPublicArticle(1, true)).thenReturn(true);
         when(store.find(3, false)).thenReturn(active);
-        when(store.find(3, true)).thenReturn(active, active.tombstone());
+        when(store.find(3, true)).thenReturn(active, new CommentRow(3, 1, 0, null, 2, null, Instant.EPOCH, true));
         TransactionSynchronizationManager.initSynchronization();
         try {
             writes.delete(1, 3, author);

@@ -26,8 +26,7 @@ public class CommentViews {
         var authorsById = authors.get(authorIds);
         var roots = active.stream().filter(row -> row.rootId() == 0).map(CommentRow::id).toList();
         Map<Long, LikeQueryService.Summary> summaries = likes.summaries(Type.COMMENT, user, roots);
-        return rows.stream().map(row -> {
-            if (row.deleted()) return view(row, null, null);
+        return active.stream().map(row -> {
             var author = authorsById.get(row.authorId());
             if (author == null) throw CommentErrors.unavailable();
             return view(row, new Author(text(row.authorId()), author.username()), summaries.get(row.id()));
@@ -42,8 +41,8 @@ public class CommentViews {
     private static Item view(CommentRow row, Author author, LikeQueryService.Summary likes) {
         return new Item(text(row.id()), row.rootId() == 0 ? null : text(row.rootId()),
                 row.replyToId() == null ? null : text(row.replyToId()), author, row.content(), row.createdAt(),
-                row.deleted() ? "DELETED" : "ACTIVE", likes == null ? null : likes.likeCount(),
-                likes == null ? null : likes.likedByMe());
+                "ACTIVE", likes == null ? null : likes.likeCount(),
+                likes == null ? null : likes.likedByMe(), null);
     }
 
     private static String text(long id) { return Long.toString(id); }
@@ -53,5 +52,9 @@ public class CommentViews {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Item(String id, @JsonInclude(JsonInclude.Include.ALWAYS) String rootId,
                        @JsonInclude(JsonInclude.Include.ALWAYS) String replyToId, Author author, String content,
-                       Instant createdAt, String status, Long likeCount, Boolean likedByMe) { }
+                       Instant createdAt, String status, Long likeCount, Boolean likedByMe, CommentLists.Response replies) {
+        Item withReplies(CommentLists.Response preview) {
+            return new Item(id, rootId, replyToId, author, content, createdAt, status, likeCount, likedByMe, preview);
+        }
+    }
 }

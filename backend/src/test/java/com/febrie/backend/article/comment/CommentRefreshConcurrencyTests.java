@@ -8,6 +8,7 @@ import com.febrie.backend.shared.error.ApiException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.util.UUID;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -18,8 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.SimpleTransactionStatus;
 import tools.jackson.databind.json.JsonMapper;
 
 /** 用屏障暂停首次回源，验证竞争者和过载请求的行为。 */
@@ -32,8 +31,6 @@ class CommentRefreshConcurrencyTests {
     void oneColdRequestRebuildsWhileCompetitorUsesItsSharedWaitBudget() throws Exception {
         var store = mock(CommentStore.class);
         var cache = mock(CommentSnapshotCache.class);
-        var transactions = mock(PlatformTransactionManager.class);
-        when(transactions.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         var key = new CommentListKey(1, 0, CommentListKey.Sort.LATEST);
         var held = new AtomicBoolean();
         var current = new AtomicReference<CommentSnapshot>();
@@ -46,8 +43,8 @@ class CommentRefreshConcurrencyTests {
         doAnswer(call -> {
             rebuilding.countDown();
             assertTrue(finish.await(4, TimeUnit.SECONDS));
-            return null;
-        }).when(store).streamIndex(eq(key), any());
+            return List.of();
+        }).when(store).indexBatch(eq(key), isNull(), anyInt());
         when(cache.publish(eq(key), isNull(), anyString(), eq("leader"), eq(0L), anyLong(), eq(false)))
                 .thenAnswer(call -> {
                     current.set(snapshot);
@@ -55,7 +52,7 @@ class CommentRefreshConcurrencyTests {
                 });
 
         try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
-            var snapshots = new CommentSnapshots(store, cache, Clock.systemUTC(), meters, transactions);
+            var snapshots = new CommentSnapshots(store, cache, Clock.systemUTC(), meters);
             var first = threads.submit(() -> snapshots.current(key));
             try {
                 assertTrue(rebuilding.await(2, TimeUnit.SECONDS));
@@ -66,7 +63,7 @@ class CommentRefreshConcurrencyTests {
             }
             assertSame(snapshot, first.get(2, TimeUnit.SECONDS));
             assertSame(snapshot, snapshots.current(key));
-            verify(store).streamIndex(eq(key), any());
+            verify(store).indexBatch(eq(key), isNull(), anyInt());
         }
     }
 

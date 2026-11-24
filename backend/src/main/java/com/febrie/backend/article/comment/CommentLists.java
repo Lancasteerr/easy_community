@@ -3,6 +3,13 @@ package com.febrie.backend.article.comment;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.springframework.dao.DataAccessException;
+import com.febrie.backend.shared.error.ApiException;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.stereotype.Service;
@@ -20,10 +27,11 @@ public class CommentLists {
     private final CommentCursorCodec cursors;
     private final CommentViews views;
     private final Clock clock;
+    private final CommentStore store;
 
     public CommentLists(CommentAccess access, CommentSnapshots snapshots, CommentSnapshotCache cache,
                         CommentRefreshes refreshes, CommentValues values, CommentCursorCodec cursors,
-                        CommentViews views, Clock clock) {
+                        CommentViews views, Clock clock, CommentStore store) {
         this.access = access;
         this.snapshots = snapshots;
         this.cache = cache;
@@ -32,12 +40,24 @@ public class CommentLists {
         this.cursors = cursors;
         this.views = views;
         this.clock = clock;
+        this.store = store;
     }
 
     public Response page(CommentListKey key, int size, String encoded, Long user) {
+        try {
+            return readPage(key, size, encoded, user);
+        } catch (DataAccessException failure) {
+            throw CommentErrors.unavailable();
+        } catch (ApiException failure) {
+            if (failure.status().is5xxServerError()) throw CommentErrors.unavailable();
+            throw failure;
+        }
+    }
+
+    private Response readPage(CommentListKey key, int size, String encoded, Long user) {
         if (size < 1 || size > 50) throw CommentErrors.invalid();
         access.article(key.articleId());
-        if (key.rootId() != 0) access.root(key.articleId(), key.rootId(), true);
+        if (key.rootId() != 0) access.root(key.articleId(), key.rootId());
         var cursor = decode(key, encoded);
         boolean hot = key.sort() == CommentListKey.Sort.HOT;
         boolean pinned = hot && cursor != null;
@@ -54,13 +74,17 @@ public class CommentLists {
             }
             var items = views.items(page.rows(), user);
             String next = null;
-            if ((page.more() || key.sort() == CommentListKey.Sort.REPLIES) && !page.position().isEmpty()) {
+            if (page.more() || key.sort() == CommentListKey.Sort.REPLIES) {
                 long deadline = cursor == null
                         ? (hot ? Math.min(clock.millis() + 120_000, snapshot.hardAt()) : clock.millis() + 600_000)
                         : cursor.expiresAt();
                 if (deadline <= clock.millis()) throw expired();
                 next = cursors.encode(new CommentCursorCodec.Cursor(key, hot ? snapshot.id() : null,
                         hot ? snapshot.version() : null, page.position(), deadline));
+            }
+            if (key.rootId() == 0) {
+                var previews = previews(page.rows(), user);
+                items = items.stream().map(item -> item.withReplies(previews.get(Long.parseLong(item.id())))).toList();
             }
             return new Response(items, next, page.more(), hot ? snapshot.version() : null);
         }
@@ -102,8 +126,72 @@ public class CommentLists {
             }
             if (members.size() < size + 1) return new Page(found, position, false);
         }
-        // 有界扫描允许空页继续前进，避免大量已删回复拖住 Servlet。
-        return new Page(found, position, true);
+        // 尚有未验证的候选，不能把它们误报为可见的下一页。
+        throw CommentErrors.unavailable();
+    }
+
+    /** 预览先批量读取热楼，只在确实缺键时合并读取冷楼的前三条。 */
+    Map<Long, Response> previews(List<CommentRow> roots, Long user) {
+        if (roots.isEmpty()) return Map.of();
+        long article = roots.getFirst().articleId();
+        var keys = roots.stream().map(root -> new CommentListKey(article, root.id(), CommentListKey.Sort.REPLIES)).toList();
+        var snapshotsByKey = cache.currentAll(keys);
+        var candidates = cache.firstPages(snapshotsByKey, 3);
+        var objects = values.objects(candidates.values().stream().flatMap(List::stream)
+                .map(CommentSnapshot::commentId).distinct().toList());
+        var pages = new LinkedHashMap<CommentListKey, Page>();
+        var cold = new ArrayList<Long>();
+        for (var key : keys) {
+            var members = candidates.get(key);
+            if (members == null) {
+                cold.add(key.rootId());
+                continue;
+            }
+            var snapshot = snapshotsByKey.get(key);
+            if (snapshots.stale(snapshot)) refreshes.offer(key, snapshot.id());
+            var page = previewCandidates(key, members, objects);
+            if (page == null) page = scan(key, snapshot, "", 2);
+            if (page == null) cold.add(key.rootId());
+            else pages.put(key, page);
+        }
+        if (!cold.isEmpty()) {
+            var loaded = store.previews(article, cold);
+            for (long root : cold) {
+                var rows = loaded.getOrDefault(root, List.of());
+                var displayed = rows.subList(0, Math.min(rows.size(), 2));
+                String position = displayed.isEmpty() ? "" : member(displayed.getLast());
+                pages.put(new CommentListKey(article, root, CommentListKey.Sort.REPLIES),
+                        new Page(displayed, position, rows.size() > 2));
+            }
+        }
+        var viewsById = views.items(pages.values().stream().flatMap(page -> page.rows().stream()).toList(), user)
+                .stream().collect(Collectors.toMap(CommentViews.Item::id, Function.identity()));
+        long deadline = clock.millis() + 600_000;
+        var result = new HashMap<Long, Response>();
+        pages.forEach((key, page) -> result.put(key.rootId(), new Response(
+                page.rows().stream().map(row -> viewsById.get(Long.toString(row.id()))).toList(),
+                cursors.encode(new CommentCursorCodec.Cursor(key, null, null, page.position(), deadline)),
+                page.more(), null)));
+        return result;
+    }
+
+    private static Page previewCandidates(CommentListKey key, List<String> members, Map<Long, CommentRow> rows) {
+        var found = new ArrayList<CommentRow>(2);
+        String position = "";
+        for (String member : members) {
+            var row = rows.get(CommentSnapshot.commentId(member));
+            if (row != null && !row.deleted() && row.articleId() == key.articleId() && row.rootId() == key.rootId()) {
+                if (found.size() == 2) return new Page(found, position, true);
+                found.add(row);
+            }
+            position = member;
+        }
+        // 三条候选里出现过滤时，需要继续寻找真正的下一条可见回复。
+        return members.size() < 3 ? new Page(found, position, false) : null;
+    }
+
+    private static String member(CommentRow row) {
+        return CommentSnapshot.member(row.createdAt().toEpochMilli(), row.id());
     }
 
     private record Page(List<CommentRow> rows, String position, boolean more) { }

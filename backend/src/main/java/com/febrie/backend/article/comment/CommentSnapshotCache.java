@@ -3,6 +3,10 @@ package com.febrie.backend.article.comment;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -57,6 +61,37 @@ public class CommentSnapshotCache {
         return CommentSnapshot.parse(redis.opsForValue().get(base(key) + ":current"));
     }
 
+    Map<CommentListKey, CommentSnapshot> currentAll(List<CommentListKey> keys) {
+        var snapshots = new LinkedHashMap<CommentListKey, CommentSnapshot>();
+        if (keys.isEmpty()) return snapshots;
+        var raw = redis.opsForValue().multiGet(keys.stream().map(key -> base(key) + ":current").toList());
+        if (raw == null || raw.size() != keys.size()) throw CommentErrors.unavailable();
+        for (int i = 0; i < keys.size(); i++) {
+            var snapshot = CommentSnapshot.parse(raw.get(i));
+            if (snapshot != null) snapshots.put(keys.get(i), snapshot);
+        }
+        return snapshots;
+    }
+
+    Map<CommentListKey, List<String>> firstPages(Map<CommentListKey, CommentSnapshot> snapshots, int size) {
+        var out = new LinkedHashMap<CommentListKey, List<String>>();
+        if (snapshots.isEmpty()) return out;
+        // 每个脚本仅访问自己楼层的哈希槽，合并网络往返。
+        var replies = redis.executePipelined(new SessionCallback<Object>() {
+            @Override public <K, V> Object execute(RedisOperations<K, V> operations) {
+                snapshots.forEach((key, snapshot) -> readPage(key, snapshot, "", size));
+                return null;
+            }
+        });
+        if (replies.size() != snapshots.size()) throw CommentErrors.unavailable();
+        int index = 0;
+        for (var key : snapshots.keySet()) {
+            var result = pageRows((List<?>) replies.get(index++));
+            if (result != null) out.put(key, result);
+        }
+        return out;
+    }
+
     CommentSnapshot snapshot(CommentListKey key, String id) {
         return CommentSnapshot.parse(redis.opsForValue().get(meta(key, id)));
     }
@@ -107,8 +142,15 @@ public class CommentSnapshotCache {
     }
 
     List<String> page(CommentListKey key, CommentSnapshot snapshot, String position, int size) {
-        List<?> raw = redis.execute(PAGE, List.of(meta(key, snapshot.id()), rows(key, snapshot.id())),
+        return pageRows(readPage(key, snapshot, position, size));
+    }
+
+    private List<?> readPage(CommentListKey key, CommentSnapshot snapshot, String position, int size) {
+        return redis.execute(PAGE, List.of(meta(key, snapshot.id()), rows(key, snapshot.id())),
                 snapshot.payload(), Long.toString(snapshot.count()), key.sort().name(), position, Integer.toString(size));
+    }
+
+    private static List<String> pageRows(List<?> raw) {
         if (raw == null || raw.isEmpty()) throw CommentErrors.unavailable();
         if ("missing".equals(raw.getFirst())) return null;
         return raw.subList(1, raw.size()).stream().map(String.class::cast).toList();

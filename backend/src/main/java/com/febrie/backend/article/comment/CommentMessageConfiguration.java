@@ -17,6 +17,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /** 写分片与 ES 投影独立限流及死信，楼层刷新继续使用现有队列。 */
 @Configuration(proxyBeanMethods = false)
@@ -32,6 +33,16 @@ class CommentMessageConfiguration {
             queues.add(work(broker.writeQueue(partition), broker.writeDeadQueue(), true));
         }
         return new Declarables(queues);
+    }
+
+    @Bean
+    ThreadPoolTaskExecutor commentArticleExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(CommentBroker.PARTITIONS);
+        executor.setMaxPoolSize(CommentBroker.PARTITIONS);
+        executor.setQueueCapacity(CommentBroker.PARTITIONS * CommentBroker.BATCH_SIZE);
+        executor.setThreadNamePrefix("comment-article-");
+        return executor;
     }
 
     @Bean

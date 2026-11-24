@@ -4,12 +4,12 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.BiConsumer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -99,31 +99,46 @@ public class CommentStore {
         return result;
     }
 
-    /** 通过 Connector/J 流式读一个一致的 SELECT，排序由 Redis 定长键完成。 */
-    void streamIndex(CommentListKey key, BiConsumer<Long, Long> row) {
-        boolean hot = key.sort() == CommentListKey.Sort.HOT;
-        String select = hot
-                ? """
-                    SELECT c.id, CASE WHEN c.deleted THEN 0 ELSE l.like_count END AS sort_value
-                    FROM article_comment c JOIN comment_like_count l ON l.comment_id = c.id
-                    WHERE c.article_id = ? AND c.root_id = ?
-                    """
-                : """
-                    SELECT id, created_at FROM article_comment
-                    WHERE article_id = ? AND root_id = ? AND (root_id = 0 OR deleted = FALSE)
+    /** 每个冷楼层走有界索引查询，组装一级列表不会触发全楼重建。 */
+    Map<Long, List<CommentRow>> previews(long article, List<Long> roots) {
+        var result = new HashMap<Long, List<CommentRow>>();
+        for (int offset = 0; offset < roots.size(); offset += 16) {
+            var group = roots.subList(offset, Math.min(offset + 16, roots.size()));
+            var args = new ArrayList<Long>(group.size() * 2);
+            for (long root : group) {
+                args.add(article);
+                args.add(root);
+            }
+            String part = "(SELECT " + COLUMNS + " " + """
+                    FROM article_comment WHERE article_id = ? AND root_id = ? AND deleted = FALSE
+                    ORDER BY created_at, id LIMIT 3)
                     """;
-        sql.query(connection -> {
-            var statement = connection.prepareStatement(select);
-            statement.setLong(1, key.articleId());
-            statement.setLong(2, key.rootId());
-            statement.setFetchSize(Integer.MIN_VALUE);
-            return statement;
-        }, (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
-            long sortValue = hot ? rs.getLong(2)
-                    : rs.getObject(2, LocalDateTime.class).toInstant(ZoneOffset.UTC).toEpochMilli();
-            row.accept(rs.getLong(1), sortValue);
-        });
+            String query = String.join(" UNION ALL ", java.util.Collections.nCopies(group.size(), part))
+                    + " ORDER BY root_id, created_at, id";
+            sql.query(query, ROW, args.toArray()).forEach(row ->
+                    result.computeIfAbsent(row.rootId(), ignored -> new ArrayList<>(3)).add(row));
+        }
+        return result;
     }
+
+    /** 主库按不可变时间键读取，查询返回后才向 Redis 写这一批。 */
+    List<IndexRow> indexBatch(CommentListKey key, IndexRow after, int limit) {
+        boolean hot = key.sort() == CommentListKey.Sort.HOT;
+        String select = hot ? "SELECT c.id, c.created_at, l.like_count FROM article_comment c "
+                + "JOIN comment_like_count l ON l.comment_id = c.id "
+                : "SELECT c.id, c.created_at FROM article_comment c ";
+        String scope = "WHERE c.article_id = ? AND c.root_id = ? AND c.deleted = FALSE ";
+        String order = "ORDER BY c.created_at, c.id LIMIT ?";
+        RowMapper<IndexRow> mapper = (rs, index) -> {
+            var created = rs.getObject(2, LocalDateTime.class);
+            return new IndexRow(rs.getLong(1), created, hot ? rs.getLong(3) : created.toInstant(ZoneOffset.UTC).toEpochMilli());
+        };
+        if (after == null) return sql.query(select + scope + order, mapper, key.articleId(), key.rootId(), limit);
+        return sql.query(select + scope + "AND (c.created_at > ? OR (c.created_at = ? AND c.id > ?)) " + order,
+                mapper, key.articleId(), key.rootId(), after.createdAt(), after.createdAt(), after.id(), limit);
+    }
+
+    record IndexRow(long id, LocalDateTime createdAt, long sortValue) { }
 
     private static String placeholders(int size) {
         return String.join(",", java.util.Collections.nCopies(size, "?"));

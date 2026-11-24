@@ -35,10 +35,13 @@ public class CommentController {
     private final CommentAccess access;
     private final LikeWriteService likes;
     private final CommentCommands commands;
+    private final CommentRootLists rootLists;
+    private final boolean rootEs;
     private final boolean asyncWrites;
 
     public CommentController(CommentLists lists, CommentWrites writes, CommentViews views,
-                             CommentAccess access, LikeWriteService likes, CommentCommands commands,
+                             CommentAccess access, LikeWriteService likes, CommentCommands commands, CommentRootLists rootLists,
+                             @Value("${app.comment.root-es:true}") boolean rootEs,
                              @Value("${app.comment.async-writes:true}") boolean asyncWrites) {
         this.lists = lists;
         this.writes = writes;
@@ -46,6 +49,8 @@ public class CommentController {
         this.access = access;
         this.likes = likes;
         this.commands = commands;
+        this.rootLists = rootLists;
+        this.rootEs = rootEs;
         this.asyncWrites = asyncWrites;
     }
 
@@ -58,15 +63,16 @@ public class CommentController {
             case "hot" -> CommentListKey.Sort.HOT;
             default -> throw CommentErrors.invalid();
         };
-        return lists.page(new CommentListKey(ArticleIds.parse(articleId), 0, ordering), size, cursor, user(principal));
+        var key = new CommentListKey(ArticleIds.parse(articleId), 0, ordering);
+        return rootEs ? rootLists.page(key, size, cursor, user(principal)) : lists.page(key, size, cursor, user(principal));
     }
 
     @GetMapping("/{rootId}/replies")
     public CommentLists.Response replies(@PathVariable String articleId, @PathVariable String rootId,
-                                         @RequestParam(defaultValue = "20") int size, @RequestParam(required = false) String cursor,
+                                         @RequestParam(required = false) String cursor,
                                          @AuthenticationPrincipal SessionPrincipal principal) {
         return lists.page(new CommentListKey(ArticleIds.parse(articleId), ArticleIds.parse(rootId),
-                CommentListKey.Sort.REPLIES), size, cursor, user(principal));
+                CommentListKey.Sort.REPLIES), 10, cursor, user(principal));
     }
 
     @PostMapping(consumes = "application/json")
@@ -135,8 +141,13 @@ public class CommentController {
         long article = ArticleIds.parse(articleId);
         long comment = ArticleIds.parse(commentId);
         access.article(article);
-        access.root(article, comment, true);
-        return likes.set(user, new LikeTarget(LikeTarget.Type.COMMENT, comment), desired, operation);
+        access.root(article, comment);
+        try {
+            return likes.set(user, new LikeTarget(LikeTarget.Type.COMMENT, comment), desired, operation);
+        } catch (ApiException failure) {
+            if ("DEPENDENCY_UNAVAILABLE".equals(failure.code())) throw CommentErrors.unavailable();
+            throw failure;
+        }
     }
 
     private static Long user(SessionPrincipal principal) {

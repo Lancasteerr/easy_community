@@ -53,7 +53,8 @@ public class CommentCursorCodec {
                 if (!cursor.rankVersion().matches("[1-9][0-9]{0,18}") ||
                         !cursor.position().matches("[0-9]{1,18}")) throw CommentErrors.invalid();
             } else if (cursor.snapshotId() != null || cursor.rankVersion() != null ||
-                    !cursor.position().matches("[0-9]{19}:[0-9]{19}")) {
+                    !(key.sort() == CommentListKey.Sort.REPLIES && cursor.position().isEmpty())
+                    && !cursor.position().matches("[0-9]{19}:[0-9]{19}")) {
                 throw CommentErrors.invalid();
             }
             if (cursor.expiresAt() <= clock.millis()) throw CommentErrors.expired();

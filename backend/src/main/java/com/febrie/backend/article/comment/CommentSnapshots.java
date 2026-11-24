@@ -3,16 +3,12 @@ package com.febrie.backend.article.comment;
 import com.febrie.backend.shared.cache.CacheProtocol;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
-import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /** Web 冷回源与后台刷新共用构建算法；只有完整快照可切换为当前版本。 */
 @Service
@@ -23,16 +19,14 @@ public class CommentSnapshots {
     private final CommentSnapshotCache cache;
     private final Clock clock;
     private final MeterRegistry metrics;
-    private final PlatformTransactionManager transactions;
     private final Semaphore coldBuilds = new Semaphore(2);
 
     public CommentSnapshots(CommentStore store, CommentSnapshotCache cache, Clock clock,
-                            MeterRegistry metrics, PlatformTransactionManager transactions) {
+                            MeterRegistry metrics) {
         this.store = store;
         this.cache = cache;
         this.clock = clock;
         this.metrics = metrics;
-        this.transactions = transactions;
     }
 
     CommentSnapshot current(CommentListKey key) {
@@ -87,27 +81,22 @@ public class CommentSnapshots {
         long started = System.nanoTime();
         long deadline = started + TimeUnit.SECONDS.toNanos(seconds);
         String id = UUID.randomUUID().toString();
-        var batch = new ArrayList<String>(BATCH);
-        var tx = new TransactionTemplate(transactions);
-        tx.setReadOnly(true);
-        tx.setTimeout(seconds);
-        tx.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
-        tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        long[] count = {0};
+        long count = 0;
+        CommentStore.IndexRow after = null;
         try {
-            tx.executeWithoutResult(status -> store.streamIndex(key, (commentId, sortValue) -> {
+            while (true) {
                 checkBudget(deadline);
-                batch.add(CommentSnapshot.member(sortValue, commentId));
-                count[0]++;
-                if (batch.size() == BATCH) {
-                    cache.stage(key, id, token, batch);
-                    batch.clear();
-                }
-            }));
-            if (!batch.isEmpty()) cache.stage(key, id, token, batch);
+                var rows = store.indexBatch(key, after, BATCH);
+                if (rows.isEmpty()) break;
+                cache.stage(key, id, token, rows.stream()
+                        .map(row -> CommentSnapshot.member(row.sortValue(), row.id())).toList());
+                count += rows.size();
+                if (rows.size() < BATCH) break;
+                after = rows.getLast();
+            }
             checkBudget(deadline);
-            var result = cache.publish(key, expected, id, token, count[0], clock.millis(), refresh);
-            if (result != null) metrics.summary("community.comment.rebuild.rows", "sort", key.sort().name()).record(count[0]);
+            var result = cache.publish(key, expected, id, token, count, clock.millis(), refresh);
+            if (result != null) metrics.summary("community.comment.rebuild.rows", "sort", key.sort().name()).record(count);
             return result;
         } finally {
             metrics.timer("community.comment.rebuild", "mode", refresh ? "refresh" : "cold")
