@@ -53,7 +53,7 @@ public class CommentWrites {
         }
         if (row.deleted()) return;
         store.delete(row);
-        afterCommit(() -> maintenance.deleted(row.tombstone()));
+        afterCommit(() -> maintenance.deleted(row));
     }
 
     static CommentRow belonging(long article, CommentRow row) {

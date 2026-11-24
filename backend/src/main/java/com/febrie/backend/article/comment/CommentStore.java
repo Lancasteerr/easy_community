@@ -42,7 +42,7 @@ public class CommentStore {
     Map<Long, CommentRow> findAll(Collection<Long> ids) {
         var result = new HashMap<Long, CommentRow>();
         if (!ids.isEmpty()) {
-            sql.query("SELECT " + COLUMNS + " FROM article_comment WHERE id IN (" + placeholders(ids.size()) + ")",
+            sql.query("SELECT " + COLUMNS + " FROM article_comment WHERE deleted = FALSE AND id IN (" + placeholders(ids.size()) + ")",
                     ROW, ids.toArray()).forEach(row -> result.put(row.id(), row));
         }
         return result;
@@ -76,7 +76,6 @@ public class CommentStore {
                 row.id());
         if (changed != 1) throw new IllegalStateException("评论删除状态发生变化");
         if (row.rootId() == 0) changeCount(row.articleId(), -1);
-        sql.update("INSERT INTO comment_visibility_repair(comment_id) VALUES (?)", row.id());
     }
 
     private void changeCount(long article, int delta) {
@@ -93,27 +92,6 @@ public class CommentStore {
                     ids.toArray());
         }
         return result;
-    }
-
-    List<Long> dueRepairs() {
-        return sql.queryForList("""
-                SELECT comment_id FROM comment_visibility_repair WHERE next_attempt_at <= UTC_TIMESTAMP(3)
-                ORDER BY next_attempt_at, comment_id LIMIT 50
-                """, Long.class);
-    }
-
-    boolean claimRepair(long id) {
-        return sql.update("""
-                UPDATE comment_visibility_repair SET next_attempt_at = UTC_TIMESTAMP(3) + INTERVAL 5 SECOND
-                WHERE comment_id = ? AND next_attempt_at <= UTC_TIMESTAMP(3)
-                """, id) == 1;
-    }
-
-    // afterCommit 仍可能绑定原连接，补偿清理必须独立提交。
-    @org.springframework.transaction.annotation.Transactional(
-            propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
-    public void completeRepair(long id) {
-        sql.update("DELETE FROM comment_visibility_repair WHERE comment_id = ?", id);
     }
 
     /** 通过 Connector/J 流式读一个一致的 SELECT，排序由 Redis 定长键完成。 */

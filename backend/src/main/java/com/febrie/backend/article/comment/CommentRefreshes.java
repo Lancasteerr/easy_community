@@ -32,7 +32,6 @@ public class CommentRefreshes {
     private final ThreadPoolTaskExecutor publishers;
     private final CommentSnapshotCache cache;
     private final CommentSnapshots snapshots;
-    private final CommentMaintenance maintenance;
     private final ObjectMapper json;
     private final Clock clock;
     private final String queue;
@@ -41,14 +40,13 @@ public class CommentRefreshes {
 
     public CommentRefreshes(@Qualifier("commentRefreshRabbit") RabbitTemplate rabbit,
                             @Qualifier("commentRefreshPublishExecutor") ThreadPoolTaskExecutor publishers,
-                            CommentSnapshotCache cache, CommentSnapshots snapshots, CommentMaintenance maintenance,
+                            CommentSnapshotCache cache, CommentSnapshots snapshots,
                             ObjectMapper json, Clock clock, MeterRegistry metrics,
                             @Value("${app.comment.refresh-queue}") String queue) {
         this.rabbit = rabbit;
         this.publishers = publishers;
         this.cache = cache;
         this.snapshots = snapshots;
-        this.maintenance = maintenance;
         this.json = json;
         this.clock = clock;
         this.metrics = metrics;
@@ -114,11 +112,6 @@ public class CommentRefreshes {
             log.warn("评论列表刷新失败 key={}", command.key(), failure);
         }
         channel.basicAck(tag, false);
-    }
-
-    @Scheduled(scheduler = "commentMaintenanceScheduler", fixedDelay = 1000, initialDelay = 1000)
-    public void repairDeleted() {
-        maintenance.repair();
     }
 
     @Scheduled(scheduler = "commentMaintenanceScheduler", fixedDelay = 10000, initialDelay = 10000)

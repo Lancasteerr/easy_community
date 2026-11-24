@@ -37,7 +37,7 @@ public class CommentLists {
     public Response page(CommentListKey key, int size, String encoded, Long user) {
         if (size < 1 || size > 50) throw CommentErrors.invalid();
         access.article(key.articleId());
-        if (key.rootId() != 0) access.root(key.articleId(), key.rootId(), false);
+        if (key.rootId() != 0) access.root(key.articleId(), key.rootId(), true);
         var cursor = decode(key, encoded);
         boolean hot = key.sort() == CommentListKey.Sort.HOT;
         boolean pinned = hot && cursor != null;
@@ -93,7 +93,7 @@ public class CommentLists {
             for (String member : members) {
                 var row = rows.get(CommentSnapshot.commentId(member));
                 if (row != null && row.articleId() == key.articleId() && row.rootId() == key.rootId()
-                        && (key.rootId() == 0 || !row.deleted())) {
+                        && !row.deleted()) {
                     // 多读一条只用于判定下一页，位置停在该条之前。
                     if (found.size() == size) return new Page(found, position, true);
                     found.add(row);

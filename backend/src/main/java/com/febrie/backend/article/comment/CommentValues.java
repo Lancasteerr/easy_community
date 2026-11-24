@@ -54,7 +54,7 @@ public class CommentValues {
     }
 
     Map<Long, CommentRow> objects(Collection<Long> ids) {
-        return load("object", ids, 120_000, store::findAll, json::writeValueAsString,
+        return load("visible-object", ids, 120_000, store::findAll, json::writeValueAsString,
                 value -> json.readValue(value, CommentRow.class));
     }
 
@@ -64,8 +64,8 @@ public class CommentValues {
         }
     }
 
-    boolean tombstone(CommentRow deleted) {
-        return write("object", deleted.id(), "write", 120_000, json.writeValueAsString(deleted));
+    boolean invalidateObject(long id) {
+        return write("visible-object", id, "delete", 0, "");
     }
 
     private boolean write(String kind, long id, String operation, long ttl, String value) {

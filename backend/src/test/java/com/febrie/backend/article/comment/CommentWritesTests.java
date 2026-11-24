@@ -42,7 +42,7 @@ class CommentWritesTests {
             var callbacks = TransactionSynchronizationManager.getSynchronizations();
             assertEquals(1, callbacks.size());
             callbacks.forEach(TransactionSynchronization::afterCommit);
-            verify(maintenance).deleted(active.tombstone());
+            verify(maintenance).deleted(active);
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }

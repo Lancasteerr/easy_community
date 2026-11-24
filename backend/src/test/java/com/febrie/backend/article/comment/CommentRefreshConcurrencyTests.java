@@ -77,7 +77,7 @@ class CommentRefreshConcurrencyTests {
         var snapshots = mock(CommentSnapshots.class);
         var rabbit = mock(RabbitTemplate.class);
         var cache = mock(CommentSnapshotCache.class);
-        var refreshes = new CommentRefreshes(rabbit, publisher, cache, snapshots, mock(CommentMaintenance.class),
+        var refreshes = new CommentRefreshes(rabbit, publisher, cache, snapshots,
                 new JsonMapper(), Clock.systemUTC(), meters, "test.comment.refresh.q");
         refreshes.offer(new CommentListKey(1, 0, CommentListKey.Sort.HOT), UUID.randomUUID().toString());
         verify(snapshots).event("publish_saturated");
