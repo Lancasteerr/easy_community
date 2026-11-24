@@ -16,7 +16,7 @@ export function compactCount(value: number) {
   return unit === 1 ? String(value) : `${(value / unit).toFixed(1).replace(/\.0$/, '')}${unit === 10_000 ? '万' : '亿'}`;
 }
 
-/** 指标只读，真实零值与尚未开放的能力分开展示。 */
+/** 指标只读，评论数沿用列表接口的一级评论计数口径。 */
 export function ManageArticleRow({ article, disabled = false, uncertain = false, onDelete }: {
   article: ArticleCardData; disabled?: boolean; uncertain?: boolean; onDelete: (article: ArticleCardData) => void;
 }) {
@@ -34,7 +34,9 @@ export function ManageArticleRow({ article, disabled = false, uncertain = false,
       <time dateTime={article.publishedAt}>{publicationTime(article.publishedAt)}</time>
       <div className="manage-metrics">
         <span title={`阅读 ${article.viewCount}`} aria-label={`阅读 ${article.viewCount}`}><Icon name="manageView" size={16} />{compactCount(article.viewCount)}</span>
-        <span title="评论暂未开放" aria-label="评论暂未开放"><Icon name="manageComment" size={16} />—</span>
+        <span title={`评论 ${article.commentCount}`} aria-label={`评论 ${article.commentCount}`}>
+          <Icon name="manageComment" size={16} />{compactCount(article.commentCount)}
+        </span>
         <span title={`点赞 ${article.likeCount}`} aria-label={`点赞 ${article.likeCount}`}><Icon name="manageLike" size={16} />{compactCount(article.likeCount)}</span>
         <span title="收藏暂未开放" aria-label="收藏暂未开放"><Icon name="favorite" size={16} />—</span>
       </div>

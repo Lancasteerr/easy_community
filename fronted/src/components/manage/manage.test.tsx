@@ -30,7 +30,7 @@ describe('管理页展示边界', () => {
     const remove = vi.fn();
     render(<MemoryRouter><ManageArticleRow article={data} onDelete={remove} /></MemoryRouter>);
     expect(screen.getByLabelText('阅读 0')).toHaveTextContent('0');
-    expect(screen.getByLabelText('评论暂未开放')).toHaveTextContent('—');
+    expect(screen.getByLabelText('收藏暂未开放')).toHaveTextContent('—');
     expect(screen.getByTitle(data.title)).toHaveTextContent(data.title);
     fireEvent.error(screen.getByRole('presentation'));
     expect(screen.getByText('暂无封面')).toBeVisible();
@@ -39,6 +39,19 @@ describe('管理页展示边界', () => {
     expect(remove).toHaveBeenCalledWith(data);
     expect(compactCount(128000)).toBe('12.8万');
     expect(compactCount(100000000)).toBe('1亿');
+  });
+
+  it.each([
+    { count: 0, text: '0' },
+    { count: 14, text: '14' },
+    { count: 128000, text: '12.8万' },
+  ])('评论数 $count 显示为 $text，提示保留完整数值', ({ count, text }) => {
+    const data = { ...article(), commentCount: count };
+    render(<MemoryRouter><ManageArticleRow article={data} onDelete={vi.fn()} /></MemoryRouter>);
+    const label = `评论 ${count}`;
+    const metric = screen.getByLabelText(label);
+    expect(metric.textContent).toBe(text);
+    expect(metric).toHaveAttribute('title', label);
   });
 
   it('首次骨架提供明确的加载状态', () => {
