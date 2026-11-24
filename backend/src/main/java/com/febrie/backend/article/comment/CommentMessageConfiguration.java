@@ -62,6 +62,27 @@ class CommentMessageConfiguration {
         return new WriteListeners(List.copyOf(listeners));
     }
 
+    @Bean
+    org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler commentIndexScheduler() {
+        var scheduler = new org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("comment-index-");
+        return scheduler;
+    }
+
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+            name = "app.comment.index-sync", havingValue = "true", matchIfMissing = true)
+    SimpleMessageListenerContainer commentIndexListener(ConnectionFactory factory, CommentBroker broker,
+                                                         CommentIndexWorker worker) {
+        var listener = new SimpleMessageListenerContainer(factory);
+        listener.setQueueNames(broker.indexQueue());
+        listener.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        listener.setPrefetchCount(4);
+        listener.setMessageListener((org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener) worker::consume);
+        return listener;
+    }
+
     private static Queue work(String name, String parked, boolean single) {
         return new Queue(name, true, false, false, Map.of(
                 "x-queue-type", "quorum", "x-quorum-initial-group-size", 1,

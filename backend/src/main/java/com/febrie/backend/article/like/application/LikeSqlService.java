@@ -1,5 +1,6 @@
 package com.febrie.backend.article.like.application;
 
+import com.febrie.backend.article.comment.CommentIndexTasks;
 import com.febrie.backend.article.like.domain.*;
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository;
@@ -12,10 +13,12 @@ import org.springframework.transaction.annotation.*;
 public class LikeSqlService {
     private final LikeRepository repository;
     private final int batchSize;
+    private final CommentIndexTasks commentIndex;
 
-    public LikeSqlService(LikeRepository repository, LikeProperties properties) {
+    public LikeSqlService(LikeRepository repository, LikeProperties properties, CommentIndexTasks commentIndex) {
         this.repository = repository;
         this.batchSize = properties.batchSize();
+        this.commentIndex = commentIndex;
     }
 
     /** 单条入口本身开启事务，不依赖类内调用触发事务代理。 */
@@ -44,6 +47,11 @@ public class LikeSqlService {
                 throw new IllegalArgumentException("文章事务必须属于同一文章且用户不重复");
             }
         }
+        if (target.type() == LikeTarget.Type.COMMENT && !commentIndex.lockActiveRoot(targetId)) {
+            // 已删除的一级不再改变关系、总数或索引；过期命令也不回填点赞缓存。
+            return new ArticleResult(target, commands.stream().map(command -> new Result(Status.STALE,
+                    new LikeState(command.userId(), targetId, false, 0))).toList(), 0);
+        }
         var ordered = commands.stream().sorted(Comparator.comparingLong(LikeCommand::userId)).toList();
         List<Result> results = new ArrayList<>();
         int delta = 0;
@@ -66,6 +74,9 @@ public class LikeSqlService {
         }
         if (delta != 0 && store.addDelta(targetId, delta) != 1) {
             throw new LikeInvariantException("点赞计数更新行数异常");
+        }
+        if (delta != 0 && target.type() == LikeTarget.Type.COMMENT) {
+            commentIndex.scheduleLike(targetId);
         }
         return new ArticleResult(target, results, delta);
     }

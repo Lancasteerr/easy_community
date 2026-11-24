@@ -1,5 +1,6 @@
 package com.febrie.backend.article.like;
 
+import com.febrie.backend.article.comment.CommentIndexTasks;
 import com.febrie.backend.article.like.application.LikeSqlService;
 import com.febrie.backend.article.like.domain.*;
 import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository;
@@ -12,7 +13,7 @@ import static org.mockito.Mockito.*;
 /** 事务原子性另由MySQL集成测试验证；此处锁定版本裁决与净增量规则。 */
 class LikeSqlServiceTests {
     private final LikeRepository repository = mock(LikeRepository.class);
-    private final LikeSqlService service = new LikeSqlService(repository, LikeTestProperties.defaults());
+    private final LikeSqlService service = new LikeSqlService(repository, LikeTestProperties.defaults(), mock(CommentIndexTasks.class));
 
     @org.junit.jupiter.api.BeforeEach void counterBaseline() { when(repository.lockCount(2)).thenReturn(1L); }
 
