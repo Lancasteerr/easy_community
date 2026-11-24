@@ -3,6 +3,7 @@ package com.febrie.backend.article.comment;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.febrie.backend.article.like.application.LikeQueryService;
 import com.febrie.backend.article.like.domain.LikeTarget.Type;
+import com.febrie.backend.media.application.MediaUrls;
 import com.febrie.backend.user.application.UserBasicQueryService;
 import java.time.Instant;
 import java.util.List;
@@ -14,10 +15,12 @@ import org.springframework.stereotype.Component;
 public class CommentViews {
     private final UserBasicQueryService authors;
     private final LikeQueryService likes;
+    private final MediaUrls mediaUrls;
 
-    public CommentViews(UserBasicQueryService authors, LikeQueryService likes) {
+    public CommentViews(UserBasicQueryService authors, LikeQueryService likes, MediaUrls mediaUrls) {
         this.authors = authors;
         this.likes = likes;
+        this.mediaUrls = mediaUrls;
     }
 
     List<Item> items(List<CommentRow> rows, Long user) {
@@ -29,12 +32,15 @@ public class CommentViews {
         return active.stream().map(row -> {
             var author = authorsById.get(row.authorId());
             if (author == null) throw CommentErrors.unavailable();
-            return view(row, new Author(text(row.authorId()), author.username()), summaries.get(row.id()));
+            // 复用批量查询出的头像 ID，仅在一级评论展示时生成公开地址。
+            String avatarUrl = row.rootId() == 0 && author.avatarMediaId() != null
+                    ? mediaUrls.publicUrl(author.avatarMediaId()) : null;
+            return view(row, new Author(text(row.authorId()), author.username(), avatarUrl), summaries.get(row.id()));
         }).toList();
     }
 
     Item created(CommentRow row, String username) {
-        return view(row, new Author(text(row.authorId()), username),
+        return view(row, new Author(text(row.authorId()), username, null),
                 row.rootId() == 0 ? new LikeQueryService.Summary(0, false) : null);
     }
 
@@ -47,7 +53,7 @@ public class CommentViews {
 
     private static String text(long id) { return Long.toString(id); }
 
-    public record Author(String id, String username) { }
+    public record Author(String id, String username, @JsonInclude(JsonInclude.Include.NON_NULL) String avatarUrl) { }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Item(String id, @JsonInclude(JsonInclude.Include.ALWAYS) String rootId,
