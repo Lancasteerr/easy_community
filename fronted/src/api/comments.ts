@@ -23,6 +23,12 @@ export interface CommentPage {
   commentCount?: number;
 }
 
+/** 浏览器只处理发布结果，提交编号在第一次发送前生成。 */
+export interface CommentSubmission {
+  state: 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
+  commentCount?: number;
+}
+
 function commentsPath(articleId: string) {
   return `/api/articles/${encodeURIComponent(articleId)}/comments`;
 }
@@ -33,10 +39,25 @@ export function getComments(articleId: string, sort: CommentSort, cursor: string
   return request<CommentPage>(`${commentsPath(articleId)}?${query}`, { signal });
 }
 
-export function getReplies(articleId: string, rootId: string, cursor: string | null, signal: AbortSignal) {
+export function getReplies(articleId: string, rootId: string, cursor: string | null, signal: AbortSignal, submissionId?: string) {
   const path = `${commentsPath(articleId)}/${encodeURIComponent(rootId)}/replies`;
-  const query = cursor === null ? '' : `?${new URLSearchParams({ cursor })}`;
-  return request<CommentPage>(path + query, { signal });
+  const query = new URLSearchParams();
+  if (cursor !== null) query.set('cursor', cursor);
+  if (submissionId) query.set('submissionId', submissionId);
+  return request<CommentPage>(query.size ? `${path}?${query}` : path, { signal });
+}
+
+export function submitComment(articleId: string, id: string, content: string, replyToId: string | null,
+  csrf: CsrfToken, signal: AbortSignal) {
+  return request<CommentSubmission>(`${commentsPath(articleId)}/submissions/${id}`, {
+    method: 'PUT', signal,
+    headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
+    body: JSON.stringify({ content, replyToId }),
+  });
+}
+
+export function getCommentSubmission(articleId: string, id: string, signal: AbortSignal) {
+  return request<CommentSubmission>(`${commentsPath(articleId)}/submissions/${id}`, { signal });
 }
 
 /** 请求层只提取可用于更新点赞按钮的受理字段。 */

@@ -22,6 +22,14 @@ class CommentCommands {
     }
 
     Accepted submit(CommentCommand command) {
+        enqueue(command);
+        var receipt = new Receipt(command.articleId(), command.actor().userId(), command.operationId(), command.fingerprint(),
+                clock.millis() + Duration.ofDays(1).toMillis());
+        return new Accepted(command.operationId(), tokens.seal(receipt));
+    }
+
+    /** 新的发布入口只复用可靠投递，原入口仍签发其查询凭证。 */
+    void enqueue(CommentCommand command) {
         String fingerprint = command.fingerprint();
         var existing = results.find(command.articleId(), command.actor().userId(), command.operationId());
         if (existing == null) {
@@ -38,11 +46,8 @@ class CommentCommands {
                 throw CommentErrors.unavailable();
             }
         } else {
-            requireFingerprint(existing, fingerprint);
+            existing.requireFingerprint(fingerprint);
         }
-        var receipt = new Receipt(command.articleId(), command.actor().userId(), command.operationId(), fingerprint,
-                clock.millis() + Duration.ofDays(1).toMillis());
-        return new Accepted(command.operationId(), tokens.seal(receipt));
     }
 
     Status status(long article, UserActor actor, String suppliedOperation, String receipt) {
@@ -54,13 +59,9 @@ class CommentCommands {
         }
         var result = results.find(article, actor.userId(), operation);
         if (result == null) return new Status(operation, "PENDING", null, null);
-        requireFingerprint(result, issued.fingerprint());
+        result.requireFingerprint(issued.fingerprint());
         return new Status(operation, result.error() == null ? "SUCCEEDED" : "REJECTED",
                 result.commentId() == null ? null : result.commentId().toString(), result.error());
-    }
-
-    private static void requireFingerprint(CommentCommandResults.Result result, String fingerprint) {
-        if (!result.fingerprint().equals(fingerprint)) throw CommentErrors.operationConflict();
     }
 
     record Receipt(long articleId, long actorId, String operationId, String fingerprint, long expiresAt) { }

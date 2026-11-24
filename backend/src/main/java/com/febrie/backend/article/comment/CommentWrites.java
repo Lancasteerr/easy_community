@@ -25,7 +25,11 @@ public class CommentWrites {
 
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
     public CommentRow createReply(long article, UserActor actor, long replyToId, String supplied) {
-        String content = content(supplied);
+        return insertReply(article, actor, replyToId, content(supplied));
+    }
+
+    /** 调用方先校验文字，并开启事务以持有文章与楼层锁。 */
+    CommentRow insertReply(long article, UserActor actor, long replyToId, String content) {
         if (!store.lockPublicArticle(article, false)) throw CommentErrors.missing();
         var candidate = belonging(article, store.find(replyToId, false));
         long rootId = candidate.rootId() == 0 ? candidate.id() : candidate.rootId();

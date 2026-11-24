@@ -54,6 +54,28 @@ public class CommentLists {
         }
     }
 
+    /** 已确认发布后的刷新读一段主库分页，避免仍有效的共享快照遮住刚提交的回复。 */
+    Response publishedReplyPage(CommentListKey key, int size, String encoded, long user) {
+        try {
+            access.article(key.articleId());
+            access.root(key.articleId(), key.rootId());
+            var cursor = encoded == null ? null : cursors.decode(key, encoded);
+            String start = cursor == null ? "" : cursor.position();
+            var candidates = store.repliesAfter(key, start, size + 1);
+            var rows = candidates.subList(0, Math.min(size, candidates.size()));
+            String position = rows.isEmpty() ? start : member(rows.getLast());
+            long deadline = cursor == null ? clock.millis() + 600_000 : cursor.expiresAt();
+            if (deadline <= clock.millis()) throw CommentErrors.expired();
+            String next = cursors.encode(new CommentCursorCodec.Cursor(key, position, deadline));
+            return new Response(views.items(rows, user), next, candidates.size() > size, null);
+        } catch (DataAccessException failure) {
+            throw CommentErrors.unavailable();
+        } catch (ApiException failure) {
+            if (failure.status().is5xxServerError()) throw CommentErrors.unavailable();
+            throw failure;
+        }
+    }
+
     private Response readPage(CommentListKey key, int size, String encoded, Long user) {
         access.article(key.articleId());
         access.root(key.articleId(), key.rootId());

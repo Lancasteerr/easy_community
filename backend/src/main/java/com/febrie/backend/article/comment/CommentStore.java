@@ -121,6 +121,16 @@ public class CommentStore {
         return result;
     }
 
+    /** 发布后沿用回复游标补读一页，避免为了单次确认重建共享快照。 */
+    List<CommentRow> repliesAfter(CommentListKey key, String position, int limit) {
+        String scope = "SELECT " + COLUMNS + " FROM article_comment WHERE article_id = ? AND root_id = ? AND deleted = FALSE ";
+        String order = "ORDER BY created_at, id LIMIT ?";
+        if (position.isEmpty()) return sql.query(scope + order, ROW, key.articleId(), key.rootId(), limit);
+        var time = LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(position.substring(0, 19))), ZoneOffset.UTC);
+        return sql.query(scope + "AND (created_at > ? OR (created_at = ? AND id > ?)) " + order, ROW,
+                key.articleId(), key.rootId(), time, time, CommentSnapshot.commentId(position), limit);
+    }
+
     /** 主库按不可变时间键读取，查询返回后才向 Redis 写这一批。 */
     List<IndexRow> indexBatch(CommentListKey key, IndexRow after, int limit) {
         String select = "SELECT c.id, c.created_at FROM article_comment c ";

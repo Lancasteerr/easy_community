@@ -23,3 +23,12 @@
 .comment-reply { padding: 9px 0; }
 .comment-reply + .comment-reply { border-top: 1px solid rgb(255 255 255 / 8%); }
 .comment-status { margin: 12px 0; text-align: center; color: #b7bdc9; font-size: 14px; }
+.comment-composer { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: start; gap: 12px; }
+.comment-thread-body .comment-composer { margin: 10px 0; }
+.comment-editor { padding: 12px; border: 1px solid #444953; border-radius: 12px; background: #202329; }
+.comment-editor:focus-within { border-color: #799fbf; }
+.comment-editor textarea { display: block; width: 100%; min-height: 64px; padding: 2px 4px; resize: vertical; border: 0; outline: 0; color: #e4e7ed; background: transparent; font: inherit; }
+.comment-editor textarea::placeholder { color: #a8adba; }
+.comment-editor-target { margin: 0 4px 6px; color: #9bceff; font-size: 13px; overflow-wrap: anywhere; }
+.comment-editor-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.comment-feedback { margin: 6px 4px 0; color: #ffaeaa; font-size: 13px; }

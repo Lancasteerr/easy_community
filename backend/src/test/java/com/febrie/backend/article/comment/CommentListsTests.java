@@ -85,6 +85,23 @@ class CommentListsTests {
         assertEquals(List.of("11"), continued.items().stream().map(CommentViews.Item::id).toList());
     }
 
+    @Test
+    void confirmedReplyRefreshReadsOnePageFromTheExistingPosition() {
+        var key = new CommentListKey(1, 3, CommentListKey.Sort.REPLIES);
+        String previous = CommentSnapshot.member(clock.millis(), 10);
+        var cursor = cursors.encode(new CommentCursorCodec.Cursor(key, previous, clock.millis() + 60_000));
+        var reply = row(11, 3, false);
+        // 第二条仅用于判断是否还有更多，刷新不会跳过这条回复。
+        when(store.repliesAfter(key, previous, 2)).thenReturn(List.of(reply, row(12, 3, false)));
+        when(views.items(List.of(reply), 2L)).thenReturn(List.of(item(11)));
+
+        var page = lists.publishedReplyPage(key, 1, cursor, 2);
+        assertEquals(List.of("11"), page.items().stream().map(CommentViews.Item::id).toList());
+        assertTrue(page.hasMore());
+        assertEquals(CommentSnapshot.member(clock.millis(), 11), cursors.decode(key, page.nextCursor()).position());
+        verifyNoInteractions(snapshots);
+    }
+
     private CommentViews.Item item(long id) {
         return new CommentViews.Item(Long.toString(id), "3", "3", null, "正文", clock.instant(), "ACTIVE", null, null, null);
     }

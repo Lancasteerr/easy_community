@@ -23,6 +23,11 @@ record CommentCommand(long articleId, UserActor actor, String operationId, Long 
 
     String fingerprint() {
         String payload = commentId == null ? "create:" + content : "delete:" + commentId;
+        return digest(payload);
+    }
+
+    /** 一级评论、回复和删除共用结果表，用不同的载荷前缀区分。 */
+    static String digest(String payload) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(payload.getBytes(StandardCharsets.UTF_8)));

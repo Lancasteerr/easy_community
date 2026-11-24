@@ -9,6 +9,7 @@ import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.dto.UserActor;
 import java.util.List;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.dao.DataAccessException;
@@ -40,10 +41,11 @@ public class CommentController {
     private final CommentCommands commands;
     private final CommentRootLists rootLists;
     private final CommentValues values;
+    private final CommentSubmissions submissions;
 
     public CommentController(CommentLists lists, CommentWrites writes, CommentViews views,
                              CommentAccess access, LikeWriteService likes, CommentCommands commands,
-                             CommentRootLists rootLists, CommentValues values) {
+                             CommentRootLists rootLists, CommentValues values, CommentSubmissions submissions) {
         this.lists = lists;
         this.writes = writes;
         this.views = views;
@@ -52,6 +54,7 @@ public class CommentController {
         this.commands = commands;
         this.rootLists = rootLists;
         this.values = values;
+        this.submissions = submissions;
     }
 
     @GetMapping
@@ -76,9 +79,15 @@ public class CommentController {
     @GetMapping("/{rootId}/replies")
     public CommentLists.Response replies(@PathVariable String articleId, @PathVariable String rootId,
                                          @RequestParam(required = false) String cursor,
+                                         @RequestParam(required = false) String submissionId,
                                          @AuthenticationPrincipal SessionPrincipal principal) {
-        return lists.page(new CommentListKey(ArticleIds.parse(articleId), ArticleIds.parse(rootId),
-                CommentListKey.Sort.REPLIES), 10, cursor, user(principal));
+        var key = new CommentListKey(ArticleIds.parse(articleId), ArticleIds.parse(rootId), CommentListKey.Sort.REPLIES);
+        if (submissionId != null) {
+            var actor = actor(principal);
+            submissions.requirePublishedReply(key.articleId(), key.rootId(), actor, submissionId);
+            return lists.publishedReplyPage(key, 10, cursor, actor.userId());
+        }
+        return lists.page(key, 10, cursor, user(principal));
     }
 
     @PostMapping(consumes = "application/json")
@@ -86,21 +95,33 @@ public class CommentController {
                                     @RequestHeader(value = "X-Operation-Id", required = false) String operation,
                                     @AuthenticationPrincipal SessionPrincipal principal) {
         var actor = actor(principal);
-        var content = body.path("content");
-        var reply = body.path("replyToId");
-        if (!body.isObject() || !content.isString() || body.size() != (reply.isMissingNode() ? 1 : 2)
-                || (!reply.isMissingNode() && !reply.isNull() && !reply.isString())) {
-            throw CommentErrors.invalid();
-        }
-        Long target = reply.isString() ? ArticleIds.parse(reply.asString()) : null;
+        var input = CommentInput.read(body);
         long article = ArticleIds.parse(articleId);
-        if (target == null) {
+        if (input.replyToId() == null) {
             access.article(article);
             return ResponseEntity.accepted().body(commands.submit(
-                    new CommentCommand(article, actor, operation, null, content.asString())));
+                    new CommentCommand(article, actor, operation, null, input.content())));
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(
-                views.created(writes.createReply(article, actor, target, content.asString()), principal.username()));
+                views.created(writes.createReply(article, actor, input.replyToId(), input.content()), principal.username()));
+    }
+
+    @PutMapping(value = "/submissions/{submissionId}", consumes = "application/json")
+    public ResponseEntity<CommentSubmissions.View> submit(@PathVariable String articleId, @PathVariable String submissionId,
+                                                          @RequestBody JsonNode body,
+                                                          @AuthenticationPrincipal SessionPrincipal principal) {
+        return submission(submissions.submit(ArticleIds.parse(articleId), actor(principal), submissionId, CommentInput.read(body)));
+    }
+
+    @GetMapping("/submissions/{submissionId}")
+    public ResponseEntity<CommentSubmissions.View> submissionStatus(@PathVariable String articleId, @PathVariable String submissionId,
+                                                                    @AuthenticationPrincipal SessionPrincipal principal) {
+        return submission(submissions.status(ArticleIds.parse(articleId), actor(principal), submissionId));
+    }
+
+    private static ResponseEntity<CommentSubmissions.View> submission(CommentSubmissions.View view) {
+        var status = view.state() == CommentSubmissions.State.PUBLISHING ? HttpStatus.ACCEPTED : HttpStatus.OK;
+        return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).body(view);
     }
 
     @DeleteMapping("/{commentId}")
