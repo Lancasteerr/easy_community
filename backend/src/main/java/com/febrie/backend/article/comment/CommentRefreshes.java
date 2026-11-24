@@ -96,7 +96,7 @@ public class CommentRefreshes {
             command = json.readValue(message.getBody(), Refresh.class);
             UUID.fromString(command.expected());
             UUID.fromString(command.token());
-            if (command.key() == null || command.queuedAt() < 0) throw new IllegalArgumentException("评论刷新消息无效");
+            if (command.key() == null || command.key().rootId() == 0 || command.queuedAt() < 0) throw new IllegalArgumentException("评论刷新消息无效");
         } catch (RuntimeException invalid) {
             snapshots.event("invalid_message");
             channel.basicReject(tag, false);

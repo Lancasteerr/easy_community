@@ -1,20 +1,19 @@
 package com.febrie.backend.article.comment;
 
-import com.febrie.backend.shared.error.ApiException;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.Base64;
-import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
-/** 排名游标绑定不可变快照，时间游标只绑定不可变的时间和 ID 排序键。 */
+/** 签名服务共用密钥，回复游标仅保存楼层、时间边界和有效期。 */
 @Component
 public class CommentCursorCodec {
     private final ObjectMapper json;
@@ -45,25 +44,19 @@ public class CommentCursorCodec {
     }
 
     Cursor decode(CommentListKey key, String encoded) {
-        try {
-            var cursor = open(encoded, Cursor.class, 1024);
-            if (!key.equals(cursor.key()) || cursor.position() == null) throw CommentErrors.invalid();
-            if (key.sort() == CommentListKey.Sort.HOT) {
-                UUID.fromString(cursor.snapshotId());
-                if (!cursor.rankVersion().matches("[1-9][0-9]{0,18}") ||
-                        !cursor.position().matches("[0-9]{1,18}")) throw CommentErrors.invalid();
-            } else if (cursor.snapshotId() != null || cursor.rankVersion() != null ||
-                    !(key.sort() == CommentListKey.Sort.REPLIES && cursor.position().isEmpty())
-                    && !cursor.position().matches("[0-9]{19}:[0-9]{19}")) {
-                throw CommentErrors.invalid();
-            }
-            if (cursor.expiresAt() <= clock.millis()) throw CommentErrors.expired();
-            return cursor;
-        } catch (ApiException known) {
-            throw known;
-        } catch (RuntimeException invalid) {
+        var cursor = open(encoded, Cursor.class, 1024);
+        if (!key.equals(cursor.key()) || cursor.position() == null
+                || (!cursor.position().isEmpty() && !cursor.position().matches("[0-9]{19}:[0-9]{19}"))) {
             throw CommentErrors.invalid();
         }
+        if (cursor.expiresAt() <= clock.millis()) throw CommentErrors.expired();
+        return cursor;
+    }
+
+    void rejectSupersededRoot(CommentListKey key, String encoded) {
+        var old = open(encoded, Cursor.class, 1024);
+        if (!key.equals(old.key())) throw CommentErrors.invalid();
+        throw CommentErrors.expired();
     }
 
     <T> T open(String encoded, Class<T> type, int maxLength) {
@@ -91,5 +84,7 @@ public class CommentCursorCodec {
         }
     }
 
-    record Cursor(CommentListKey key, String snapshotId, String rankVersion, String position, long expiresAt) { }
+    // 仅在读取切换前签发的游标时忽略旧排名字段。
+    @JsonIgnoreProperties({"snapshotId", "rankVersion"})
+    record Cursor(CommentListKey key, String position, long expiresAt) { }
 }

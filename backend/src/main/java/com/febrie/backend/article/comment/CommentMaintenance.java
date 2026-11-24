@@ -25,11 +25,6 @@ public class CommentMaintenance {
         }
     }
 
-    void deleted(CommentRow row) {
-        visibility(row);
-        if (row.rootId() == 0) count(row.articleId());
-    }
-
     void visibility(CommentRow row) {
         try {
             if (!values.invalidateObject(row.id())) {

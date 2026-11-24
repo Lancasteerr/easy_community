@@ -15,7 +15,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
 
-/** SQL 中只保存评论事实；展示投影、消息和 Redis 不参与写事务。 */
+/** SQL 负责评论事实和 Outbox 持久化，网络操作由事务外的调用方处理。 */
 @Repository
 public class CommentStore {
     private static final String COLUMNS = "id, article_id, root_id, reply_to_id, author_id, content, created_at, deleted";
@@ -123,15 +123,12 @@ public class CommentStore {
 
     /** 主库按不可变时间键读取，查询返回后才向 Redis 写这一批。 */
     List<IndexRow> indexBatch(CommentListKey key, IndexRow after, int limit) {
-        boolean hot = key.sort() == CommentListKey.Sort.HOT;
-        String select = hot ? "SELECT c.id, c.created_at, l.like_count FROM article_comment c "
-                + "JOIN comment_like_count l ON l.comment_id = c.id "
-                : "SELECT c.id, c.created_at FROM article_comment c ";
+        String select = "SELECT c.id, c.created_at FROM article_comment c ";
         String scope = "WHERE c.article_id = ? AND c.root_id = ? AND c.deleted = FALSE ";
         String order = "ORDER BY c.created_at, c.id LIMIT ?";
         RowMapper<IndexRow> mapper = (rs, index) -> {
             var created = rs.getObject(2, LocalDateTime.class);
-            return new IndexRow(rs.getLong(1), created, hot ? rs.getLong(3) : created.toInstant(ZoneOffset.UTC).toEpochMilli());
+            return new IndexRow(rs.getLong(1), created, created.toInstant(ZoneOffset.UTC).toEpochMilli());
         };
         if (after == null) return sql.query(select + scope + order, mapper, key.articleId(), key.rootId(), limit);
         return sql.query(select + scope + "AND (c.created_at > ? OR (c.created_at = ? AND c.id > ?)) " + order,

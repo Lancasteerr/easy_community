@@ -30,19 +30,20 @@ class CommentWritesTests {
     @Test
     void firstDeleteWritesOnceAndPublishesOnlyAfterCommit() {
         var active = row(1);
-        when(store.lockPublicArticle(1, true)).thenReturn(true);
+        when(store.lockPublicArticle(1, false)).thenReturn(true);
         when(store.find(3, false)).thenReturn(active);
-        when(store.find(3, true)).thenReturn(active, new CommentRow(3, 1, 0, null, 2, null, Instant.EPOCH, true));
+        when(store.find(7, true)).thenReturn(new CommentRow(7, 1, 0, null, 2, "楼层", Instant.EPOCH, false));
+        when(store.find(3, true)).thenReturn(active, new CommentRow(3, 1, 7, 7L, 2, null, Instant.EPOCH, true));
         TransactionSynchronizationManager.initSynchronization();
         try {
-            writes.delete(1, 3, author);
-            writes.delete(1, 3, author);
+            writes.deleteReply(1, 3, author);
+            writes.deleteReply(1, 3, author);
             verify(store).delete(active);
             verifyNoInteractions(maintenance);
             var callbacks = TransactionSynchronizationManager.getSynchronizations();
             assertEquals(1, callbacks.size());
             callbacks.forEach(TransactionSynchronization::afterCommit);
-            verify(maintenance).deleted(active);
+            verify(maintenance).visibility(active);
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
@@ -53,17 +54,18 @@ class CommentWritesTests {
         when(store.lockPublicArticle(1, false)).thenReturn(true);
         when(store.find(3, false)).thenReturn(row(2));
         assertEquals("COMMENT_NOT_FOUND", assertThrows(ApiException.class,
-                () -> writes.create(1, author, 3L, "正文")).code());
-        when(store.lockPublicArticle(1, true)).thenReturn(true);
+                () -> writes.createReply(1, author, 3L, "正文")).code());
+        when(store.lockPublicArticle(1, false)).thenReturn(true);
         when(store.find(3, false)).thenReturn(row(1));
+        when(store.find(7, true)).thenReturn(new CommentRow(7, 1, 0, null, 2, "楼层", Instant.EPOCH, false));
         when(store.find(3, true)).thenReturn(row(1));
         var otherUser = new UserActor(9, Role.USER, 1);
         assertEquals("COMMENT_FORBIDDEN", assertThrows(ApiException.class,
-                () -> writes.delete(1, 3, otherUser)).code());
+                () -> writes.deleteReply(1, 3, otherUser)).code());
         verify(store, never()).delete(any());
     }
 
     private static CommentRow row(long article) {
-        return new CommentRow(3, article, 0, null, 2, "正文", Instant.EPOCH, false);
+        return new CommentRow(3, article, 7, 7L, 2, "正文", Instant.EPOCH, false);
     }
 }

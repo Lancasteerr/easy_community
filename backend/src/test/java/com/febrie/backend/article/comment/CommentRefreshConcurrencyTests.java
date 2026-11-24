@@ -31,12 +31,12 @@ class CommentRefreshConcurrencyTests {
     void oneColdRequestRebuildsWhileCompetitorUsesItsSharedWaitBudget() throws Exception {
         var store = mock(CommentStore.class);
         var cache = mock(CommentSnapshotCache.class);
-        var key = new CommentListKey(1, 0, CommentListKey.Sort.LATEST);
+        var key = new CommentListKey(1, 3, CommentListKey.Sort.REPLIES);
         var held = new AtomicBoolean();
         var current = new AtomicReference<CommentSnapshot>();
         var rebuilding = new CountDownLatch(1);
         var finish = new CountDownLatch(1);
-        var snapshot = new CommentSnapshot(UUID.randomUUID().toString(), "0", 1, 2, 0);
+        var snapshot = new CommentSnapshot(UUID.randomUUID().toString(), 1, 2, 0);
         when(cache.current(key)).thenAnswer(call -> current.get());
         when(cache.available(key, snapshot)).thenReturn(true);
         when(cache.lock(key)).thenAnswer(call -> held.compareAndSet(false, true) ? "leader" : null);
@@ -76,7 +76,7 @@ class CommentRefreshConcurrencyTests {
         var cache = mock(CommentSnapshotCache.class);
         var refreshes = new CommentRefreshes(rabbit, publisher, cache, snapshots,
                 new JsonMapper(), Clock.systemUTC(), meters, "test.comment.refresh.q");
-        refreshes.offer(new CommentListKey(1, 0, CommentListKey.Sort.HOT), UUID.randomUUID().toString());
+        refreshes.offer(new CommentListKey(1, 3, CommentListKey.Sort.REPLIES), UUID.randomUUID().toString());
         verify(snapshots).event("publish_saturated");
         verifyNoInteractions(rabbit, cache);
     }

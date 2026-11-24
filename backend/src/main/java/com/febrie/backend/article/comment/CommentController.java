@@ -6,7 +6,6 @@ import com.febrie.backend.article.like.domain.LikeTarget;
 import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.dto.UserActor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpStatus;
@@ -36,13 +35,9 @@ public class CommentController {
     private final LikeWriteService likes;
     private final CommentCommands commands;
     private final CommentRootLists rootLists;
-    private final boolean rootEs;
-    private final boolean asyncWrites;
 
     public CommentController(CommentLists lists, CommentWrites writes, CommentViews views,
-                             CommentAccess access, LikeWriteService likes, CommentCommands commands, CommentRootLists rootLists,
-                             @Value("${app.comment.root-es:true}") boolean rootEs,
-                             @Value("${app.comment.async-writes:true}") boolean asyncWrites) {
+                             CommentAccess access, LikeWriteService likes, CommentCommands commands, CommentRootLists rootLists) {
         this.lists = lists;
         this.writes = writes;
         this.views = views;
@@ -50,8 +45,6 @@ public class CommentController {
         this.likes = likes;
         this.commands = commands;
         this.rootLists = rootLists;
-        this.rootEs = rootEs;
-        this.asyncWrites = asyncWrites;
     }
 
     @GetMapping
@@ -64,7 +57,7 @@ public class CommentController {
             default -> throw CommentErrors.invalid();
         };
         var key = new CommentListKey(ArticleIds.parse(articleId), 0, ordering);
-        return rootEs ? rootLists.page(key, size, cursor, user(principal)) : lists.page(key, size, cursor, user(principal));
+        return rootLists.page(key, size, cursor, user(principal));
     }
 
     @GetMapping("/{rootId}/replies")
@@ -88,13 +81,13 @@ public class CommentController {
         }
         Long target = reply.isString() ? ArticleIds.parse(reply.asString()) : null;
         long article = ArticleIds.parse(articleId);
-        if (target == null && asyncWrites) {
+        if (target == null) {
             access.article(article);
             return ResponseEntity.accepted().body(commands.submit(
                     new CommentCommand(article, actor, operation, null, content.asString())));
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(
-                views.created(writes.create(article, actor, target, content.asString()), principal.username()));
+                views.created(writes.createReply(article, actor, target, content.asString()), principal.username()));
     }
 
     @DeleteMapping("/{commentId}")
@@ -104,11 +97,11 @@ public class CommentController {
         var actor = actor(principal);
         long article = ArticleIds.parse(articleId);
         long id = ArticleIds.parse(commentId);
-        if (asyncWrites && writes.deletionTarget(article, id, actor).rootId() == 0) {
+        if (writes.deletionTarget(article, id, actor).rootId() == 0) {
             access.article(article);
             return ResponseEntity.accepted().body(commands.submit(new CommentCommand(article, actor, operation, id, null)));
         }
-        writes.delete(article, id, actor);
+        writes.deleteReply(article, id, actor);
         return ResponseEntity.noContent().build();
     }
 

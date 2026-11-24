@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** SQL 层提供两种任务的短租约以及一致的一级评论投影。 */
@@ -29,11 +30,13 @@ public class CommentIndexTasks {
     public CommentIndexTasks(JdbcTemplate sql) { this.sql = sql; }
 
     /** 点赞与删除共用评论行锁，调用方持有同一个 SQL 事务。 */
+    @Transactional(propagation = Propagation.MANDATORY)
     public boolean lockActiveRoot(long id) {
         return sql.query("SELECT deleted FROM article_comment WHERE id = ? AND root_id = 0 FOR UPDATE",
                 (rs, index) -> !rs.getBoolean(1), id).stream().findFirst().orElse(false);
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public void scheduleLike(long id) {
         if (sql.update("UPDATE article_comment SET index_version = index_version + 1 WHERE id = ?", id) != 1) {
             throw new IllegalStateException("评论点赞索引版本更新失败");

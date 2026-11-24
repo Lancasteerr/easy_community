@@ -15,7 +15,8 @@ public class BackendApplication {
         if (bootstrapCommand
                 || context.getEnvironment().getProperty("app.article.cache-rebuild.enabled", Boolean.class, false)
                 || !context.getEnvironment().getProperty("app.like.maintenance", "none").equals("none")
-                || !context.getEnvironment().getProperty("app.search.maintenance", "none").equals("none")) {
+                || !context.getEnvironment().getProperty("app.search.maintenance", "none").equals("none")
+                || !context.getEnvironment().getProperty("app.comment.maintenance", "").isBlank()) {
             System.exit(SpringApplication.exit(context));
         }
     }

@@ -20,8 +20,9 @@ class CommentRootListsTests {
     private final CommentValues values = mock(CommentValues.class);
     private final CommentLists replies = mock(CommentLists.class);
     private final CommentViews views = mock(CommentViews.class);
+    private final CommentCursorCodec tokens = new CommentCursorCodec(new JsonMapper(), clock, "");
     private final CommentRootLists service = new CommentRootLists(mock(CommentAccess.class), index, values, replies,
-            views, new CommentCursorCodec(new JsonMapper(), clock, ""), clock);
+            views, tokens, clock);
     private final CommentListKey hot = new CommentListKey(1, 0, CommentListKey.Sort.HOT);
 
     @Test
@@ -58,6 +59,20 @@ class CommentRootListsTests {
         assertEquals("COMMENT_UNAVAILABLE",
                 assertThrows(ApiException.class, () -> service.page(hot, 1, null, null)).code());
         verify(index).close("pit");
+    }
+
+    @Test
+    void oldRootTokensExpireAndOldReplyTokensKeepTheirPosition() {
+        String oldRoot = tokens.seal(Map.of("key", hot, "snapshotId", "legacy", "rankVersion", "1",
+                "position", "1", "expiresAt", 1000));
+        assertEquals("COMMENT_CURSOR_EXPIRED",
+                assertThrows(ApiException.class, () -> service.page(hot, 20, oldRoot, null)).code());
+        var replyKey = new CommentListKey(1, 3, CommentListKey.Sort.REPLIES);
+        String position = CommentSnapshot.member(200, 19);
+        String oldReply = tokens.seal(Map.of("key", replyKey, "position", position,
+                "snapshotId", "", "rankVersion", "", "expiresAt", 1000));
+        assertEquals(position, tokens.decode(replyKey, oldReply).position());
+        verifyNoInteractions(index);
     }
 
     private static CommentIndex.Hit hit(long id) {

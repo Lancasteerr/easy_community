@@ -27,6 +27,10 @@ class CommentCommandTransactions {
 
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
     public Applied apply(long article, List<CommentCommand> commands) {
+        if (commands.isEmpty() || commands.size() > CommentBroker.BATCH_SIZE
+                || commands.stream().anyMatch(command -> command.articleId() != article)) {
+            throw CommentErrors.invalid();
+        }
         boolean visible = store.lockPublicArticle(article, true);
         int delta = 0;
         var deleted = new ArrayList<CommentRow>();

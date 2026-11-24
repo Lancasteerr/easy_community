@@ -100,8 +100,7 @@ class CommentRootLists {
 
     private Cursor decode(CommentListKey key, String encoded) {
         if (!encoded.startsWith(PREFIX)) {
-            tokens.decode(key, encoded);
-            throw CommentErrors.expired();
+            tokens.rejectSupersededRoot(key, encoded);
         }
         var cursor = tokens.open(encoded.substring(PREFIX.length()), Cursor.class, 16384);
         if (!key.equals(cursor.key()) || cursor.pit() == null || cursor.pit().isBlank()

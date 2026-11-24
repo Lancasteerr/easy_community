@@ -32,6 +32,11 @@ public class IndexPublisher {
         return correlation;
     }
     public boolean confirmed(CorrelationData correlation, long deadlineNanos) throws InterruptedException {
+        return awaitConfirmation(correlation, deadlineNanos);
+    }
+
+    /** 文章与评论的索引投递共用 Confirm 和 Return 的判断。 */
+    public static boolean awaitConfirmation(CorrelationData correlation, long deadlineNanos) throws InterruptedException {
         try {
             // 已完成确认即使排在批次末尾，也不因为前项超时而丢弃确定成功结果。
             var future = correlation.getFuture();

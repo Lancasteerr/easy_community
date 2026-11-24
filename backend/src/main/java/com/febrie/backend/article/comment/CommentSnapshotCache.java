@@ -30,17 +30,8 @@ public class CommentSnapshotCache {
             if redis.call('GET', KEYS[1]) ~= ARGV[1] then return {'missing'} end
             if ARGV[2] == '0' then return {'ok'} end
             if redis.call('EXISTS', KEYS[2]) == 0 then return {'missing'} end
-            local rows
-            if ARGV[3] == 'HOT' then
-                local first = tonumber(ARGV[4])
-                rows = redis.call('ZREVRANGE', KEYS[2], first, first + tonumber(ARGV[5]) - 1)
-            elseif ARGV[3] == 'LATEST' then
-                local upper = ARGV[4] == '' and '+' or '(' .. ARGV[4]
-                rows = redis.call('ZREVRANGEBYLEX', KEYS[2], upper, '-', 'LIMIT', 0, ARGV[5])
-            else
-                local lower = ARGV[4] == '' and '-' or '(' .. ARGV[4]
-                rows = redis.call('ZRANGEBYLEX', KEYS[2], lower, '+', 'LIMIT', 0, ARGV[5])
-            end
+            local lower = ARGV[3] == '' and '-' or '(' .. ARGV[3]
+            local rows = redis.call('ZRANGEBYLEX', KEYS[2], lower, '+', 'LIMIT', 0, ARGV[4])
             table.insert(rows, 1, 'ok')
             return rows
             """, List.class);
@@ -128,15 +119,14 @@ public class CommentSnapshotCache {
 
     CommentSnapshot publish(CommentListKey key, CommentSnapshot expected, String id, String token,
                             long count, long now, boolean refresh) {
-        boolean hot = key.sort() == CommentListKey.Sort.HOT;
-        long soft = hot ? 60_000 : count == 0 ? 2_000 : 5_000;
-        long ttl = hot ? 300_000 : count == 0 ? 10_000 : 60_000;
+        long soft = count == 0 ? 2_000 : 5_000;
+        long ttl = count == 0 ? 10_000 : 60_000;
         String previous = expected == null ? "none" : expected.id();
         String payload = redis.execute(PUBLISH, List.of(base(key) + ":build", base(key) + ":current",
-                        meta(key, id), rows(key, id), base(key) + ":rank",
+                        meta(key, id), rows(key, id),
                         meta(key, previous), rows(key, previous)),
                 token, expected == null ? "" : expected.payload(), id, Long.toString(count),
-                hot ? "1" : "0", refresh ? "1" : "0", Long.toString(now + soft),
+                refresh ? "1" : "0", Long.toString(now + soft),
                 Long.toString(now + ttl), Long.toString(ttl));
         return CommentSnapshot.parse(payload);
     }
@@ -147,7 +137,7 @@ public class CommentSnapshotCache {
 
     private List<?> readPage(CommentListKey key, CommentSnapshot snapshot, String position, int size) {
         return redis.execute(PAGE, List.of(meta(key, snapshot.id()), rows(key, snapshot.id())),
-                snapshot.payload(), Long.toString(snapshot.count()), key.sort().name(), position, Integer.toString(size));
+                snapshot.payload(), Long.toString(snapshot.count()), position, Integer.toString(size));
     }
 
     private static List<String> pageRows(List<?> raw) {

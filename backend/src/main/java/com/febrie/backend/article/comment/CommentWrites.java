@@ -24,43 +24,30 @@ public class CommentWrites {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
-    public CommentRow create(long article, UserActor actor, Long replyToId, String supplied) {
+    public CommentRow createReply(long article, UserActor actor, long replyToId, String supplied) {
         String content = content(supplied);
-        if (!store.lockPublicArticle(article, replyToId == null)) throw CommentErrors.missing();
-        long rootId = 0;
-        if (replyToId != null) {
-            CommentRow candidate = belonging(article, store.find(replyToId, false));
-            rootId = candidate.rootId() == 0 ? candidate.id() : candidate.rootId();
-            var root = belonging(article, store.find(rootId, true));
-            var target = replyToId == rootId ? root : belonging(article, store.find(replyToId, true));
-            if (root.deleted() || target.deleted()) throw CommentErrors.missing();
-        }
-        var inserted = store.insert(article, rootId, replyToId, actor.userId(), content,
+        if (!store.lockPublicArticle(article, false)) throw CommentErrors.missing();
+        var candidate = belonging(article, store.find(replyToId, false));
+        long rootId = candidate.rootId() == 0 ? candidate.id() : candidate.rootId();
+        // 固定文章、楼层、实际目标的加锁顺序，与删楼串行。
+        var root = belonging(article, store.find(rootId, true));
+        var target = replyToId == rootId ? root : belonging(article, store.find(replyToId, true));
+        if (root.deleted() || target.deleted()) throw CommentErrors.missing();
+        return store.insert(article, rootId, replyToId, actor.userId(), content,
                 clock.instant().truncatedTo(ChronoUnit.MILLIS));
-        if (rootId == 0) {
-            // 滚动升级时同步入口也必须登记索引变更。
-            store.changeCount(article, 1);
-            store.appendIndex(inserted.id());
-            afterCommit(() -> maintenance.count(article));
-        }
-        return inserted;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
-    public void delete(long article, long id, UserActor actor) {
-        // 层级不可修改，可在加文章锁之前确定是否需要写计数。
+    public void deleteReply(long article, long id, UserActor actor) {
+        if (!store.lockPublicArticle(article, false)) throw CommentErrors.missing();
         var candidate = belonging(article, store.find(id, false));
-        if (!store.lockPublicArticle(article, candidate.rootId() == 0)) throw CommentErrors.missing();
-        if (candidate.rootId() > 0) belonging(article, store.find(candidate.rootId(), true));
+        if (candidate.rootId() == 0) throw CommentErrors.invalid();
+        belonging(article, store.find(candidate.rootId(), true));
         var row = belonging(article, store.find(id, true));
         requireDeletePermission(row, actor);
         if (row.deleted()) return;
         store.delete(row);
-        if (row.rootId() == 0) {
-            store.changeCount(article, -1);
-            store.appendIndex(row.id());
-        }
-        afterCommit(() -> maintenance.deleted(row));
+        afterCommit(() -> maintenance.visibility(row));
     }
 
     CommentRow deletionTarget(long article, long id, UserActor actor) {

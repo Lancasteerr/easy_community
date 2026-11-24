@@ -1,8 +1,7 @@
 package com.febrie.backend.article.comment;
 
-import java.util.concurrent.ExecutionException;
+import com.febrie.backend.article.search.infrastructure.messaging.IndexPublisher;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
@@ -60,14 +59,7 @@ class CommentBroker {
     }
 
     boolean confirmed(CorrelationData confirmation, long deadline) throws InterruptedException {
-        try {
-            var future = confirmation.getFuture();
-            var result = future.isDone() ? future.get() : future.get(
-                    Math.max(1, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
-            return result.ack() && confirmation.getReturned() == null;
-        } catch (ExecutionException | TimeoutException failure) {
-            return false;
-        }
+        return IndexPublisher.awaitConfirmation(confirmation, deadline);
     }
 
     int replay(boolean write, int limit) {

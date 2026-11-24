@@ -55,60 +55,27 @@ public class CommentLists {
     }
 
     private Response readPage(CommentListKey key, int size, String encoded, Long user) {
-        if (size < 1 || size > 50) throw CommentErrors.invalid();
         access.article(key.articleId());
-        if (key.rootId() != 0) access.root(key.articleId(), key.rootId());
-        var cursor = decode(key, encoded);
-        boolean hot = key.sort() == CommentListKey.Sort.HOT;
-        boolean pinned = hot && cursor != null;
+        access.root(key.articleId(), key.rootId());
+        var cursor = encoded == null ? null : cursors.decode(key, encoded);
         for (int attempt = 0; attempt < 2; attempt++) {
-            var snapshot = pinned ? cache.snapshot(key, cursor.snapshotId()) : snapshots.current(key);
-            if (pinned && (snapshot == null || !snapshot.version().equals(cursor.rankVersion()))) throw expired();
-            String start = cursor == null ? (hot ? "0" : "") : cursor.position();
-            // 后台可立即接手，但本页继续使用这里已经选中的快照。
+            var snapshot = snapshots.current(key);
+            String start = cursor == null ? "" : cursor.position();
+            // 刷新可以异步切换指针，本次读取继续使用已选快照。
             if (snapshots.stale(snapshot)) refreshes.offer(key, snapshot.id());
             var page = scan(key, snapshot, start, size);
-            if (page == null) {
-                if (pinned) throw expired();
-                continue;
-            }
-            var items = views.items(page.rows(), user);
-            String next = null;
-            if (page.more() || key.sort() == CommentListKey.Sort.REPLIES) {
-                long deadline = cursor == null
-                        ? (hot ? Math.min(clock.millis() + 120_000, snapshot.hardAt()) : clock.millis() + 600_000)
-                        : cursor.expiresAt();
-                if (deadline <= clock.millis()) throw expired();
-                next = cursors.encode(new CommentCursorCodec.Cursor(key, hot ? snapshot.id() : null,
-                        hot ? snapshot.version() : null, page.position(), deadline));
-            }
-            if (key.rootId() == 0) {
-                var previews = previews(page.rows(), user);
-                items = items.stream().map(item -> item.withReplies(previews.get(Long.parseLong(item.id())))).toList();
-            }
-            return new Response(items, next, page.more(), hot ? snapshot.version() : null);
+            if (page == null) continue;
+            long deadline = cursor == null ? clock.millis() + 600_000 : cursor.expiresAt();
+            if (deadline <= clock.millis()) throw CommentErrors.expired();
+            var next = cursors.encode(new CommentCursorCodec.Cursor(key, page.position(), deadline));
+            return new Response(views.items(page.rows(), user), next, page.more(), null);
         }
         throw CommentErrors.unavailable();
-    }
-
-    private CommentCursorCodec.Cursor decode(CommentListKey key, String encoded) {
-        try {
-            return encoded == null ? null : cursors.decode(key, encoded);
-        } catch (com.febrie.backend.shared.error.ApiException failure) {
-            if (failure.status() == org.springframework.http.HttpStatus.CONFLICT) snapshots.event("cursor_expired");
-            throw failure;
-        }
-    }
-
-    private com.febrie.backend.shared.error.ApiException expired() {
-        snapshots.event("cursor_expired");
-        return CommentErrors.expired();
     }
 
     private Page scan(CommentListKey key, CommentSnapshot snapshot, String start, int size) {
         var found = new ArrayList<CommentRow>(size);
         String position = start;
-        boolean hot = key.sort() == CommentListKey.Sort.HOT;
         for (int batch = 0; batch < MAX_BATCHES; batch++) {
             var members = cache.page(key, snapshot, position, size + 1);
             if (members == null) return null;
@@ -122,7 +89,7 @@ public class CommentLists {
                     if (found.size() == size) return new Page(found, position, true);
                     found.add(row);
                 }
-                position = hot ? Long.toString(Long.parseLong(position) + 1) : member;
+                position = member;
             }
             if (members.size() < size + 1) return new Page(found, position, false);
         }
@@ -170,7 +137,7 @@ public class CommentLists {
         var result = new HashMap<Long, Response>();
         pages.forEach((key, page) -> result.put(key.rootId(), new Response(
                 page.rows().stream().map(row -> viewsById.get(Long.toString(row.id()))).toList(),
-                cursors.encode(new CommentCursorCodec.Cursor(key, null, null, page.position(), deadline)),
+                cursors.encode(new CommentCursorCodec.Cursor(key, page.position(), deadline)),
                 page.more(), null)));
         return result;
     }

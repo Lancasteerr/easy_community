@@ -2,9 +2,6 @@ package com.febrie.backend.article.comment;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.febrie.backend.article.like.application.LikeSqlService;
-import com.febrie.backend.article.like.domain.LikeCommand;
-import com.febrie.backend.article.like.domain.LikeTarget;
 import com.febrie.backend.media.application.UploadStorage;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.user.domain.Role;
@@ -15,7 +12,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,7 +41,8 @@ class CommentHttpIntegrationTests {
     @Autowired StringRedisTemplate redis;
     @Autowired CommentWrites writes;
     @Autowired CommentSnapshotCache cache;
-    @Autowired LikeSqlService likes;
+    @Autowired CommentCommandTransactions commands;
+    @Autowired CommentCommandResults results;
     @Autowired ObjectMapper json;
     @Autowired PasswordEncoder passwords;
     @MockitoBean UploadStorage storage;
@@ -59,14 +56,11 @@ class CommentHttpIntegrationTests {
         properties.add("app.auth.redis-prefix", () -> PREFIX);
         properties.add("app.search.query-enabled", () -> false);
         properties.add("app.search.rank-scheduling-enabled", () -> false);
-        // 这个既有用例专门覆盖滚动升级期间的 Redis 一级兼容入口。
-        properties.add("app.comment.root-es", () -> false);
-        properties.add("app.comment.async-writes", () -> false);
         properties.add("app.comment.index-sync", () -> false);
     }
 
     @Test
-    void guestRankingSurvivesRealRefreshAndDeletion() throws Exception {
+    void replyRefreshAndQueuedRootDeletion() throws Exception {
         String authorName = "comment_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         sql.update("INSERT INTO users(username, role) VALUES (?, 'USER')", authorName);
         long owner = sql.queryForObject("SELECT id FROM users WHERE username = ?", Long.class, authorName);
@@ -80,58 +74,51 @@ class CommentHttpIntegrationTests {
         long article = sql.queryForObject("SELECT MAX(id) FROM article WHERE author_id = ?", Long.class, owner);
         sql.update("INSERT INTO article_like_count(article_id, like_count) VALUES (?, 0)", article);
         var actor = new UserActor(owner, Role.USER, 1);
-        var first = writes.create(article, actor, null, "较早");
-        var second = writes.create(article, actor, null, "较晚");
-        writes.create(article, actor, first.id(), "回复");
-        var key = new CommentListKey(article, 0, CommentListKey.Sort.HOT);
+        var create = new CommentCommand(article, actor, UUID.randomUUID().toString(), null, "楼层");
+        commands.apply(article, List.of(create));
+        long root = results.find(article, owner, create.operationId()).commentId();
+        var first = writes.createReply(article, actor, root, "旧回复");
+        var key = new CommentListKey(article, root, CommentListKey.Sort.REPLIES);
         String route = "/api/articles/" + article + "/comments";
-        String hotRoute = route + "?sort=hot&size=1";
+        String replyRoute = route + "/" + root + "/replies";
 
         try (var http = HttpClient.newHttpClient()) {
-            var old = get(http, hotRoute, 200);
-            assertEquals(Long.toString(second.id()), old.at("/items/0/id").asString());
-            String cursor = old.path("nextCursor").asString();
+            var old = get(http, replyRoute, 200);
+            assertEquals(Long.toString(first.id()), old.at("/items/0/id").asString());
+            assertFalse(old.path("hasMore").asBoolean());
             var oldSnapshot = cache.current(key);
-            var command = new LikeCommand(1, UUID.randomUUID().toString(), owner,
-                    new LikeTarget(LikeTarget.Type.COMMENT, first.id()), true, "1", Instant.now());
-            likes.apply(command);
-            likes.apply(command);
-            assertEquals(1L, sql.queryForObject("SELECT like_count FROM comment_like_count WHERE comment_id = ?", Long.class, first.id()));
-            assertEquals(0L, sql.queryForObject("SELECT like_count FROM article_like_count WHERE article_id = ?", Long.class, article));
-
-            // 人工推进逻辑到期，仍通过 HTTP 投递与真实监听器发布下一版。
-            var stale = new CommentSnapshot(oldSnapshot.id(), oldSnapshot.version(), 1,
-                    oldSnapshot.hardAt(), oldSnapshot.count());
-            String base = PREFIX + ":comment:v1:list:{" + article + ":0:HOT}";
-            redis.opsForValue().set(base + ":meta:" + stale.id(), stale.payload(), Duration.ofMinutes(5));
-            redis.opsForValue().set(base + ":current", stale.payload(), Duration.ofMinutes(5));
-            assertEquals(oldSnapshot.version(), get(http, hotRoute, 200).path("rankVersion").asString());
-            var refreshed = waitForRefresh(key, oldSnapshot);
-            assertEquals(Long.toString(first.id()), get(http, hotRoute, 200).at("/items/0/id").asString());
-            assertEquals(oldSnapshot.version(), get(http, hotRoute + "&cursor=" + cursor, 200).path("rankVersion").asString());
-            assertEquals(Long.toString(first.id()), get(http, hotRoute + "&cursor=" + cursor, 200).at("/items/0/id").asString());
-            assertNotEquals(oldSnapshot.version(), refreshed.version());
-
             try (var ownerBrowser = HttpClient.newBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL)).build()) {
                 var csrf = get(ownerBrowser, "/api/auth/csrf", 200).path("token").asString();
                 send(ownerBrowser, "POST", "/api/auth/login", Map.of("username", authorName, "password", password), csrf, 200);
                 csrf = get(ownerBrowser, "/api/auth/csrf", 200).path("token").asString();
-                send(ownerBrowser, "POST", route, Map.of("content", "新回复", "replyToId", Long.toString(first.id())), null, 403);
+                send(ownerBrowser, "POST", route, Map.of("content", "新回复", "replyToId", Long.toString(root)), null, 403);
                 var created = json.readTree(send(ownerBrowser, "POST", route,
-                        Map.of("content", "新回复", "replyToId", Long.toString(first.id())), csrf, 201));
-                assertEquals(Long.toString(first.id()), created.path("rootId").asString());
-                send(ownerBrowser, "DELETE", route + "/" + first.id(), null, csrf, 204);
-                send(ownerBrowser, "DELETE", route + "/" + first.id(), null, csrf, 204);
+                        Map.of("content", "新回复", "replyToId", Long.toString(root)), csrf, 201));
+                assertEquals(Long.toString(root), created.path("rootId").asString());
+
+                // 人工推进逻辑到期，通过真实刷新监听器生成下一版楼层索引。
+                var stale = new CommentSnapshot(oldSnapshot.id(), 1, oldSnapshot.hardAt(), oldSnapshot.count());
+                String base = PREFIX + ":comment:v1:list:{" + article + ":" + root + ":REPLIES}";
+                redis.opsForValue().set(base + ":meta:" + stale.id(), stale.payload(), Duration.ofSeconds(60));
+                redis.opsForValue().set(base + ":current", stale.payload(), Duration.ofSeconds(60));
+                get(http, replyRoute, 200);
+                awaitRefresh(key, oldSnapshot);
+                assertEquals(created.path("id").asString(), get(http,
+                        replyRoute + "?cursor=" + old.path("nextCursor").asString(), 200).at("/items/0/id").asString());
+
+                String operation = UUID.randomUUID().toString();
+                send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
+                awaitNotVisible(http, replyRoute);
+                send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
             }
-            assertEquals(Long.toString(second.id()), get(http, hotRoute, 200).at("/items/0/id").asString());
-            get(http, route + "/" + first.id() + "/replies", 404);
-            assertEquals(1L, get(http, "/api/articles/" + article, 200).path("commentCount").asLong());
-            get(http, route + "/" + first.id(), 401);
+            assertEquals(0L, get(http, "/api/articles/" + article, 200).path("commentCount").asLong());
+            get(http, route + "/" + root, 401);
         } finally {
             sql.update("DELETE o FROM comment_index_outbox o JOIN article_comment c ON c.id=o.comment_id WHERE c.article_id=?", article);
             sql.update("DELETE o FROM comment_like_index_outbox o JOIN article_comment c ON c.id=o.comment_id WHERE c.article_id=?", article);
             sql.update("DELETE l FROM comment_like_state l JOIN article_comment c ON c.id=l.comment_id WHERE c.article_id=?", article);
             sql.update("DELETE l FROM comment_like_count l JOIN article_comment c ON c.id=l.comment_id WHERE c.article_id=?", article);
+            sql.update("DELETE FROM comment_write_result WHERE article_id=?", article);
             sql.update("DELETE FROM article_comment WHERE article_id=?", article);
             sql.update("DELETE FROM article_like_count WHERE article_id=?", article);
             sql.update("DELETE FROM article WHERE id=?", article);
@@ -142,7 +129,7 @@ class CommentHttpIntegrationTests {
 
     @Test
     void expiredBuildLeaseCannotPublishAnOlderSnapshot() {
-        var key = new CommentListKey(9_999_999, 0, CommentListKey.Sort.HOT);
+        var key = new CommentListKey(9_999_999, 1, CommentListKey.Sort.REPLIES);
         String one = UUID.randomUUID().toString();
         String two = UUID.randomUUID().toString();
         String token = cache.lock(key);
@@ -161,14 +148,24 @@ class CommentHttpIntegrationTests {
         cache.release(key, current);
     }
 
-    private CommentSnapshot waitForRefresh(CommentListKey key, CommentSnapshot old) throws InterruptedException {
+    private void awaitRefresh(CommentListKey key, CommentSnapshot old) throws InterruptedException {
         long deadline = System.nanoTime() + Duration.ofSeconds(6).toNanos();
         while (System.nanoTime() < deadline) {
             var active = cache.current(key);
-            if (!old.version().equals(active.version())) return active;
+            if (active != null && !old.id().equals(active.id())) return;
             Thread.sleep(25);
         }
         throw new AssertionError("评论刷新监听器未发布新版本");
+    }
+
+    private void awaitNotVisible(HttpClient http, String path) throws Exception {
+        long deadline = System.nanoTime() + Duration.ofSeconds(6).toNanos();
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).build();
+        while (System.nanoTime() < deadline) {
+            if (http.send(request, HttpResponse.BodyHandlers.discarding()).statusCode() == 404) return;
+            Thread.sleep(25);
+        }
+        throw new AssertionError("一级删除命令未完成");
     }
 
     private JsonNode get(HttpClient http, String path, int status) throws Exception {
@@ -176,8 +173,14 @@ class CommentHttpIntegrationTests {
     }
 
     private String send(HttpClient http, String method, String path, Object body, String csrf, int status) throws Exception {
+        return send(http, method, path, body, csrf, null, status);
+    }
+
+    private String send(HttpClient http, String method, String path, Object body, String csrf, String operation,
+                        int status) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).timeout(Duration.ofSeconds(8));
         if (csrf != null) request.header("X-CSRF-TOKEN", csrf);
+        if (operation != null) request.header("X-Operation-Id", operation);
         if (body != null) request.header("Content-Type", "application/json");
         var data = body == null ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body));
