@@ -90,6 +90,8 @@ img { display: block; max-width: 100%; }
 .image-placeholder { display: grid; place-items: center; width: 100%; height: 100%; font-size: 14px; color: #999; }
 .article-interactions { display: flex; gap: 12px; margin-top: 14px; }
 .interaction-button { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 78px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: none; color: #757575; font-size: 14px; }
+/* 评论入口是链接，视觉样式与同排操作按钮一致。 */
+.article-interactions a.interaction-button { text-decoration: none; }
 .interaction-button:hover:not(:disabled) { background: rgb(155 206 255 / 8%); color: #9bceff; }
 .interaction-button.is-liked { border-color: rgb(155 206 255 / 45%); background: rgb(155 206 255 / 12%); color: #9bceff; }
 /* 等待受理或限流期间保留原有点赞状态，禁用反馈不改变按钮尺寸。 */
