@@ -81,7 +81,7 @@ class CommentListsTests {
         assertFalse(tail.hasMore());
         assertEquals(member(12), cursors.decode(key, tail.nextCursor()).position());
         verify(views).items(List.of(second), null);
-        verify(access, times(2)).root(1, 3, false);
+        verify(access, times(2)).root(1, 3, true);
     }
 
     private CommentSnapshot snapshot(String version, long count) {

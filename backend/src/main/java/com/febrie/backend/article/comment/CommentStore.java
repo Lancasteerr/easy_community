@@ -66,19 +66,24 @@ public class CommentStore {
         long id = Objects.requireNonNull(key.getKey()).longValue();
         if (root == 0) {
             sql.update("INSERT INTO comment_like_count(comment_id) VALUES (?)", id);
-            changeCount(article, 1);
         }
         return new CommentRow(id, article, root, replyTo, author, content, now, false);
     }
 
     void delete(CommentRow row) {
-        int changed = sql.update("UPDATE article_comment SET deleted = TRUE, content = NULL WHERE id = ? AND deleted = FALSE",
+        int changed = sql.update("UPDATE article_comment SET deleted = TRUE, content = NULL, index_version = index_version + (root_id = 0) WHERE id = ? AND deleted = FALSE",
                 row.id());
         if (changed != 1) throw new IllegalStateException("评论删除状态发生变化");
-        if (row.rootId() == 0) changeCount(row.articleId(), -1);
     }
 
-    private void changeCount(long article, int delta) {
+    void appendIndex(long id) {
+        if (sql.update("""
+                INSERT INTO comment_index_outbox(comment_id, index_version)
+                SELECT id, index_version FROM article_comment WHERE id = ? AND root_id = 0
+                """, id) != 1) throw new IllegalStateException("一级评论索引事件写入失败");
+    }
+
+    void changeCount(long article, int delta) {
         if (sql.update("UPDATE article SET comment_count = comment_count + ? WHERE id = ?", delta, article) != 1) {
             throw new IllegalStateException("文章评论计数缺失");
         }

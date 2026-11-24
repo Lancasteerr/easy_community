@@ -6,6 +6,8 @@ import com.febrie.backend.article.like.domain.LikeTarget;
 import com.febrie.backend.auth.application.dto.SessionPrincipal;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.dto.UserActor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -32,14 +34,19 @@ public class CommentController {
     private final CommentViews views;
     private final CommentAccess access;
     private final LikeWriteService likes;
+    private final CommentCommands commands;
+    private final boolean asyncWrites;
 
     public CommentController(CommentLists lists, CommentWrites writes, CommentViews views,
-                             CommentAccess access, LikeWriteService likes) {
+                             CommentAccess access, LikeWriteService likes, CommentCommands commands,
+                             @Value("${app.comment.async-writes:true}") boolean asyncWrites) {
         this.lists = lists;
         this.writes = writes;
         this.views = views;
         this.access = access;
         this.likes = likes;
+        this.commands = commands;
+        this.asyncWrites = asyncWrites;
     }
 
     @GetMapping
@@ -63,9 +70,9 @@ public class CommentController {
     }
 
     @PostMapping(consumes = "application/json")
-    @ResponseStatus(HttpStatus.CREATED)
-    public CommentViews.Item create(@PathVariable String articleId, @RequestBody JsonNode body,
-                                   @AuthenticationPrincipal SessionPrincipal principal) {
+    public ResponseEntity<?> create(@PathVariable String articleId, @RequestBody JsonNode body,
+                                    @RequestHeader(value = "X-Operation-Id", required = false) String operation,
+                                    @AuthenticationPrincipal SessionPrincipal principal) {
         var actor = actor(principal);
         var content = body.path("content");
         var reply = body.path("replyToId");
@@ -74,14 +81,36 @@ public class CommentController {
             throw CommentErrors.invalid();
         }
         Long target = reply.isString() ? ArticleIds.parse(reply.asString()) : null;
-        return views.created(writes.create(ArticleIds.parse(articleId), actor, target, content.asString()), principal.username());
+        long article = ArticleIds.parse(articleId);
+        if (target == null && asyncWrites) {
+            access.article(article);
+            return ResponseEntity.accepted().body(commands.submit(
+                    new CommentCommand(article, actor, operation, null, content.asString())));
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                views.created(writes.create(article, actor, target, content.asString()), principal.username()));
     }
 
     @DeleteMapping("/{commentId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable String articleId, @PathVariable String commentId,
-                       @AuthenticationPrincipal SessionPrincipal principal) {
-        writes.delete(ArticleIds.parse(articleId), ArticleIds.parse(commentId), actor(principal));
+    public ResponseEntity<?> delete(@PathVariable String articleId, @PathVariable String commentId,
+                                    @RequestHeader(value = "X-Operation-Id", required = false) String operation,
+                                    @AuthenticationPrincipal SessionPrincipal principal) {
+        var actor = actor(principal);
+        long article = ArticleIds.parse(articleId);
+        long id = ArticleIds.parse(commentId);
+        if (asyncWrites && writes.deletionTarget(article, id, actor).rootId() == 0) {
+            access.article(article);
+            return ResponseEntity.accepted().body(commands.submit(new CommentCommand(article, actor, operation, id, null)));
+        }
+        writes.delete(article, id, actor);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/operations/{operationId}")
+    public CommentCommands.Status operation(@PathVariable String articleId, @PathVariable String operationId,
+                                            @RequestHeader("X-Operation-Receipt") String receipt,
+                                            @AuthenticationPrincipal SessionPrincipal principal) {
+        return commands.status(ArticleIds.parse(articleId), actor(principal), operationId, receipt);
     }
 
     @PutMapping("/{commentId}/like")

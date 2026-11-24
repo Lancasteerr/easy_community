@@ -26,6 +26,11 @@ public class CommentMaintenance {
     }
 
     void deleted(CommentRow row) {
+        visibility(row);
+        if (row.rootId() == 0) count(row.articleId());
+    }
+
+    void visibility(CommentRow row) {
         try {
             if (!values.invalidateObject(row.id())) {
                 metrics.counter("community.comment.invalidate.failure").increment();
@@ -35,6 +40,5 @@ public class CommentMaintenance {
             metrics.counter("community.comment.invalidate.failure").increment();
             log.warn("评论缓存失效失败 commentId={}", row.id(), failure);
         }
-        if (row.rootId() == 0) count(row.articleId());
     }
 }

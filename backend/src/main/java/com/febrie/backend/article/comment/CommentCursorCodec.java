@@ -35,18 +35,18 @@ public class CommentCursorCodec {
     }
 
     String encode(Cursor cursor) {
-        String content = Base64.getUrlEncoder().withoutPadding().encodeToString(json.writeValueAsBytes(cursor));
+        return seal(cursor);
+    }
+
+    /** 已签名数据仍由调用方验证用途、归属及有效期。 */
+    String seal(Object payload) {
+        String content = Base64.getUrlEncoder().withoutPadding().encodeToString(json.writeValueAsBytes(payload));
         return content + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(sign(content));
     }
 
     Cursor decode(CommentListKey key, String encoded) {
         try {
-            if (encoded.length() > 1024) throw CommentErrors.invalid();
-            String[] parts = encoded.split("\\.", -1);
-            if (parts.length != 2 || !MessageDigest.isEqual(sign(parts[0]), Base64.getUrlDecoder().decode(parts[1]))) {
-                throw CommentErrors.invalid();
-            }
-            var cursor = json.readValue(Base64.getUrlDecoder().decode(parts[0]), Cursor.class);
+            var cursor = open(encoded, Cursor.class, 1024);
             if (!key.equals(cursor.key()) || cursor.position() == null) throw CommentErrors.invalid();
             if (key.sort() == CommentListKey.Sort.HOT) {
                 UUID.fromString(cursor.snapshotId());
@@ -60,6 +60,21 @@ public class CommentCursorCodec {
             return cursor;
         } catch (ApiException known) {
             throw known;
+        } catch (RuntimeException invalid) {
+            throw CommentErrors.invalid();
+        }
+    }
+
+    <T> T open(String encoded, Class<T> type, int maxLength) {
+        try {
+            if (encoded == null || encoded.length() > maxLength) throw CommentErrors.invalid();
+            String[] parts = encoded.split("\\.", -1);
+            if (parts.length != 2 || !MessageDigest.isEqual(sign(parts[0]), Base64.getUrlDecoder().decode(parts[1]))) {
+                throw CommentErrors.invalid();
+            }
+            T result = json.readValue(Base64.getUrlDecoder().decode(parts[0]), type);
+            if (result == null) throw CommentErrors.invalid();
+            return result;
         } catch (RuntimeException invalid) {
             throw CommentErrors.invalid();
         }

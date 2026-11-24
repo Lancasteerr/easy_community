@@ -19,6 +19,10 @@ public final class CommentErrors {
         return new ApiException(HttpStatus.FORBIDDEN, "COMMENT_FORBIDDEN", "无权删除该评论");
     }
 
+    public static ApiException operationConflict() {
+        return new ApiException(HttpStatus.CONFLICT, "COMMENT_OPERATION_CONFLICT", "同一操作 ID 已用于其他评论请求");
+    }
+
     public static ApiException expired() {
         return new ApiException(HttpStatus.CONFLICT, "COMMENT_CURSOR_EXPIRED", "评论游标已过期，请重新开始");
     }

@@ -37,23 +37,42 @@ public class CommentWrites {
         }
         var inserted = store.insert(article, rootId, replyToId, actor.userId(), content,
                 clock.instant().truncatedTo(ChronoUnit.MILLIS));
-        if (rootId == 0) afterCommit(() -> maintenance.count(article));
+        if (rootId == 0) {
+            // 滚动升级时同步入口也必须登记索引变更。
+            store.changeCount(article, 1);
+            store.appendIndex(inserted.id());
+            afterCommit(() -> maintenance.count(article));
+        }
         return inserted;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
     public void delete(long article, long id, UserActor actor) {
-        // 锁升级容易死锁，删除先取文章写锁，再锁楼层和目标。
-        if (!store.lockPublicArticle(article, true)) throw CommentErrors.missing();
+        // 层级不可修改，可在加文章锁之前确定是否需要写计数。
         var candidate = belonging(article, store.find(id, false));
+        if (!store.lockPublicArticle(article, candidate.rootId() == 0)) throw CommentErrors.missing();
         if (candidate.rootId() > 0) belonging(article, store.find(candidate.rootId(), true));
         var row = belonging(article, store.find(id, true));
+        requireDeletePermission(row, actor);
+        if (row.deleted()) return;
+        store.delete(row);
+        if (row.rootId() == 0) {
+            store.changeCount(article, -1);
+            store.appendIndex(row.id());
+        }
+        afterCommit(() -> maintenance.deleted(row));
+    }
+
+    CommentRow deletionTarget(long article, long id, UserActor actor) {
+        var row = belonging(article, store.find(id, false));
+        requireDeletePermission(row, actor);
+        return row;
+    }
+
+    static void requireDeletePermission(CommentRow row, UserActor actor) {
         if (row.authorId() != actor.userId() && actor.role() != Role.ADMIN && actor.role() != Role.PATROLLER) {
             throw CommentErrors.forbidden();
         }
-        if (row.deleted()) return;
-        store.delete(row);
-        afterCommit(() -> maintenance.deleted(row));
     }
 
     static CommentRow belonging(long article, CommentRow row) {
