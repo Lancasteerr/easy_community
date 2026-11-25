@@ -1,6 +1,6 @@
 package com.febrie.backend.article.content.web;
 
-import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
+import com.febrie.backend.article.comment.application.query.CommentCountQuery;
 import com.febrie.backend.article.common.ArticleErrors;
 import com.febrie.backend.article.content.application.ArticleQueryService;
 import com.febrie.backend.article.content.application.ArticleService;
@@ -141,8 +141,8 @@ class ArticleDetailHttpTests {
                 .andExpect(jsonPath("$.authorAvatarUrl").value("https://avatars.test/2"))
                 .andExpect(jsonPath("$.authorBio").value("作者的公开简介"));
     }
-    private static CommentValues comments() {
-        var comments = mock(CommentValues.class);
+    private static CommentCountQuery comments() {
+        var comments = mock(CommentCountQuery.class);
         when(comments.counts(anyCollection())).thenAnswer(call -> {
             java.util.Collection<Long> ids = call.getArgument(0);
             var counts = new java.util.HashMap<Long, Long>();

@@ -1,6 +1,6 @@
 package com.febrie.backend.article.like.application;
 
-import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
+import com.febrie.backend.article.comment.application.command.CommentLikeIndex;
 import com.febrie.backend.article.like.domain.*;
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository;
@@ -13,9 +13,9 @@ import org.springframework.transaction.annotation.*;
 public class LikeSqlService {
     private final LikeRepository repository;
     private final int batchSize;
-    private final CommentIndexTasks commentIndex;
+    private final CommentLikeIndex commentIndex;
 
-    public LikeSqlService(LikeRepository repository, LikeProperties properties, CommentIndexTasks commentIndex) {
+    public LikeSqlService(LikeRepository repository, LikeProperties properties, CommentLikeIndex commentIndex) {
         this.repository = repository;
         this.batchSize = properties.batchSize();
         this.commentIndex = commentIndex;

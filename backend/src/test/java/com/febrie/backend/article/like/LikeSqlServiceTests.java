@@ -1,10 +1,12 @@
 package com.febrie.backend.article.like;
 
-import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
+import com.febrie.backend.article.comment.application.command.CommentLikeIndex;
 import com.febrie.backend.article.like.application.LikeSqlService;
 import com.febrie.backend.article.like.domain.*;
 import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository;
+import com.febrie.backend.article.like.infrastructure.persistence.LikeStore;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -13,7 +15,8 @@ import static org.mockito.Mockito.*;
 /** 事务原子性另由MySQL集成测试验证；此处锁定版本裁决与净增量规则。 */
 class LikeSqlServiceTests {
     private final LikeRepository repository = mock(LikeRepository.class);
-    private final LikeSqlService service = new LikeSqlService(repository, LikeTestProperties.defaults(), mock(CommentIndexTasks.class));
+    private final CommentLikeIndex commentIndex = mock(CommentLikeIndex.class);
+    private final LikeSqlService service = new LikeSqlService(repository, LikeTestProperties.defaults(), commentIndex);
 
     @org.junit.jupiter.api.BeforeEach void counterBaseline() { when(repository.lockCount(2)).thenReturn(1L); }
 
@@ -84,6 +87,59 @@ class LikeSqlServiceTests {
         assertThrows(IllegalArgumentException.class, () -> service.applyArticle(2, java.util.List.of(command(true, 10), command(false, 11))));
         assertThrows(IllegalArgumentException.class, () -> service.applyArticle(3, java.util.List.of(command(true, 10))));
         verify(repository, never()).initializeState(anyLong(), anyLong());
+    }
+
+    @Test void deletedCommentDoesNotWriteLikesOrScheduleIndexing() {
+        var comments = mock(LikeStore.class);
+        when(repository.comments()).thenReturn(comments);
+
+        assertEquals(LikeSqlService.Status.STALE, service.apply(commentCommand(1, true)).status());
+        verify(commentIndex).lockActiveRoot(2);
+        verifyNoInteractions(comments);
+        verify(commentIndex, never()).scheduleLike(anyLong());
+    }
+
+    @Test void commentLikesWithNoNetChangeDoNotScheduleIndexing() {
+        var comments = mock(LikeStore.class);
+        when(repository.comments()).thenReturn(comments);
+        when(commentIndex.lockActiveRoot(2)).thenReturn(true);
+        when(comments.lock(1, 2)).thenReturn(new LikeState(1, 2, true, 10));
+        when(comments.lock(2, 2)).thenReturn(new LikeState(2, 2, false, 10));
+        when(comments.update(any())).thenReturn(1);
+        when(comments.lockCount(2)).thenReturn(1L);
+        var unlike = commentCommand(1, false);
+        var like = commentCommand(2, true);
+
+        assertEquals(0, service.applyTarget(unlike.target(), List.of(unlike, like)).delta());
+        verify(comments, times(2)).update(any());
+        verify(comments, never()).addDelta(anyLong(), anyInt());
+        verify(commentIndex, never()).scheduleLike(anyLong());
+    }
+
+    @Test void locksCommentBeforeChangingLikesAndSchedulesIndexAfterCountWrite() {
+        var comments = mock(LikeStore.class);
+        when(repository.comments()).thenReturn(comments);
+        when(commentIndex.lockActiveRoot(2)).thenReturn(true);
+        when(comments.lock(1, 2)).thenReturn(new LikeState(1, 2, false, 10));
+        when(comments.update(any())).thenReturn(1);
+        when(comments.lockCount(2)).thenReturn(0L);
+        when(comments.addDelta(2, 1)).thenReturn(1);
+
+        assertEquals(LikeSqlService.Status.APPLIED, service.apply(commentCommand(1, true)).status());
+        // 先锁一级评论，再更新关系和计数，索引任务才可随写入一起提交。
+        var order = inOrder(commentIndex, comments);
+        order.verify(commentIndex).lockActiveRoot(2);
+        order.verify(comments).initializeState(1, 2);
+        order.verify(comments).lock(1, 2);
+        order.verify(comments).update(new LikeState(1, 2, true, 12));
+        order.verify(comments).lockCount(2);
+        order.verify(comments).addDelta(2, 1);
+        order.verify(commentIndex).scheduleLike(2);
+    }
+
+    private static LikeCommand commentCommand(long userId, boolean liked) {
+        return new LikeCommand(1, UUID.randomUUID().toString(), userId, new LikeTarget(LikeTarget.Type.COMMENT, 2),
+                liked, "12", Instant.now());
     }
 
     static LikeCommand command(boolean liked, long version) {

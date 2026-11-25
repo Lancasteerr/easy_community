@@ -2,7 +2,7 @@ package com.febrie.backend.article.search.web;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.febrie.backend.article.content.application.ArticleDisplayAssembler;
-import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
+import com.febrie.backend.article.comment.application.query.CommentCountQuery;
 import com.febrie.backend.article.content.application.dto.ArticleListView;
 import com.febrie.backend.article.like.application.LikeQueryService;
 import com.febrie.backend.article.search.application.ArticleSearchService;
@@ -16,10 +16,10 @@ public class ArticleSearchAssembler {
     private final ArticleViewService views;
     private final LikeQueryService likes;
     private final ArticleDisplayAssembler display;
-    private final CommentValues comments;
+    private final CommentCountQuery comments;
 
     public ArticleSearchAssembler(ArticleViewService views, LikeQueryService likes, ArticleDisplayAssembler display,
-                                  CommentValues comments) {
+                                  CommentCountQuery comments) {
         this.views = views; this.likes = likes; this.display = display; this.comments = comments;
     }
     public Response assemble(ArticleSearchService.Page page, Long user) {

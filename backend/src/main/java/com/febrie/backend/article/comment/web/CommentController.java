@@ -7,7 +7,7 @@ import com.febrie.backend.article.comment.application.command.CommentWriteServic
 import com.febrie.backend.article.comment.application.query.CommentListKey;
 import com.febrie.backend.article.comment.application.query.CommentLists;
 import com.febrie.backend.article.comment.application.query.CommentRootLists;
-import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
+import com.febrie.backend.article.comment.application.query.CommentCountQuery;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.febrie.backend.article.common.ArticleIds;
@@ -46,18 +46,18 @@ public class CommentController {
     private final CommentAccess access;
     private final LikeWriteService likes;
     private final CommentRootLists rootLists;
-    private final CommentValues values;
+    private final CommentCountQuery counts;
     private final CommentSubmissions submissions;
 
     public CommentController(CommentLists lists, CommentWriteService writes, CommentAccess access,
-                             LikeWriteService likes, CommentRootLists rootLists, CommentValues values,
+                             LikeWriteService likes, CommentRootLists rootLists, CommentCountQuery counts,
                              CommentSubmissions submissions) {
         this.lists = lists;
         this.writes = writes;
         this.access = access;
         this.likes = likes;
         this.rootLists = rootLists;
-        this.values = values;
+        this.counts = counts;
         this.submissions = submissions;
     }
 
@@ -74,7 +74,7 @@ public class CommentController {
         var page = rootLists.page(key, size, cursor, user(principal));
         // 只有首页需要刷新标题和左侧入口共享的一级评论数。
         try {
-            return new RootPage(page, cursor == null ? values.counts(List.of(key.articleId())).get(key.articleId()) : null);
+            return new RootPage(page, cursor == null ? counts.counts(List.of(key.articleId())).get(key.articleId()) : null);
         } catch (DataAccessException failure) {
             throw CommentErrors.unavailable();
         }

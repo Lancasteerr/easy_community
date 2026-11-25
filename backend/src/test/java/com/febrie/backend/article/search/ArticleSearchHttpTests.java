@@ -1,6 +1,6 @@
 package com.febrie.backend.article.search;
 
-import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
+import com.febrie.backend.article.comment.application.query.CommentCountQuery;
 import com.febrie.backend.article.content.application.dto.*;
 import com.febrie.backend.article.content.application.ArticleDisplayAssembler;
 import com.febrie.backend.article.like.application.LikeQueryService;
@@ -52,8 +52,8 @@ class ArticleSearchHttpTests {
                 .andExpect(jsonPath("$.items[0].likedByMe").value(false));
         verify(views).totals(List.of(1L)); verify(likes).summaries(null, List.of(1L));
     }
-    private static CommentValues comments() {
-        var comments = mock(CommentValues.class);
+    private static CommentCountQuery comments() {
+        var comments = mock(CommentCountQuery.class);
         when(comments.counts(anyCollection())).thenAnswer(call -> {
             java.util.Collection<Long> ids = call.getArgument(0);
             var counts = new java.util.HashMap<Long, Long>();

@@ -1,7 +1,7 @@
 package com.febrie.backend.article.content.web.response;
 
 import com.febrie.backend.article.content.application.dto.ArticleDetailView;
-import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
+import com.febrie.backend.article.comment.application.query.CommentCountQuery;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.febrie.backend.article.like.application.LikeQueryService;
@@ -15,9 +15,9 @@ public class ArticleDetailResponseAssembler {
     private final LikeQueryService likes;
     private final ArticleViewService views;
 
-    private final CommentValues comments;
+    private final CommentCountQuery comments;
 
-    public ArticleDetailResponseAssembler(LikeQueryService likes, ArticleViewService views, CommentValues comments) {
+    public ArticleDetailResponseAssembler(LikeQueryService likes, ArticleViewService views, CommentCountQuery comments) {
         this.likes = likes; this.views = views; this.comments = comments;
     }
 
