@@ -17,12 +17,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /** 写入使用主库授权，提交以后才维护缓存；列表由 TTL 负责收敛。 */
 @Service
-public class CommentWrites {
+class CommentWrites {
     private final CommentStore store;
     private final CommentMaintenance maintenance;
     private final Clock clock;
 
-    public CommentWrites(CommentStore store, CommentMaintenance maintenance, Clock clock) {
+    CommentWrites(CommentStore store, CommentMaintenance maintenance, Clock clock) {
         this.store = store;
         this.maintenance = maintenance;
         this.clock = clock;
@@ -59,7 +59,7 @@ public class CommentWrites {
         afterCommit(() -> maintenance.visibility(row));
     }
 
-    public CommentRow deletionTarget(long article, long id, UserActor actor) {
+    CommentRow deletionTarget(long article, long id, UserActor actor) {
         var row = CommentAccess.belonging(article, store.find(id, false));
         requireDeletePermission(row, actor);
         return row;

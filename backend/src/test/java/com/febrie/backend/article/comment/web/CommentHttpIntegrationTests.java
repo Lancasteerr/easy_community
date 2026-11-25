@@ -2,16 +2,10 @@ package com.febrie.backend.article.comment.web;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.febrie.backend.article.comment.application.command.CommentCommand;
-import com.febrie.backend.article.comment.application.command.CommentCommandTransactions;
-import com.febrie.backend.article.comment.application.command.CommentWrites;
 import com.febrie.backend.article.comment.application.query.CommentListKey;
-import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshot;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshotCache;
 import com.febrie.backend.media.application.UploadStorage;
-import com.febrie.backend.user.application.dto.UserActor;
-import com.febrie.backend.user.domain.Role;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.URI;
@@ -46,10 +40,7 @@ class CommentHttpIntegrationTests {
     @LocalServerPort int port;
     @Autowired JdbcTemplate sql;
     @Autowired StringRedisTemplate redis;
-    @Autowired CommentWrites writes;
     @Autowired CommentSnapshotCache cache;
-    @Autowired CommentCommandTransactions commands;
-    @Autowired CommentCommandResults results;
     @Autowired ObjectMapper json;
     @Autowired PasswordEncoder passwords;
     @MockitoBean UploadStorage storage;
@@ -80,46 +71,53 @@ class CommentHttpIntegrationTests {
                 """, owner);
         long article = sql.queryForObject("SELECT MAX(id) FROM article WHERE author_id = ?", Long.class, owner);
         sql.update("INSERT INTO article_like_count(article_id, like_count) VALUES (?, 0)", article);
-        var actor = new UserActor(owner, Role.USER, 1);
-        var create = new CommentCommand(article, actor, UUID.randomUUID().toString(), null, "楼层");
-        commands.apply(article, List.of(create));
-        long root = results.find(article, owner, create.operationId()).commentId();
-        var first = writes.createReply(article, actor, root, "旧回复");
-        var key = new CommentListKey(article, root, CommentListKey.Sort.REPLIES);
         String route = "/api/articles/" + article + "/comments";
-        String replyRoute = route + "/" + root + "/replies";
 
-        try (var http = HttpClient.newHttpClient()) {
+        try (var http = HttpClient.newHttpClient();
+             var ownerBrowser = HttpClient.newBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL)).build()) {
+            var csrf = get(ownerBrowser, "/api/auth/csrf", 200).path("token").asString();
+            send(ownerBrowser, "POST", "/api/auth/login", Map.of("username", authorName, "password", password), csrf, 200);
+            csrf = get(ownerBrowser, "/api/auth/csrf", 200).path("token").asString();
+
+            // 用真实的受理回执轮询一级评论，回复仍应由同一次请求返回。
+            String createOperation = UUID.randomUUID().toString();
+            var accepted = json.readTree(send(ownerBrowser, "POST", route, Map.of("content", "楼层"),
+                    csrf, createOperation, 202));
+            assertEquals(createOperation, accepted.path("operationId").asString());
+            var completed = awaitOperation(ownerBrowser, route, createOperation, accepted.path("receipt").asString());
+            long root = Long.parseLong(completed.path("commentId").asString());
+            var key = new CommentListKey(article, root, CommentListKey.Sort.REPLIES);
+            String replyRoute = route + "/" + root + "/replies";
+            var first = json.readTree(send(ownerBrowser, "POST", route,
+                    Map.of("content", "旧回复", "replyToId", Long.toString(root)), csrf, 201));
             var old = get(http, replyRoute, 200);
-            assertEquals(Long.toString(first.id()), old.at("/items/0/id").asString());
+            assertEquals(first.path("id").asString(), old.at("/items/0/id").asString());
             assertFalse(old.path("hasMore").asBoolean());
             var oldSnapshot = cache.current(key);
-            try (var ownerBrowser = HttpClient.newBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL)).build()) {
-                var csrf = get(ownerBrowser, "/api/auth/csrf", 200).path("token").asString();
-                send(ownerBrowser, "POST", "/api/auth/login", Map.of("username", authorName, "password", password), csrf, 200);
-                csrf = get(ownerBrowser, "/api/auth/csrf", 200).path("token").asString();
-                send(ownerBrowser, "POST", route, Map.of("content", "新回复", "replyToId", Long.toString(root)), null, 403);
-                var created = json.readTree(send(ownerBrowser, "POST", route,
-                        Map.of("content", "新回复", "replyToId", Long.toString(root)), csrf, 201));
-                assertEquals(Long.toString(root), created.path("rootId").asString());
+            send(ownerBrowser, "POST", route, Map.of("content", "新回复", "replyToId", Long.toString(root)), null, 403);
+            var created = json.readTree(send(ownerBrowser, "POST", route,
+                    Map.of("content", "新回复", "replyToId", Long.toString(root)), csrf, 201));
+            assertEquals(Long.toString(root), created.path("rootId").asString());
 
-                // 人工推进逻辑到期，通过真实刷新监听器生成下一版楼层索引。
-                String base = PREFIX + ":comment:v1:list:{" + article + ":" + root + ":REPLIES}";
-                String[] metadata = redis.opsForValue().get(base + ":current").split("\\|", -1);
-                metadata[2] = "1";
-                String stale = String.join("|", metadata);
-                redis.opsForValue().set(base + ":meta:" + oldSnapshot.id(), stale, Duration.ofSeconds(60));
-                redis.opsForValue().set(base + ":current", stale, Duration.ofSeconds(60));
-                get(http, replyRoute, 200);
-                awaitRefresh(key, oldSnapshot);
-                assertEquals(created.path("id").asString(), get(http,
-                        replyRoute + "?cursor=" + old.path("nextCursor").asString(), 200).at("/items/0/id").asString());
+            // 人工推进逻辑到期，通过真实刷新监听器生成下一版楼层索引。
+            String base = PREFIX + ":comment:v1:list:{" + article + ":" + root + ":REPLIES}";
+            String[] metadata = redis.opsForValue().get(base + ":current").split("\\|", -1);
+            metadata[2] = "1";
+            String stale = String.join("|", metadata);
+            redis.opsForValue().set(base + ":meta:" + oldSnapshot.id(), stale, Duration.ofSeconds(60));
+            redis.opsForValue().set(base + ":current", stale, Duration.ofSeconds(60));
+            get(http, replyRoute, 200);
+            awaitRefresh(key, oldSnapshot);
+            assertEquals(created.path("id").asString(), get(http,
+                    replyRoute + "?cursor=" + old.path("nextCursor").asString(), 200).at("/items/0/id").asString());
 
-                String operation = UUID.randomUUID().toString();
-                send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
-                awaitNotVisible(http, replyRoute);
-                send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
-            }
+            String replyId = created.path("id").asString();
+            assertEquals("", send(ownerBrowser, "DELETE", route + "/" + replyId, null, csrf, 204));
+
+            String operation = UUID.randomUUID().toString();
+            send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
+            awaitNotVisible(http, replyRoute);
+            send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
             assertEquals(0L, get(http, "/api/articles/" + article, 200).path("commentCount").asLong());
             get(http, route + "/" + root, 401);
         } finally {
@@ -165,6 +163,22 @@ class CommentHttpIntegrationTests {
             Thread.sleep(25);
         }
         throw new AssertionError("评论刷新监听器未发布新版本");
+    }
+
+    private JsonNode awaitOperation(HttpClient http, String route, String operation, String receipt) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + route + "/operations/" + operation))
+                .timeout(Duration.ofSeconds(8)).header("X-Operation-Receipt", receipt).GET().build();
+        long deadline = System.nanoTime() + Duration.ofSeconds(6).toNanos();
+        while (System.nanoTime() < deadline) {
+            var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode(), response.body());
+            var body = json.readTree(response.body());
+            assertEquals(operation, body.path("operationId").asString());
+            if ("SUCCEEDED".equals(body.path("status").asString())) return body;
+            assertEquals("PENDING", body.path("status").asString(), response.body());
+            Thread.sleep(25);
+        }
+        throw new AssertionError("一级评论创建命令未完成");
     }
 
     private void awaitNotVisible(HttpClient http, String path) throws Exception {

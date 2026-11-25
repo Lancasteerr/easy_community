@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 /** 受理凭证由会话主体及摘要签名，允许在消费者写结果前查询待处理状态。 */
 @Service
-public class CommentCommands {
+class CommentCommands {
     private final CommentBroker broker;
     private final CommentCommandResults results;
     private final CommentCursorCodec tokens;
@@ -25,11 +25,11 @@ public class CommentCommands {
         this.clock = clock;
     }
 
-    public Accepted submit(CommentCommand command) {
+    CommentWriteService.Accepted submit(CommentCommand command) {
         enqueue(command);
         var receipt = new Receipt(command.articleId(), command.actor().userId(), command.operationId(), command.fingerprint(),
                 clock.millis() + Duration.ofDays(1).toMillis());
-        return new Accepted(command.operationId(), tokens.seal(receipt));
+        return new CommentWriteService.Accepted(command.operationId(), tokens.seal(receipt));
     }
 
     /** 新的发布入口只复用可靠投递，原入口仍签发其查询凭证。 */
@@ -54,7 +54,7 @@ public class CommentCommands {
         }
     }
 
-    public Status status(long article, UserActor actor, String suppliedOperation, String receipt) {
+    CommentWriteService.Status status(long article, UserActor actor, String suppliedOperation, String receipt) {
         String operation = CommentCommand.operation(suppliedOperation);
         var issued = tokens.open(receipt, Receipt.class, 1024);
         if (issued.articleId() != article || issued.actorId() != actor.userId()
@@ -62,13 +62,11 @@ public class CommentCommands {
             throw CommentErrors.invalid();
         }
         var result = results.find(article, actor.userId(), operation);
-        if (result == null) return new Status(operation, "PENDING", null, null);
+        if (result == null) return new CommentWriteService.Status(operation, "PENDING", null, null);
         result.requireFingerprint(issued.fingerprint());
-        return new Status(operation, result.error() == null ? "SUCCEEDED" : "REJECTED",
+        return new CommentWriteService.Status(operation, result.error() == null ? "SUCCEEDED" : "REJECTED",
                 result.commentId() == null ? null : result.commentId().toString(), result.error());
     }
 
     record Receipt(long articleId, long actorId, String operationId, String fingerprint, long expiresAt) { }
-    public record Accepted(String operationId, String receipt) { }
-    public record Status(String operationId, String status, String commentId, String errorCode) { }
 }

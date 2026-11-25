@@ -2,14 +2,11 @@ package com.febrie.backend.article.comment.web;
 
 import com.febrie.backend.article.comment.application.CommentAccess;
 import com.febrie.backend.article.comment.application.CommentErrors;
-import com.febrie.backend.article.comment.application.command.CommentCommand;
-import com.febrie.backend.article.comment.application.command.CommentCommands;
 import com.febrie.backend.article.comment.application.command.CommentSubmissions;
-import com.febrie.backend.article.comment.application.command.CommentWrites;
+import com.febrie.backend.article.comment.application.command.CommentWriteService;
 import com.febrie.backend.article.comment.application.query.CommentListKey;
 import com.febrie.backend.article.comment.application.query.CommentLists;
 import com.febrie.backend.article.comment.application.query.CommentRootLists;
-import com.febrie.backend.article.comment.application.query.CommentViews;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
@@ -45,24 +42,20 @@ import tools.jackson.databind.JsonNode;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class CommentController {
     private final CommentLists lists;
-    private final CommentWrites writes;
-    private final CommentViews views;
+    private final CommentWriteService writes;
     private final CommentAccess access;
     private final LikeWriteService likes;
-    private final CommentCommands commands;
     private final CommentRootLists rootLists;
     private final CommentValues values;
     private final CommentSubmissions submissions;
 
-    public CommentController(CommentLists lists, CommentWrites writes, CommentViews views,
-                             CommentAccess access, LikeWriteService likes, CommentCommands commands,
-                             CommentRootLists rootLists, CommentValues values, CommentSubmissions submissions) {
+    public CommentController(CommentLists lists, CommentWriteService writes, CommentAccess access,
+                             LikeWriteService likes, CommentRootLists rootLists, CommentValues values,
+                             CommentSubmissions submissions) {
         this.lists = lists;
         this.writes = writes;
-        this.views = views;
         this.access = access;
         this.likes = likes;
-        this.commands = commands;
         this.rootLists = rootLists;
         this.values = values;
         this.submissions = submissions;
@@ -108,13 +101,10 @@ public class CommentController {
         var actor = actor(principal);
         var input = CommentRequest.read(body);
         long article = ArticleIds.parse(articleId);
-        if (input.replyToId() == null) {
-            access.article(article);
-            return ResponseEntity.accepted().body(commands.submit(
-                    new CommentCommand(article, actor, operation, null, input.content())));
-        }
-        return ResponseEntity.status(HttpStatus.CREATED).body(
-                views.created(writes.createReply(article, actor, input.replyToId(), input.content()), principal.username()));
+        return switch (writes.create(article, actor, principal.username(), operation, input)) {
+            case CommentWriteService.Accepted accepted -> ResponseEntity.accepted().body(accepted);
+            case CommentWriteService.CreatedReply reply -> ResponseEntity.status(HttpStatus.CREATED).body(reply.item());
+        };
     }
 
     @PutMapping(value = "/submissions/{submissionId}", consumes = "application/json")
@@ -142,19 +132,16 @@ public class CommentController {
         var actor = actor(principal);
         long article = ArticleIds.parse(articleId);
         long id = ArticleIds.parse(commentId);
-        if (writes.deletionTarget(article, id, actor).rootId() == 0) {
-            access.article(article);
-            return ResponseEntity.accepted().body(commands.submit(new CommentCommand(article, actor, operation, id, null)));
-        }
-        writes.deleteReply(article, id, actor);
-        return ResponseEntity.noContent().build();
+        return writes.delete(article, id, actor, operation)
+                .<ResponseEntity<?>>map(accepted -> ResponseEntity.accepted().body(accepted))
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @GetMapping("/operations/{operationId}")
-    public CommentCommands.Status operation(@PathVariable String articleId, @PathVariable String operationId,
+    public CommentWriteService.Status operation(@PathVariable String articleId, @PathVariable String operationId,
                                             @RequestHeader("X-Operation-Receipt") String receipt,
                                             @AuthenticationPrincipal SessionPrincipal principal) {
-        return commands.status(ArticleIds.parse(articleId), actor(principal), operationId, receipt);
+        return writes.status(ArticleIds.parse(articleId), actor(principal), operationId, receipt);
     }
 
     @PutMapping("/{commentId}/like")
