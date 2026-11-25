@@ -1,5 +1,8 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.messaging;
 
+import com.febrie.backend.article.comment.CommentListKey;
+import com.febrie.backend.article.comment.CommentSnapshots;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshotCache;
 import com.rabbitmq.client.Channel;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
@@ -54,7 +57,7 @@ public class CommentRefreshes {
         metrics.gauge("community.comment.refresh.queued", queueDepth);
     }
 
-    void offer(CommentListKey key, String expected) {
+    public void offer(CommentListKey key, String expected) {
         try {
             publishers.execute(() -> publish(key, expected));
         } catch (TaskRejectedException rejected) {

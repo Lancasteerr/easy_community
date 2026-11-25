@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.search;
 
+import com.febrie.backend.article.comment.infrastructure.messaging.CommentBroker;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -11,6 +13,7 @@ import java.util.stream.LongStream;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -146,7 +149,7 @@ public final class BaselineCommentFixture {
 
     public static void cleanupQueues(ConfigurableApplicationContext app, String prefix) {
         app.getBean("commentIndexScheduler", ThreadPoolTaskScheduler.class).shutdown();
-        app.getBean(CommentMessageConfiguration.WriteListeners.class).stop();
+        app.getBean("commentWriteListeners", SmartLifecycle.class).stop();
         app.getBean("commentIndexListener", SimpleMessageListenerContainer.class).stop();
         app.getBean("commentRefreshListener", SimpleMessageListenerContainer.class).stop();
         var admin = app.getBean(AmqpAdmin.class);

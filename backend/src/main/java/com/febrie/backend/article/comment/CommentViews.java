@@ -1,5 +1,6 @@
 package com.febrie.backend.article.comment;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.febrie.backend.article.like.application.LikeQueryService;
 import com.febrie.backend.article.like.domain.LikeTarget.Type;

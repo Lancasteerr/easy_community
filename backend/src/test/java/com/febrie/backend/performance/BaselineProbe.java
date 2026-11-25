@@ -1,6 +1,6 @@
 package com.febrie.backend.performance;
 
-import com.febrie.backend.article.comment.BaselineCommentFixture;
+import com.febrie.backend.article.comment.infrastructure.search.BaselineCommentFixture;
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 import com.febrie.backend.article.like.infrastructure.messaging.LikePartitionRouter;
 import com.febrie.backend.article.view.application.ArticleViewService;

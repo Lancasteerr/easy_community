@@ -1,5 +1,8 @@
 package com.febrie.backend.article.comment;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshot;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshotCache;
 import com.febrie.backend.shared.cache.CacheProtocol;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
@@ -54,7 +57,7 @@ public class CommentSnapshots {
         return snapshot.softAt() <= clock.millis();
     }
 
-    void refresh(CommentListKey key, String expectedId) {
+    public void refresh(CommentListKey key, String expectedId) {
         String token = cache.lock(key);
         if (token == null) return;
         try {
@@ -110,7 +113,7 @@ public class CommentSnapshots {
         }
     }
 
-    void event(String outcome) {
+    public void event(String outcome) {
         metrics.counter("community.comment.cache.events", "outcome", outcome).increment();
     }
 }

@@ -1,5 +1,8 @@
 package com.febrie.backend.article.comment;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.user.application.AccountQueryService;
 import com.febrie.backend.user.application.dto.AccountAuthState;
 import com.febrie.backend.user.application.dto.UserActor;
@@ -39,6 +42,6 @@ class CommentCommandTransactionsTests {
         verify(store).changeCount(1, 2);
         verify(store).appendIndex(8);
         verify(store).appendIndex(9);
-        verify(results).insert(first, 8L, null);
+        verify(results).insert(1, 2, first.operationId(), first.fingerprint(), 8L, null);
     }
 }

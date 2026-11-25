@@ -1,7 +1,7 @@
 package com.febrie.backend.article.content.web.response;
 
 import com.febrie.backend.article.content.application.dto.ArticleDetailView;
-import com.febrie.backend.article.comment.CommentValues;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.febrie.backend.article.like.application.LikeQueryService;

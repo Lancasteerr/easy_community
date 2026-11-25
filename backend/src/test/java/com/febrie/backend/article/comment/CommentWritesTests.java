@@ -1,5 +1,8 @@
 package com.febrie.backend.article.comment;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentMaintenance;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 

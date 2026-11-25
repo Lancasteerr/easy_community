@@ -1,6 +1,6 @@
 package com.febrie.backend.article.search;
 
-import com.febrie.backend.article.comment.CommentValues;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
 import com.febrie.backend.article.content.application.dto.*;
 import com.febrie.backend.article.content.application.ArticleDisplayAssembler;
 import com.febrie.backend.article.like.application.LikeQueryService;

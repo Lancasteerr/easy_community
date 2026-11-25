@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.search;
 
+import com.febrie.backend.article.comment.CommentListKey;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.VersionType;
@@ -19,7 +21,7 @@ import org.springframework.stereotype.Component;
 
 /** 生命周期、点赞与回填写入相同版本空间，公开查询只读取候选 ID 与排序值。 */
 @Component
-class CommentIndex {
+public class CommentIndex {
     private static final Logger log = LoggerFactory.getLogger(CommentIndex.class);
     private final ElasticsearchClient es;
     private final int replicas;
@@ -98,11 +100,11 @@ class CommentIndex {
         return differences;
     }
 
-    String open() throws IOException {
+    public String open() throws IOException {
         return es.openPointInTime(p -> p.index(readAlias()).keepAlive(t -> t.time("2m")).allowPartialSearchResults(false)).id();
     }
 
-    Batch page(CommentListKey key, String pit, List<SearchCursor.Value> after, int size) throws IOException {
+    public Batch page(CommentListKey key, String pit, List<SearchCursor.Value> after, int size) throws IOException {
         var search = new SearchRequest.Builder().pit(p -> p.id(pit).keepAlive(t -> t.time("2m")))
                 .query(q -> q.bool(b -> b.filter(f -> f.term(t -> t.field("articleId").value(key.articleId())))
                         .filter(f -> f.term(t -> t.field("visible").value(true)))))
@@ -120,7 +122,7 @@ class CommentIndex {
                 .toList());
     }
 
-    void close(String pit) {
+    public void close(String pit) {
         try {
             es.closePointInTime(c -> c.id(pit));
         } catch (IOException | RuntimeException ignored) {
@@ -131,6 +133,6 @@ class CommentIndex {
     private String readAlias() { return name + "-read"; }
     private String writeAlias() { return name + "-write"; }
 
-    record Hit(long id, List<SearchCursor.Value> sort) { }
-    record Batch(String pit, List<Hit> hits) { }
+    public record Hit(long id, List<SearchCursor.Value> sort) { }
+    public record Batch(String pit, List<Hit> hits) { }
 }

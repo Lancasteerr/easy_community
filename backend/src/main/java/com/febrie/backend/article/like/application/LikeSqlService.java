@@ -1,6 +1,6 @@
 package com.febrie.backend.article.like.application;
 
-import com.febrie.backend.article.comment.CommentIndexTasks;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
 import com.febrie.backend.article.like.domain.*;
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 import com.febrie.backend.article.like.infrastructure.persistence.LikeRepository;

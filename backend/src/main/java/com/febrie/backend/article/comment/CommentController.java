@@ -1,5 +1,6 @@
 package com.febrie.backend.article.comment;
 
+import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.febrie.backend.article.common.ArticleIds;

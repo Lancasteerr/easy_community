@@ -2,7 +2,7 @@ package com.febrie.backend.article.search.web;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.febrie.backend.article.content.application.ArticleDisplayAssembler;
-import com.febrie.backend.article.comment.CommentValues;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
 import com.febrie.backend.article.content.application.dto.ArticleListView;
 import com.febrie.backend.article.like.application.LikeQueryService;
 import com.febrie.backend.article.search.application.ArticleSearchService;

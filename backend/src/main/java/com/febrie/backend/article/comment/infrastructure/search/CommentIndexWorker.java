@@ -1,5 +1,8 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.search;
 
+import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.infrastructure.messaging.CommentBroker;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -19,7 +22,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnProperty(name = "app.comment.index-sync", havingValue = "true", matchIfMissing = true)
-class CommentIndexWorker {
+public class CommentIndexWorker {
     private static final Logger log = LoggerFactory.getLogger(CommentIndexWorker.class);
     private final CommentIndexTasks tasks;
     private final CommentIndex index;
@@ -49,7 +52,7 @@ class CommentIndexWorker {
         }
     }
 
-    void consume(Message message, Channel channel) throws IOException {
+    public void consume(Message message, Channel channel) throws IOException {
         long tag = message.getMessageProperties().getDeliveryTag();
         CommentIndexTasks.Event event;
         try {

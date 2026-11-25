@@ -8,8 +8,8 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 /** 创建与删除由不同字段表示，摘要绑定实际被执行的请求。 */
-record CommentCommand(long articleId, UserActor actor, String operationId, Long commentId, String content) {
-    CommentCommand {
+public record CommentCommand(long articleId, UserActor actor, String operationId, Long commentId, String content) {
+    public CommentCommand {
         if (articleId <= 0 || actor == null || actor.userId() <= 0 || actor.role() == null) {
             throw CommentErrors.invalid();
         }

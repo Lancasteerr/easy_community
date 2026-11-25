@@ -1,6 +1,6 @@
 package com.febrie.backend.article.content.web;
 
-import com.febrie.backend.article.comment.CommentValues;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
 import com.febrie.backend.article.common.ArticleErrors;
 import com.febrie.backend.article.content.application.ArticleQueryService;
 import com.febrie.backend.article.content.application.ArticleService;

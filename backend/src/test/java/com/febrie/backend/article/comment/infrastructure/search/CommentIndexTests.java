@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.search;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.VersionType;
 import co.elastic.clients.elasticsearch.core.BulkRequest;

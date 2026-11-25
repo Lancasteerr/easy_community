@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.redis;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;

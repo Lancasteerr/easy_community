@@ -1,5 +1,8 @@
 package com.febrie.backend.article.comment;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshot;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshotCache;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.febrie.backend.media.application.UploadStorage;
@@ -97,10 +100,12 @@ class CommentHttpIntegrationTests {
                 assertEquals(Long.toString(root), created.path("rootId").asString());
 
                 // 人工推进逻辑到期，通过真实刷新监听器生成下一版楼层索引。
-                var stale = new CommentSnapshot(oldSnapshot.id(), 1, oldSnapshot.hardAt(), oldSnapshot.count());
                 String base = PREFIX + ":comment:v1:list:{" + article + ":" + root + ":REPLIES}";
-                redis.opsForValue().set(base + ":meta:" + stale.id(), stale.payload(), Duration.ofSeconds(60));
-                redis.opsForValue().set(base + ":current", stale.payload(), Duration.ofSeconds(60));
+                String[] metadata = redis.opsForValue().get(base + ":current").split("\\|", -1);
+                metadata[2] = "1";
+                String stale = String.join("|", metadata);
+                redis.opsForValue().set(base + ":meta:" + oldSnapshot.id(), stale, Duration.ofSeconds(60));
+                redis.opsForValue().set(base + ":current", stale, Duration.ofSeconds(60));
                 get(http, replyRoute, 200);
                 awaitRefresh(key, oldSnapshot);
                 assertEquals(created.path("id").asString(), get(http,

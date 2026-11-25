@@ -1,5 +1,8 @@
 package com.febrie.backend.article.comment;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentMaintenance;
 import com.febrie.backend.user.application.dto.UserActor;
 import com.febrie.backend.user.domain.Role;
 import java.time.Clock;

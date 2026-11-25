@@ -1,9 +1,10 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.redis;
 
+import com.febrie.backend.article.comment.CommentErrors;
 import java.util.UUID;
 
 /** Redis 元数据同时用于校验单页读取与有条件发布。 */
-record CommentSnapshot(String id, long softAt, long hardAt, long count) {
+public record CommentSnapshot(String id, long softAt, long hardAt, long count) {
     static CommentSnapshot parse(String value) {
         if (value == null) return null;
         String[] parts = value.split("\\|", -1);
@@ -17,11 +18,11 @@ record CommentSnapshot(String id, long softAt, long hardAt, long count) {
         return String.join("|", id, "0", Long.toString(softAt), Long.toString(hardAt), Long.toString(count));
     }
 
-    static String member(long sortValue, long id) {
+    public static String member(long sortValue, long id) {
         return padded(sortValue) + ":" + padded(id);
     }
 
-    static long commentId(String member) {
+    public static long commentId(String member) {
         return Long.parseLong(member.substring(20));
     }
 

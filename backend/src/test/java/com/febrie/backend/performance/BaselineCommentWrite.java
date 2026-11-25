@@ -1,6 +1,6 @@
 package com.febrie.backend.performance;
 
-import com.febrie.backend.article.comment.BaselineCommentFixture;
+import com.febrie.backend.article.comment.infrastructure.search.BaselineCommentFixture;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;

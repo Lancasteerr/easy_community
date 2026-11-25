@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure;
 
+import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.CommentListKey;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -33,17 +35,17 @@ public class CommentCursorCodec {
         }
     }
 
-    String encode(Cursor cursor) {
+    public String encode(Cursor cursor) {
         return seal(cursor);
     }
 
     /** 已签名数据仍由调用方验证用途、归属及有效期。 */
-    String seal(Object payload) {
+    public String seal(Object payload) {
         String content = Base64.getUrlEncoder().withoutPadding().encodeToString(json.writeValueAsBytes(payload));
         return content + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(sign(content));
     }
 
-    Cursor decode(CommentListKey key, String encoded) {
+    public Cursor decode(CommentListKey key, String encoded) {
         var cursor = open(encoded, Cursor.class, 1024);
         if (!key.equals(cursor.key()) || cursor.position() == null
                 || (!cursor.position().isEmpty() && !cursor.position().matches("[0-9]{19}:[0-9]{19}"))) {
@@ -53,13 +55,13 @@ public class CommentCursorCodec {
         return cursor;
     }
 
-    void rejectSupersededRoot(CommentListKey key, String encoded) {
+    public void rejectSupersededRoot(CommentListKey key, String encoded) {
         var old = open(encoded, Cursor.class, 1024);
         if (!key.equals(old.key())) throw CommentErrors.invalid();
         throw CommentErrors.expired();
     }
 
-    <T> T open(String encoded, Class<T> type, int maxLength) {
+    public <T> T open(String encoded, Class<T> type, int maxLength) {
         try {
             if (encoded == null || encoded.length() > maxLength) throw CommentErrors.invalid();
             String[] parts = encoded.split("\\.", -1);
@@ -86,5 +88,5 @@ public class CommentCursorCodec {
 
     // 仅在读取切换前签发的游标时忽略旧排名字段。
     @JsonIgnoreProperties({"snapshotId", "rankVersion"})
-    record Cursor(CommentListKey key, String position, long expiresAt) { }
+    public record Cursor(CommentListKey key, String position, long expiresAt) { }
 }

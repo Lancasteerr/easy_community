@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.redis;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,7 @@ public class CommentMaintenance {
         this.values = values;
     }
 
-    void count(long article) {
+    public void count(long article) {
         try {
             values.invalidateCount(article);
         } catch (RuntimeException failure) {
@@ -25,7 +26,7 @@ public class CommentMaintenance {
         }
     }
 
-    void visibility(CommentRow row) {
+    public void visibility(CommentRow row) {
         try {
             if (!values.invalidateObject(row.id())) {
                 metrics.counter("community.comment.invalidate.failure").increment();

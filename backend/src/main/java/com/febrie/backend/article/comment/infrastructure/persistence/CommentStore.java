@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.persistence;
 
+import com.febrie.backend.article.comment.CommentListKey;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshot;
 import java.sql.Statement;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -29,17 +31,17 @@ public class CommentStore {
         this.sql = sql;
     }
 
-    boolean lockPublicArticle(long id, boolean exclusive) {
+    public boolean lockPublicArticle(long id, boolean exclusive) {
         return sql.query("SELECT hidden FROM article WHERE id = ? " + (exclusive ? "FOR UPDATE" : "FOR SHARE"),
                 (rs, index) -> !rs.getBoolean(1), id).stream().findFirst().orElse(false);
     }
 
-    CommentRow find(long id, boolean lock) {
+    public CommentRow find(long id, boolean lock) {
         return sql.query("SELECT " + COLUMNS + " FROM article_comment WHERE id = ?" + (lock ? " FOR UPDATE" : ""),
                 ROW, id).stream().findFirst().orElse(null);
     }
 
-    Map<Long, CommentRow> findAll(Collection<Long> ids) {
+    public Map<Long, CommentRow> findAll(Collection<Long> ids) {
         var result = new HashMap<Long, CommentRow>();
         if (!ids.isEmpty()) {
             sql.query("SELECT " + COLUMNS + " FROM article_comment WHERE deleted = FALSE AND id IN (" + placeholders(ids.size()) + ")",
@@ -48,7 +50,7 @@ public class CommentStore {
         return result;
     }
 
-    CommentRow insert(long article, long root, Long replyTo, long author, String content, Instant now) {
+    public CommentRow insert(long article, long root, Long replyTo, long author, String content, Instant now) {
         var key = new GeneratedKeyHolder();
         sql.update(connection -> {
             var write = connection.prepareStatement("""
@@ -70,26 +72,26 @@ public class CommentStore {
         return new CommentRow(id, article, root, replyTo, author, content, now, false);
     }
 
-    void delete(CommentRow row) {
+    public void delete(CommentRow row) {
         int changed = sql.update("UPDATE article_comment SET deleted = TRUE, content = NULL, index_version = index_version + (root_id = 0) WHERE id = ? AND deleted = FALSE",
                 row.id());
         if (changed != 1) throw new IllegalStateException("评论删除状态发生变化");
     }
 
-    void appendIndex(long id) {
+    public void appendIndex(long id) {
         if (sql.update("""
                 INSERT INTO comment_index_outbox(comment_id, index_version)
                 SELECT id, index_version FROM article_comment WHERE id = ? AND root_id = 0
                 """, id) != 1) throw new IllegalStateException("一级评论索引事件写入失败");
     }
 
-    void changeCount(long article, int delta) {
+    public void changeCount(long article, int delta) {
         if (sql.update("UPDATE article SET comment_count = comment_count + ? WHERE id = ?", delta, article) != 1) {
             throw new IllegalStateException("文章评论计数缺失");
         }
     }
 
-    Map<Long, Long> counts(Collection<Long> ids) {
+    public Map<Long, Long> counts(Collection<Long> ids) {
         var result = new HashMap<Long, Long>();
         if (!ids.isEmpty()) {
             sql.query("SELECT id, comment_count FROM article WHERE id IN (" + placeholders(ids.size()) + ")",
@@ -100,7 +102,7 @@ public class CommentStore {
     }
 
     /** 每个冷楼层走有界索引查询，组装一级列表不会触发全楼重建。 */
-    Map<Long, List<CommentRow>> previews(long article, List<Long> roots) {
+    public Map<Long, List<CommentRow>> previews(long article, List<Long> roots) {
         var result = new HashMap<Long, List<CommentRow>>();
         for (int offset = 0; offset < roots.size(); offset += 16) {
             var group = roots.subList(offset, Math.min(offset + 16, roots.size()));
@@ -122,7 +124,7 @@ public class CommentStore {
     }
 
     /** 发布后沿用回复游标补读一页，避免为了单次确认重建共享快照。 */
-    List<CommentRow> repliesAfter(CommentListKey key, String position, int limit) {
+    public List<CommentRow> repliesAfter(CommentListKey key, String position, int limit) {
         String scope = "SELECT " + COLUMNS + " FROM article_comment WHERE article_id = ? AND root_id = ? AND deleted = FALSE ";
         String order = "ORDER BY created_at, id LIMIT ?";
         if (position.isEmpty()) return sql.query(scope + order, ROW, key.articleId(), key.rootId(), limit);
@@ -132,7 +134,7 @@ public class CommentStore {
     }
 
     /** 主库按不可变时间键读取，查询返回后才向 Redis 写这一批。 */
-    List<IndexRow> indexBatch(CommentListKey key, IndexRow after, int limit) {
+    public List<IndexRow> indexBatch(CommentListKey key, IndexRow after, int limit) {
         String select = "SELECT c.id, c.created_at FROM article_comment c ";
         String scope = "WHERE c.article_id = ? AND c.root_id = ? AND c.deleted = FALSE ";
         String order = "ORDER BY c.created_at, c.id LIMIT ?";
@@ -145,7 +147,7 @@ public class CommentStore {
                 mapper, key.articleId(), key.rootId(), after.createdAt(), after.createdAt(), after.id(), limit);
     }
 
-    record IndexRow(long id, LocalDateTime createdAt, long sortValue) { }
+    public record IndexRow(long id, LocalDateTime createdAt, long sortValue) { }
 
     private static String placeholders(int size) {
         return String.join(",", java.util.Collections.nCopies(size, "?"));

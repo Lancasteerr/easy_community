@@ -1,5 +1,7 @@
 package com.febrie.backend.article.comment;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.dto.UserActor;

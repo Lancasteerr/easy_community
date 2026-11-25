@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.messaging;
 
+import com.febrie.backend.article.comment.infrastructure.search.CommentIndexWorker;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

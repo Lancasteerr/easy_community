@@ -1,4 +1,4 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.persistence;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;

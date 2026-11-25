@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.redis;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.shared.cache.CacheProtocol;
 import java.util.Collections;
 import java.util.List;

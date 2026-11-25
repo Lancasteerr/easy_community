@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.messaging;
 
+import com.febrie.backend.article.comment.CommentCommand;
+import com.febrie.backend.article.comment.CommentErrors;
 import com.febrie.backend.article.search.infrastructure.messaging.IndexPublisher;
 import java.util.concurrent.TimeUnit;
 import org.springframework.amqp.core.Message;
@@ -15,9 +17,9 @@ import tools.jackson.databind.ObjectMapper;
 
 /** 两条持久化链路共用发布确认、退回检查与死信重放。 */
 @Component
-class CommentBroker {
-    static final int PARTITIONS = 4;
-    static final int BATCH_SIZE = 20;
+public class CommentBroker {
+    public static final int PARTITIONS = 4;
+    public static final int BATCH_SIZE = 20;
 
     private final RabbitTemplate rabbit;
     private final ObjectMapper json;
@@ -30,16 +32,16 @@ class CommentBroker {
         this.prefix = prefix + ".comment";
     }
 
-    String writeQueue(int partition) { return prefix + ".write." + partition + ".q"; }
+    public String writeQueue(int partition) { return prefix + ".write." + partition + ".q"; }
     String writeDeadQueue() { return prefix + ".write.dead.q"; }
-    String indexQueue() { return prefix + ".index.q"; }
+    public String indexQueue() { return prefix + ".index.q"; }
     String indexDeadQueue() { return prefix + ".index.dead.q"; }
 
-    int partition(long article) {
+    public int partition(long article) {
         return Math.floorMod(Long.hashCode(article), PARTITIONS);
     }
 
-    CorrelationData send(String queue, String id, Object body) {
+    public CorrelationData send(String queue, String id, Object body) {
         var properties = new MessageProperties();
         properties.setMessageId(id);
         properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
@@ -53,16 +55,16 @@ class CommentBroker {
         return confirmation;
     }
 
-    <T> T decode(Message message, Class<T> type) {
+    public <T> T decode(Message message, Class<T> type) {
         if (message.getBody().length > 8192) throw CommentErrors.invalid();
         return json.readValue(message.getBody(), type);
     }
 
-    boolean confirmed(CorrelationData confirmation, long deadline) throws InterruptedException {
+    public boolean confirmed(CorrelationData confirmation, long deadline) throws InterruptedException {
         return IndexPublisher.awaitConfirmation(confirmation, deadline);
     }
 
-    int replay(boolean write, int limit) {
+    public int replay(boolean write, int limit) {
         String deadQueue = write ? writeDeadQueue() : indexDeadQueue();
         return rabbit.execute(channel -> {
             var converter = new DefaultMessagePropertiesConverter();

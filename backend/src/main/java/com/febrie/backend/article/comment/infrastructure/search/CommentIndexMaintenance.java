@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.search;
 
+import com.febrie.backend.article.comment.infrastructure.messaging.CommentBroker;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
 import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

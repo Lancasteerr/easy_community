@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.redis;
 
+import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.CommentListKey;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,11 +50,11 @@ public class CommentSnapshotCache {
         this.prefix = prefix + ":comment:v1:list:";
     }
 
-    CommentSnapshot current(CommentListKey key) {
+    public CommentSnapshot current(CommentListKey key) {
         return CommentSnapshot.parse(redis.opsForValue().get(base(key) + ":current"));
     }
 
-    Map<CommentListKey, CommentSnapshot> currentAll(List<CommentListKey> keys) {
+    public Map<CommentListKey, CommentSnapshot> currentAll(List<CommentListKey> keys) {
         var snapshots = new LinkedHashMap<CommentListKey, CommentSnapshot>();
         if (keys.isEmpty()) return snapshots;
         var raw = redis.opsForValue().multiGet(keys.stream().map(key -> base(key) + ":current").toList());
@@ -64,7 +66,7 @@ public class CommentSnapshotCache {
         return snapshots;
     }
 
-    Map<CommentListKey, List<String>> firstPages(Map<CommentListKey, CommentSnapshot> snapshots, int size) {
+    public Map<CommentListKey, List<String>> firstPages(Map<CommentListKey, CommentSnapshot> snapshots, int size) {
         var out = new LinkedHashMap<CommentListKey, List<String>>();
         if (snapshots.isEmpty()) return out;
         // 每个脚本仅访问自己楼层的哈希槽，合并网络往返。
@@ -83,24 +85,24 @@ public class CommentSnapshotCache {
         return out;
     }
 
-    CommentSnapshot snapshot(CommentListKey key, String id) {
+    public CommentSnapshot snapshot(CommentListKey key, String id) {
         return CommentSnapshot.parse(redis.opsForValue().get(meta(key, id)));
     }
 
-    boolean available(CommentListKey key, CommentSnapshot snapshot) {
+    public boolean available(CommentListKey key, CommentSnapshot snapshot) {
         return snapshot != null && snapshot(key, snapshot.id()) != null
                 && (snapshot.count() == 0 || Boolean.TRUE.equals(redis.hasKey(rows(key, snapshot.id()))));
     }
 
-    String lock(CommentListKey key) {
+    public String lock(CommentListKey key) {
         return claim(base(key) + ":build", Duration.ofSeconds(15));
     }
 
-    void release(CommentListKey key, String token) {
+    public void release(CommentListKey key, String token) {
         redis.execute(RELEASE, List.of(base(key) + ":build"), token);
     }
 
-    String claimRefresh(CommentListKey key, String snapshotId) {
+    public String claimRefresh(CommentListKey key, String snapshotId) {
         return claim(base(key) + ":refresh:" + snapshotId, Duration.ofSeconds(5));
     }
 
@@ -109,7 +111,7 @@ public class CommentSnapshotCache {
         return Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(key, token, ttl)) ? token : null;
     }
 
-    void stage(CommentListKey key, String id, String token, List<String> batch) {
+    public void stage(CommentListKey key, String id, String token, List<String> batch) {
         List<String> args = new ArrayList<>(batch.size() + 1);
         args.add(token);
         args.addAll(batch);
@@ -117,7 +119,7 @@ public class CommentSnapshotCache {
                 args.toArray()))) throw CommentErrors.unavailable();
     }
 
-    CommentSnapshot publish(CommentListKey key, CommentSnapshot expected, String id, String token,
+    public CommentSnapshot publish(CommentListKey key, CommentSnapshot expected, String id, String token,
                             long count, long now, boolean refresh) {
         long soft = count == 0 ? 2_000 : 5_000;
         long ttl = count == 0 ? 10_000 : 60_000;
@@ -131,7 +133,7 @@ public class CommentSnapshotCache {
         return CommentSnapshot.parse(payload);
     }
 
-    List<String> page(CommentListKey key, CommentSnapshot snapshot, String position, int size) {
+    public List<String> page(CommentListKey key, CommentSnapshot snapshot, String position, int size) {
         return pageRows(readPage(key, snapshot, position, size));
     }
 

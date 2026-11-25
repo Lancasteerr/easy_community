@@ -1,4 +1,4 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.persistence;
 
 import java.time.Instant;
 

@@ -1,4 +1,4 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.persistence;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -84,7 +84,7 @@ public class CommentIndexTasks {
         return new Claim(token, events);
     }
 
-    void finishLifecycle(Event event, String token, boolean success) {
+    public void finishLifecycle(Event event, String token, boolean success) {
         if (success) {
             sql.update("DELETE FROM comment_index_outbox WHERE id = ? AND claim_token = ?", event.id(), token);
         } else {
@@ -95,7 +95,7 @@ public class CommentIndexTasks {
         }
     }
 
-    void finishLike(Event event, String token, boolean success) {
+    public void finishLike(Event event, String token, boolean success) {
         if (success && sql.update("""
                 DELETE FROM comment_like_index_outbox WHERE comment_id = ? AND claim_token = ? AND index_version = ?
                 """, event.commentId(), token, event.version()) == 1) return;
@@ -108,25 +108,25 @@ public class CommentIndexTasks {
                 """, delay, event.commentId(), token);
     }
 
-    List<Document> load(Collection<Long> ids) {
+    public List<Document> load(Collection<Long> ids) {
         if (ids.isEmpty()) return List.of();
         String marks = String.join(",", Collections.nCopies(ids.size(), "?"));
         return sql.query(PROJECTION + " AND c.id IN (" + marks + ")", DOCUMENT, ids.toArray());
     }
 
-    long maxId() {
+    public long maxId() {
         return sql.queryForObject("SELECT COALESCE(MAX(id), 0) FROM article_comment WHERE root_id = 0", Long.class);
     }
 
-    int pendingLifecycle() {
+    public int pendingLifecycle() {
         return sql.queryForObject("SELECT COUNT(*) FROM comment_index_outbox", Integer.class);
     }
 
-    List<Document> scan(long after, long high) {
+    public List<Document> scan(long after, long high) {
         return sql.query(PROJECTION + " AND c.id > ? AND c.id <= ? ORDER BY c.id LIMIT 200", DOCUMENT, after, high);
     }
 
-    record Event(long id, long commentId, long version) { }
-    record Claim(String token, List<Event> events) { }
-    record Document(long commentId, long articleId, long createdAt, boolean visible, long indexVersion, long likeCount) { }
+    public record Event(long id, long commentId, long version) { }
+    public record Claim(String token, List<Event> events) { }
+    public record Document(long commentId, long articleId, long createdAt, boolean visible, long indexVersion, long likeCount) { }
 }

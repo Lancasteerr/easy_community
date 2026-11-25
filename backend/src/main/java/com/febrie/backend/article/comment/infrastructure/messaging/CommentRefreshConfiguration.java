@@ -1,4 +1,4 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.messaging;
 
 import java.util.Map;
 import org.springframework.amqp.core.AcknowledgeMode;

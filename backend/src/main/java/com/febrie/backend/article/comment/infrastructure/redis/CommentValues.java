@@ -1,5 +1,8 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.infrastructure.redis;
 
+import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.shared.cache.CacheProtocol;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -53,7 +56,7 @@ public class CommentValues {
         return counts;
     }
 
-    Map<Long, CommentRow> objects(Collection<Long> ids) {
+    public Map<Long, CommentRow> objects(Collection<Long> ids) {
         return load("visible-object", ids, 120_000, store::findAll, json::writeValueAsString,
                 value -> json.readValue(value, CommentRow.class));
     }

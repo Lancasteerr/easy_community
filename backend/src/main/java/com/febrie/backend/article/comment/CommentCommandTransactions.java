@@ -1,5 +1,9 @@
 package com.febrie.backend.article.comment;
 
+import com.febrie.backend.article.comment.infrastructure.messaging.CommentBroker;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.shared.error.ApiException;
 import com.febrie.backend.user.application.AccountQueryService;
 import java.time.Clock;
@@ -12,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** 同一篇文章的命令共享一次计数更新，事务结果交给消费端做提交后维护。 */
 @Service
-class CommentCommandTransactions {
+public class CommentCommandTransactions {
     private final CommentStore store;
     private final CommentCommandResults results;
     private final AccountQueryService accounts;
@@ -42,18 +46,18 @@ class CommentCommandTransactions {
             }
             var state = accounts.authState(actor.userId()).orElse(null);
             if (state == null || !"ACTIVE".equals(state.status()) || state.authVersion() != actor.authVersion()) {
-                results.insert(command, null, ApiException.unauthorized().code());
+                saveResult(command, null, ApiException.unauthorized().code());
                 continue;
             }
             if (!visible) {
-                results.insert(command, null, CommentErrors.missing().code());
+                saveResult(command, null, CommentErrors.missing().code());
                 continue;
             }
             if (command.commentId() == null) {
                 var row = store.insert(article, 0, null, actor.userId(), command.content(),
                         clock.instant().truncatedTo(ChronoUnit.MILLIS));
                 store.appendIndex(row.id());
-                results.insert(command, row.id(), null);
+                saveResult(command, row.id(), null);
                 delta++;
                 continue;
             }
@@ -62,7 +66,7 @@ class CommentCommandTransactions {
                 if (CommentWrites.belonging(article, row).rootId() != 0) throw CommentErrors.missing();
                 CommentWrites.requireDeletePermission(row, actor);
             } catch (ApiException rejected) {
-                results.insert(command, null, rejected.code());
+                saveResult(command, null, rejected.code());
                 continue;
             }
             if (!row.deleted()) {
@@ -71,11 +75,15 @@ class CommentCommandTransactions {
                 deleted.add(row);
                 delta--;
             }
-            results.insert(command, row.id(), null);
+            saveResult(command, row.id(), null);
         }
         if (delta != 0) store.changeCount(article, delta);
         return new Applied(delta, List.copyOf(deleted));
     }
 
-    record Applied(int delta, List<CommentRow> deleted) { }
+    private void saveResult(CommentCommand command, Long id, String error) {
+        results.insert(command.articleId(), command.actor().userId(), command.operationId(), command.fingerprint(), id, error);
+    }
+
+    public record Applied(int delta, List<CommentRow> deleted) { }
 }

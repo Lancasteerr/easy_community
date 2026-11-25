@@ -152,7 +152,7 @@ try {
     }
     New-Item -ItemType Directory -Force -Path $jvmDirectory | Out-Null
     if ($Baseline) {
-        Copy-Item -LiteralPath (Join-Path $backend 'src/test/java/com/febrie/backend/article/comment/BaselineCommentFixture.java') -Destination $sources
+        Copy-Item -LiteralPath (Join-Path $backend 'src/test/java/com/febrie/backend/article/comment/infrastructure/search/BaselineCommentFixture.java') -Destination $sources
         Set-TestVariable 'IT_BASELINE' $Baseline
         Set-TestVariable 'IT_BASELINE_SCENARIO' $Scenario
         Set-TestVariable 'IT_BASELINE_ROUNDS' "$Rounds"
