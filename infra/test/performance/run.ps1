@@ -6,7 +6,7 @@ param(
     [string]$LikeRates = '60,120',
     [switch]$CompareLikeHistory,
     [ValidateSet('Smoke', 'Standard', 'Exploration')][string]$Baseline,
-    [ValidateSet('All', 'Search', 'Detail', 'Like', 'Mixed', 'Comment', 'CommentRead', 'CommentWrite')][string]$Scenario = 'All',
+    [ValidateSet('All', 'Search', 'Detail', 'Like', 'Mixed', 'Comment', 'CommentRead', 'CommentWrite', 'CommentReplyWrite')][string]$Scenario = 'All',
     [string]$Rps
 )
 # 所有性能实验统一入口；仅使用resume-perf专用Compose与测试库，逐轮归档到target之外。

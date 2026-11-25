@@ -87,6 +87,12 @@ final class BaselineReport {
             if (stage.diagnostics().get("commentWrite") instanceof BaselineCommentWrite.Result result) {
                 commentWrite(report, result);
             }
+            if (stage.diagnostics().get("commentReplyWrite") instanceof BaselineCommentReplyWrite.Audit audit) {
+                report.append("- 含预热确认回复 ").append(audit.successful()).append(" 笔，落库匹配 ").append(audit.matched())
+                        .append(" 笔，额外或错误结果 ").append(audit.unexpectedResults())
+                        .append("，额外或错误回复行 ").append(audit.unexpectedReplyRows())
+                        .append("，一级评论数差异 ").append(audit.wrongCounts()).append("。\n");
+            }
             stage.issues().forEach(issue -> report.append("- ").append(issue.replace('\n', ' ')).append("\n"));
             String telemetry = "round-" + stage.round() + "/" + stage.scenario() + "-" + stage.load() + "/telemetry.jsonl";
             if (Files.exists(root.resolve(telemetry))) { report.append("- [本档监控时序](").append(telemetry).append(")\n"); }

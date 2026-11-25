@@ -3,7 +3,7 @@ import test from 'node:test';
 import { distributedArticle, randomFor, searchPath, sessionFor, utf8Bytes, validDetail, validLike, validSearch } from './workload.mjs';
 import {
   commentListPath, commentPayload, commentReadArticle, commentSubmissionPath, commentWriteArticle,
-  validCommentPage, validCommentStatus,
+  validCommentPage, validCommentStatus, validReplySubmission,
 } from './comments.mjs';
 
 test('固定种子可重放，并分散到各点赞分区', () => {
@@ -55,7 +55,7 @@ test('评论读写使用不同目标池，分散写按四个分区轮转', () =>
 
 test('评论首页校验排序、游标和回复归属，状态响应区分受理与发布', () => {
   const root = id => ({
-    id, rootId: null, replyToId: null, author: { id: '1' }, content: '基线评论', status: 'ACTIVE',
+    id, rootId: null, author: { id: '1' }, content: '基线评论', status: 'ACTIVE',
     likeCount: 10, likedByMe: false,
     replies: { items: [{ id: '10', rootId: id }, { id: '11', rootId: id }], hasMore: true, nextCursor: 'replies' },
   });
@@ -72,4 +72,15 @@ test('评论首页校验排序、游标和回复归属，状态响应区分受�
   assert.equal(validCommentStatus({ state: 'PUBLISHING' }, 200), false);
   assert.equal(validCommentStatus({ state: 'PUBLISHED', commentCount: 1 }, 200), true);
   assert.equal(validCommentStatus({ state: 'FAILED' }, 200), false);
+});
+
+test('二级写只有返回已提交且归属正确的回复才计为成功', () => {
+  const { content, replyToId } = commentPayload('op', '23');
+  const comment = { id: '50', rootId: '23', author: { id: '1' }, content, status: 'ACTIVE' };
+  const response = { state: 'PUBLISHED', comment };
+  assert.equal(validReplySubmission(response, replyToId, 1, content), true);
+  assert.equal(validReplySubmission(response, '24', 1, content), false);
+  assert.equal(validReplySubmission(response, replyToId, 2, content), false);
+  assert.equal(validReplySubmission({ state: 'PUBLISHING' }, replyToId, 1, content), false);
+  assert.equal(validReplySubmission({ ...response, commentCount: 32 }, replyToId, 1, content), false);
 });

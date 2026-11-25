@@ -13,11 +13,12 @@
 ./infra/test/performance/run.ps1 -Baseline Smoke -Scenario Comment -Rounds 1
 ./infra/test/performance/run.ps1 -Baseline Standard -Scenario CommentRead -Rounds 1 -Rps 25
 ./infra/test/performance/run.ps1 -Baseline Standard -Scenario CommentWrite -Rounds 1 -Rps 5
+./infra/test/performance/run.ps1 -Baseline Standard -Scenario CommentReplyWrite -Rounds 1 -Rps 10
 ./infra/test/performance/run.ps1 -Baseline Standard
 ./infra/test/performance/run.ps1 -Baseline Exploration -Scenario Like
 ```
 
-`-Scenario` 可取 `All`、`Search`、`Detail`、`Like`、`Mixed`、`Comment`、`CommentRead`、`CommentWrite`，默认 `All`。Smoke 和 Standard 的 All 包含评论。Exploration 的 All 运行点赞探索档，也可显式选择 CommentWrite。`-Rounds` 支持 1–5，Smoke 默认 1 轮，Standard 和 Exploration 默认 3 轮。`-Rps '25,50,100'` 按给定顺序替换所选场景的全部默认压力档，取值为 1–1000 的不重复整数。混合默认用 VU，指定 RPS 后按每秒启动的旅程数发压，报告另列实际 HTTP RPS。
+`-Scenario` 可取 `All`、`Search`、`Detail`、`Like`、`Mixed`、`Comment`、`CommentRead`、`CommentWrite`、`CommentReplyWrite`，默认 `All`。Smoke 和 Standard 的 `All` 与 `Comment` 包含一级评论读写，二级写档通过 `CommentReplyWrite` 单独选择。Exploration 的 `All` 运行点赞探索档，也可显式选择 `CommentWrite`。`-Rounds` 支持 1–5，Smoke 默认 1 轮，Standard 和 Exploration 默认 3 轮。`-Rps '25,50,100'` 按给定顺序替换所选场景的全部默认压力档，取值为 1–1000 的不重复整数。混合默认用 VU，指定 RPS 后按每秒启动的旅程数发压，报告另列实际 HTTP RPS。
 
 默认 Smoke 使用 32 账号、96 篇文章、384 条点赞关系。正式基线固定种子，导入 1 万账号、5 万篇文章、50 万条关系并核验 ES 和 SQL。每档预热 60 秒、测量 5 分钟。冷详情有独立缓存命名空间，直接采首分钟。等待自然 PV 刷盘或异步写入排空最多 120 秒。全量正式基线的测量和预热窗口约 6 小时 40 分钟，另计导入、启动和排空。
 
@@ -31,6 +32,7 @@
 - 热门首页每篇准备 32 条一级评论，每条附 3 条回复。测试首页 20 条，Smoke 为 5 RPS，Standard 为 25／50／100 RPS。60% 请求落到热门文章池，70% 请求带已登录会话。关注 ES 开放搜索上下文、堆和搜索拒绝。
 - 一级评论发布 Smoke 为 2 次提交／秒，Standard 为 5／10／15 次，Exploration 为 20 次。每个压力档分别跑四分区分散写和单篇热点写，写档开始前清空上档的评论写数据并切换独立索引。
 - 写档按主提交计算吞吐。每个正式五秒窗口最多抽一个受理样本，确认发布和最新首页观察使用客户端轮询时间，辅助请求有独立路由指标。样本可能滑出首页，报告记录其中未观察到的笔数。停压后逐笔核对预热及测量的已受理写入、文章计数和 ES 搜索可见文档。主请求成功吞吐至少达到目标的 99%，无丢弃迭代，写档还须对账一致、无死信和持续积压。
+- 二级回复发布分别轮转 32 个不同文章的首楼，以及集中写同一篇文章的同一楼。两档均直接回复楼主。Smoke 为 2 次提交／秒，Standard 为 10／25／50 次。检查 HTTP `200/PUBLISHED` 及回复内容、作者、楼层。停压后逐笔核对预热与测量期间的回复、提交记录，并核验文章一级评论数保持为种子值。
 
 ```powershell
 node --test infra/test/performance/k6/workload.test.mjs

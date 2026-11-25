@@ -42,6 +42,10 @@ class BaselineToolTests {
                 BaselineK6.stages("Exploration", "CommentWrite").stream().map(BaselineK6.Stage::directory).toList());
         assertEquals(List.of(5, 5), BaselineK6.stages("Standard", "CommentWrite", List.of(5)).stream()
                 .map(BaselineK6.Stage::load).toList());
+        assertEquals(List.of("comment-reply-write-spread-2", "comment-reply-write-hot-2"),
+                BaselineK6.stages("Smoke", "CommentReplyWrite").stream().map(BaselineK6.Stage::directory).toList());
+        assertTrue(new BaselineCommentReplyWrite.Audit(2, 2, 0, 0, 0).passed());
+        assertFalse(new BaselineCommentReplyWrite.Audit(2, 2, 0, 1, 0).passed());
 
         var submit = new BaselineJournal.Event("comment-submit", 0, 20, 202, true, 1, 2, false, null, 0, "", "a", true, null);
         var pending = new BaselineJournal.Event("comment-status", 650, 660, 202, true, 1, 2, false, null, 0, "", "a", false, "PUBLISHING");

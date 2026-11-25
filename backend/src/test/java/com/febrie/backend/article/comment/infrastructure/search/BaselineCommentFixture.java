@@ -129,7 +129,8 @@ public final class BaselineCommentFixture {
             // 专用库中只有发压新增行超过种子边界。清空上档的幂等结果与索引生命周期任务。
             sql.update("DELETE FROM comment_index_outbox WHERE comment_id>?", seedMax);
             sql.update("DELETE FROM comment_like_index_outbox WHERE comment_id>?", seedMax);
-            sql.update("DELETE FROM comment_write_result WHERE article_id BETWEEN ? AND ?", first, last);
+            // 回复写在读种子文章，一级写在尾部预留文章。两者的提交结果都属于本次压测。
+            sql.update("DELETE FROM comment_write_result WHERE article_id BETWEEN 1 AND ?", last);
             sql.update("DELETE FROM comment_like_state WHERE comment_id>?", seedMax);
             sql.update("DELETE FROM comment_like_count WHERE comment_id>?", seedMax);
             sql.update("DELETE FROM article_comment WHERE id>?", seedMax);

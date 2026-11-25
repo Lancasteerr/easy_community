@@ -38,7 +38,8 @@ class BaselinePerformanceTests {
         boolean complete = false;
         String failure = null;
         assertTrue(!stages.isEmpty(), "需要至少一个压测场景");
-        try (var environment = new BaselineEnvironment(size, stages.stream().anyMatch(BaselineK6.Stage::readsComments))) {
+        boolean needsCommentSeeds = stages.stream().anyMatch(stage -> stage.readsComments() || stage.writesReplies());
+        try (var environment = new BaselineEnvironment(size, needsCommentSeeds)) {
             environment.seed();
             var seed = new LinkedHashMap<String, Object>();
             seed.put("seed", BaselineData.SEED); seed.put("users", size.users()); seed.put("articles", size.articles());
@@ -84,10 +85,14 @@ class BaselinePerformanceTests {
         Path input = Files.createTempFile("ec-k6-session-", ".json");
         try {
             var sessions = stage.needsSessions() ? site.sessions(stage.vus()) : List.of();
-            site.json.writeValue(input.toFile(), Map.of("base", site.base, "seed", workload.seed(),
-                    "articles", workload.articles(), "partitions", workload.partitions(), "queries", workload.queries(),
-                    "sessions", sessions, "pageSize", smoke ? 5 : 20, "commentReadArticles", environment.commentReadArticles,
-                    "commentWriteFirst", environment.commentWriteFirst, "commentWriteArticles", BaselineEnvironment.COMMENT_WRITE_ARTICLES));
+            site.json.writeValue(input.toFile(), Map.ofEntries(
+                    Map.entry("base", site.base), Map.entry("seed", workload.seed()),
+                    Map.entry("articles", workload.articles()), Map.entry("partitions", workload.partitions()),
+                    Map.entry("queries", workload.queries()), Map.entry("sessions", sessions),
+                    Map.entry("pageSize", smoke ? 5 : 20), Map.entry("commentReadArticles", environment.commentReadArticles),
+                    Map.entry("commentRootsPerArticle", BaselineCommentFixture.ROOTS_PER_ARTICLE),
+                    Map.entry("commentWriteFirst", environment.commentWriteFirst),
+                    Map.entry("commentWriteArticles", BaselineEnvironment.COMMENT_WRITE_ARTICLES)));
             return BaselineStage.run(round, stage, site, script, input, output, smoke);
         } finally { Files.deleteIfExists(input); }
     }

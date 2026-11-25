@@ -19,8 +19,8 @@ export function commentSubmissionPath(article, submission) {
   return '/api/articles/' + article + '/comments/submissions/' + submission;
 }
 
-export function commentPayload(submission) {
-  return { content: '基线评论 ' + submission, replyToId: null };
+export function commentPayload(submission, replyToId = null) {
+  return { content: '基线评论 ' + submission, replyToId };
 }
 
 function validId(value) {
@@ -28,7 +28,7 @@ function validId(value) {
 }
 
 function validRoot(item) {
-  return validId(item?.id) && item.rootId === null && item.replyToId === null &&
+  return validId(item?.id) && item.rootId === null && item.replyToUsername === undefined &&
     validId(item.author?.id) && typeof item.content === 'string' && item.content.length > 0 &&
     item.status === 'ACTIVE' && Number.isSafeInteger(item.likeCount) && item.likeCount >= 0 &&
     typeof item.likedByMe === 'boolean';
@@ -56,4 +56,12 @@ export function validCommentPage(body, size, hot) {
 export function validCommentStatus(body, status) {
   return status === 202 && body?.state === 'PUBLISHING' ||
     status === 200 && body?.state === 'PUBLISHED' && Number.isSafeInteger(body.commentCount) && body.commentCount > 0;
+}
+
+/** 回复楼主的发布响应须携带可立即展示的回复，一级计数保持独立。 */
+export function validReplySubmission(body, rootId, authorId, content) {
+  const item = body?.comment;
+  return body?.state === 'PUBLISHED' && body.commentCount === undefined &&
+    validId(item?.id) && item.rootId === rootId && item.author?.id === String(authorId) &&
+    item.content === content && item.status === 'ACTIVE' && item.replyToUsername === undefined;
 }

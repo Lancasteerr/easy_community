@@ -103,8 +103,8 @@ final class BaselineEnvironment implements AutoCloseable {
             if (stage.writesComments()) {
                 commentIndexes.add(commentIndex);
                 BaselineCommentFixture.initializeIndex(maintenance);
-                dirtyComments = true;
             }
+            dirtyComments = stage.writesComments() || stage.writesReplies();
             int epoch = jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1", Integer.class);
             maintenance.getBean(LikeRecoveryService.class).recover(epoch);
         }

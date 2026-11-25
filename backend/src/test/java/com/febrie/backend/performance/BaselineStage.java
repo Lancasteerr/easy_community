@@ -14,6 +14,7 @@ final class BaselineStage {
     private final BaselineK6.Stage stage;
     private final BaselineReconcile reconcile;
     private final BaselineCommentWrite commentWrite;
+    private final BaselineCommentReplyWrite replyWrite;
     private final List<BaselineProbe.Sample> samples = new ArrayList<>();
     private final List<String> issues = new ArrayList<>();
     private final Map<String, Object> diagnostics = new LinkedHashMap<>();
@@ -22,6 +23,7 @@ final class BaselineStage {
         this.site = site; this.stage = stage;
         reconcile = new BaselineReconcile(site.jdbc);
         commentWrite = stage.writesComments() ? new BaselineCommentWrite(site) : null;
+        replyWrite = stage.writesReplies() ? new BaselineCommentReplyWrite(site) : null;
     }
 
     static BaselineReport.Stage run(int round, BaselineK6.Stage stage, BaselineEnvironment.Site site,
@@ -113,7 +115,7 @@ final class BaselineStage {
                     .mapToLong(sample -> sample.mq().dead()).max().orElse(0));
             diagnostics.put("partitionMq", partitionDeltas(first, end, window));
             long backlog = peakPending();
-            if (stage.comments()) { reportCommentEs(first, end); }
+            if (stage.readsComments() || stage.writesComments()) { reportCommentEs(first, end); }
             if (commentWrite != null) {
                 var writeResult = commentWrite.drain(stopped, ready.comment(), events, samples,
                         () -> collect(probe, "comment-drain"));
@@ -125,6 +127,11 @@ final class BaselineStage {
                 if (writeResult.growing()) { issues.add("评论队列或索引 Outbox 持续积压"); }
                 if (!writeResult.audit().passed()) { issues.add("评论受理、落库、文章计数或 ES 搜索对账失败"); }
                 if (writeResult.drainMs() == null) { issues.add("评论队列及索引未完成排空与对账"); }
+            }
+            if (replyWrite != null) {
+                var audit = replyWrite.audit();
+                diagnostics.put("commentReplyWrite", audit);
+                if (!audit.passed()) { issues.add("回复发布确认、落库结果或文章一级评论数对账失败"); }
             }
             return new BaselineReport.Stage(round, stage.scenario(), stage.load(), stage.model().label,
                     issues.isEmpty(), issues.stream().distinct().toList(), routes, k6, stage.vus(), BaselineStats.overlap(events),
@@ -168,6 +175,7 @@ final class BaselineStage {
     private void append(List<BaselineJournal.Event> events, int offset) {
         reconcile.append(events, offset);
         if (commentWrite != null) { commentWrite.append(events, offset); }
+        if (replyWrite != null) { replyWrite.append(events, offset); }
     }
 
     private void reportCommentEs(BaselineProbe.Sample first, BaselineProbe.Sample end) {

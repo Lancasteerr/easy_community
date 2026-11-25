@@ -27,7 +27,8 @@ final class BaselineK6 {
         boolean needsSessions() { return !scenario.equals("search"); }
         boolean readsComments() { return scenario.equals("comment-read"); }
         boolean writesComments() { return scenario.startsWith("comment-write-"); }
-        boolean comments() { return readsComments() || writesComments(); }
+        boolean writesReplies() { return scenario.startsWith("comment-reply-write-"); }
+        boolean comments() { return readsComments() || writesComments() || writesReplies(); }
         boolean writes() { return scenario.startsWith("like") || scenario.equals("mixed"); }
         boolean readsDetails() { return scenario.startsWith("detail") || scenario.equals("mixed"); }
         int userLimit() { return scenario.startsWith("like") || scenario.startsWith("detail") || comments() ? 100000 : 120; }
@@ -85,6 +86,12 @@ final class BaselineK6 {
             int[] commentRates = smoke ? new int[]{2} : exploration ? new int[]{20} : new int[]{5, 10, 15};
             add(stages, "CommentWrite", "CommentWrite", "comment-write-spread", commentRates, smoke ? 8 : 64);
             add(stages, "CommentWrite", "CommentWrite", "comment-write-hot", commentRates, smoke ? 8 : 64);
+        }
+        // 回复写档独立选择，避免改变现有 All 和 Comment 的基线耗时及历史口径。
+        if (!exploration && selected.equalsIgnoreCase("CommentReplyWrite")) {
+            int[] replyRates = smoke ? new int[]{2} : new int[]{10, 25, 50};
+            add(stages, selected, "CommentReplyWrite", "comment-reply-write-spread", replyRates, smoke ? 8 : 64);
+            add(stages, selected, "CommentReplyWrite", "comment-reply-write-hot", replyRates, smoke ? 8 : 64);
         }
         if (rates.isEmpty()) { return List.copyOf(stages); }
         // 同一场景只展开一次自定义阶梯，保留用户输入顺序。

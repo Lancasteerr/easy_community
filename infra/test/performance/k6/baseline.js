@@ -7,7 +7,7 @@ import {
 } from './workload.mjs';
 import {
   commentListPath, commentPayload, commentReadArticle, commentSubmissionPath, commentWriteArticle,
-  validCommentPage, validCommentStatus,
+  validCommentPage, validCommentStatus, validReplySubmission,
 } from './comments.mjs';
 
 const config = JSON.parse(open(__ENV.EC_BASELINE_INPUT));
@@ -126,6 +126,16 @@ function submitComment(article, session, iteration) {
   if (result.ok && sample) observeComment(article, submission, session, payload.content, result.start);
 }
 
+function submitReply(session, iteration) {
+  const article = commentWriteArticle(1, config.commentWriteArticles, iteration, scenario === 'comment-reply-write-hot');
+  // 种子先连续分配所有一级 ID。每篇选第一楼，分散与热点使用相同写入形状。
+  const rootId = String((article - 1) * config.commentRootsPerArticle + 1);
+  const submission = operationId();
+  const payload = commentPayload(submission, rootId);
+  send('comment-reply-submit', 'PUT', commentSubmissionPath(article, submission), session,
+    body => validReplySubmission(body, rootId, session.user, payload.content), { article, submission, payload });
+}
+
 export default function () {
   const iteration = exec.scenario.iterationInTest;
   const vu = exec.vu.idInTest;
@@ -160,6 +170,10 @@ export default function () {
     const article = commentWriteArticle(config.commentWriteFirst, config.commentWriteArticles, iteration,
       scenario === 'comment-write-hot');
     submitComment(article, session, iteration);
+    return;
+  }
+  if (scenario === 'comment-reply-write-spread' || scenario === 'comment-reply-write-hot') {
+    submitReply(session, iteration);
     return;
   }
   if (scenario === 'mixed') {
