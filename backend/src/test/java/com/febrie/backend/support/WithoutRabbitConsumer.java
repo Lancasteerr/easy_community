@@ -1,16 +1,21 @@
 package com.febrie.backend.support;
 
-import java.lang.annotation.*;
 import com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup;
-import org.springframework.test.context.TestPropertySource;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
+import org.springframework.context.SmartLifecycle;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-/** 非MQ的Web集成测试仍装配完整点赞业务，只替换监听容器并禁止自动声明测试拓扑。 */
+/** 非 MQ 的 Web 集成测试保留业务入口，隔离消费监听器和索引调度。 */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @MockitoBean(name = "likeListener", types = LikeListenerGroup.class)
 @MockitoBean(name = "commentRefreshListener", types = SimpleMessageListenerContainer.class)
+@MockitoBean(name = "commentWriteListeners", types = SmartLifecycle.class)
 @WithoutSearchIndexing
-@TestPropertySource(properties = "spring.rabbitmq.dynamic=false")
+@TestPropertySource(properties = {"spring.rabbitmq.dynamic=false", "app.comment.index-sync=false"})
 public @interface WithoutRabbitConsumer { }
