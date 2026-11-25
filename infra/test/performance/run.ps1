@@ -6,11 +6,15 @@ param(
     [string]$LikeRates = '60,120',
     [switch]$CompareLikeHistory,
     [ValidateSet('Smoke', 'Standard', 'Exploration')][string]$Baseline,
-    [ValidateSet('All', 'Search', 'Detail', 'Like', 'Mixed')][string]$Scenario = 'All',
+    [ValidateSet('All', 'Search', 'Detail', 'Like', 'Mixed', 'Comment', 'CommentRead', 'CommentWrite')][string]$Scenario = 'All',
     [string]$Rps
 )
 # 所有性能实验统一入口；仅使用resume-perf专用Compose与测试库，逐轮归档到target之外。
 $ErrorActionPreference = 'Stop'
+if ($Baseline) {
+    # PowerShell 的参数枚举接受不同大小写，传给 Java 时使用固定的模式名。
+    $Baseline = [Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($Baseline.ToLowerInvariant())
+}
 if ($Baseline -and ($CompareLikeHistory -or $PSBoundParameters.ContainsKey('Suite') -or
         $PSBoundParameters.ContainsKey('LikeRates') -or $PSBoundParameters.ContainsKey('Seconds'))) {
     throw '基线模式不可混用 Suite、LikeRates、Seconds 或 CompareLikeHistory'
@@ -31,7 +35,9 @@ if ($PSBoundParameters.ContainsKey('Rps')) {
     $Rps = $orderedRates -join ','
 }
 if ($Baseline -eq 'Smoke' -and -not $PSBoundParameters.ContainsKey('Rounds')) { $Rounds = 1 }
-if ($Baseline -eq 'Exploration' -and $Scenario -notin @('All', 'Like')) { throw '探索档包含 240 RPS 点赞场景' }
+if ($Baseline -eq 'Exploration' -and $Scenario -notin @('All', 'Like', 'CommentWrite')) {
+    throw '探索档支持 Like 或 CommentWrite，All 使用点赞探索档'
+}
 if ($CompareLikeHistory -and ($Suite -ne 'Like' -or $LikeRates -ne '60,120')) { throw '历史对比仅支持Suite Like及60,120主阶梯；240探索固定追加' }
 if ($CompareLikeHistory -and -not (Get-Command python -ErrorAction SilentlyContinue)) { throw '历史对比需要Python及matplotlib' }
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -146,6 +152,7 @@ try {
     }
     New-Item -ItemType Directory -Force -Path $jvmDirectory | Out-Null
     if ($Baseline) {
+        Copy-Item -LiteralPath (Join-Path $backend 'src/test/java/com/febrie/backend/article/comment/BaselineCommentFixture.java') -Destination $sources
         Set-TestVariable 'IT_BASELINE' $Baseline
         Set-TestVariable 'IT_BASELINE_SCENARIO' $Scenario
         Set-TestVariable 'IT_BASELINE_ROUNDS' "$Rounds"

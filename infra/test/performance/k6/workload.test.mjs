@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { distributedArticle, randomFor, searchPath, sessionFor, utf8Bytes, validDetail, validLike, validSearch } from './workload.mjs';
+import {
+  commentListPath, commentPayload, commentReadArticle, commentSubmissionPath, commentWriteArticle,
+  validCommentPage, validCommentStatus,
+} from './comments.mjs';
 
 test('固定种子可重放，并分散到各点赞分区', () => {
   const partitions = [4, 1, 2, 3].map(first => ({ first, step: 4, count: 2 }));
@@ -35,4 +39,37 @@ test('每个 VU 只读自己的会话', () => {
   const sessions = [{ user: 1 }, { user: 2 }];
   assert.notEqual(sessionFor(sessions, 1), sessionFor(sessions, 2));
   assert.equal(sessionFor(sessions, 3), undefined);
+});
+
+test('评论读写使用不同目标池，分散写按四个分区轮转', () => {
+  const values = [0.59, 0.2, 0.6, 0.2];
+  assert.equal(commentReadArticle(100, () => values.shift()), 3);
+  assert.equal(commentReadArticle(100, () => values.shift()), 29);
+  const spread = Array.from({ length: 8 }, (_, i) => commentWriteArticle(33, 32, i, false));
+  assert.deepEqual(spread.map(id => id % 4), [1, 2, 3, 0, 1, 2, 3, 0]);
+  assert.equal(commentWriteArticle(33, 32, 7, true), 33);
+  assert.equal(commentListPath(33, 'hot', 20), '/api/articles/33/comments?sort=hot&size=20');
+  assert.equal(commentSubmissionPath(33, 'op'), '/api/articles/33/comments/submissions/op');
+  assert.deepEqual(commentPayload('op'), { content: '基线评论 op', replyToId: null });
+});
+
+test('评论首页校验排序、游标和回复归属，状态响应区分受理与发布', () => {
+  const root = id => ({
+    id, rootId: null, replyToId: null, author: { id: '1' }, content: '基线评论', status: 'ACTIVE',
+    likeCount: 10, likedByMe: false,
+    replies: { items: [{ id: '10', rootId: id }, { id: '11', rootId: id }], hasMore: true, nextCursor: 'replies' },
+  });
+  const first = root('9007199254740993');
+  const second = root('9007199254740992');
+  const body = { items: [first, second], hasMore: true, nextCursor: 'next', rankVersion: 'rank', commentCount: 32 };
+  assert.equal(validCommentPage(body, 2, true), true);
+  assert.equal(validCommentPage({ ...body, items: [first, first] }, 2, true), false);
+  assert.equal(validCommentPage({ ...body, items: [second, first] }, 2, true), false);
+  assert.equal(validCommentPage({ ...body, nextCursor: null }, 2, true), false);
+  assert.equal(validCommentPage({ ...body, items: [first, { ...second, replies: first.replies }] }, 2, true), false);
+  assert.equal(validCommentPage({ items: [], hasMore: false, nextCursor: null, commentCount: 0 }, 50, false), true);
+  assert.equal(validCommentStatus({ state: 'PUBLISHING' }, 202), true);
+  assert.equal(validCommentStatus({ state: 'PUBLISHING' }, 200), false);
+  assert.equal(validCommentStatus({ state: 'PUBLISHED', commentCount: 1 }, 200), true);
+  assert.equal(validCommentStatus({ state: 'FAILED' }, 200), false);
 });

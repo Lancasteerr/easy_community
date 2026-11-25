@@ -11,9 +11,13 @@ import tools.jackson.databind.ObjectMapper;
 /** 增量读已写完的 k6 请求行；保留真实起止时间，停压后也可独立复核。 */
 final class BaselineJournal {
     record Event(String name, long start, long end, int status, boolean ok, long user, long article,
-                 boolean liked, String version, int bytes, String variant) {
+                 boolean liked, String version, int bytes, String variant, String submission, Boolean sample, String outcome) {
         boolean accepted() { return name.equals("like") && status == 202; }
         boolean viewed() { return name.equals("detail") && status == 200; }
+        boolean commentSubmit() { return name.equals("comment-submit"); }
+        boolean auxiliary() { return name.equals("comment-status") || name.equals("comment-visible"); }
+        // 其他场景和既有请求日志没有该字段。
+        boolean sampled() { return Boolean.TRUE.equals(sample); }
     }
 
     private static final String MARKER = "EC_HTTP ";

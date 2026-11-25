@@ -5,6 +5,10 @@ import { Counter, Rate } from 'k6/metrics';
 import {
   choose, detailArticle, distributedArticle, randomFor, searchPath, sessionFor, utf8Bytes, validDetail, validLike, validSearch,
 } from './workload.mjs';
+import {
+  commentListPath, commentPayload, commentReadArticle, commentSubmissionPath, commentWriteArticle,
+  validCommentPage, validCommentStatus,
+} from './comments.mjs';
 
 const config = JSON.parse(open(__ENV.EC_BASELINE_INPUT));
 const scenario = __ENV.EC_BASELINE_SCENARIO;
@@ -32,29 +36,35 @@ let operationCount = 0;
 
 function send(name, method, path, session, validator, details = {}) {
   const headers = session ? { Cookie: session.cookie } : {};
+  if (details.payload) {
+    headers['Content-Type'] = 'application/json';
+    headers[session.csrfHeader] = session.csrf;
+  }
   if (details.operation) {
     headers[session.csrfHeader] = session.csrf;
     headers['X-Operation-Id'] = details.operation;
   }
   const start = Date.now();
-  const response = http.request(method, config.base + path, null, {
-    headers, redirects: 0, tags: { name }, timeout: '4s',
+  const response = http.request(method, config.base + path, details.payload ? JSON.stringify(details.payload) : null, {
+    headers, redirects: 0, tags: { name }, timeout: details.timeout ?? '4s',
   });
   const end = Date.now();
   let body;
   try { body = response.json(); } catch (_) { /* 网络错误和非 JSON 响应由检查统一记录。 */ }
-  const expected = details.operation ? 202 : 200;
-  const ok = response.status === expected && validator(body);
+  const expected = details.statuses ?? (details.operation ? [202] : [200]);
+  const ok = expected.includes(response.status) && validator(body, response.status);
+  const outcome = details.outcome?.(body, ok) ?? null;
   check(ok, { '业务响应有效': value => value }, { name });
   // 日志只保存测试标识、状态与时间，省略响应正文、Cookie 和 CSRF。
   console.log('EC_HTTP ' + JSON.stringify({
     name, start, end, status: response.status, ok, user: session?.user ?? 0,
     article: details.article ?? 0, liked: details.liked ?? false,
-    version: ok && expected === 202 ? body.version : null,
+    version: ok && details.operation ? body.version : null,
     bytes: typeof response.body === 'string' ? utf8Bytes(response.body) : 0,
     variant: details.variant ?? '',
+    ...(details.submission ? { submission: details.submission, sample: details.sample ?? false, outcome } : {}),
   }));
-  return { ok, body };
+  return { ok, body, start, outcome };
 }
 
 function search(query, session, cursor, previous) {
@@ -67,16 +77,53 @@ function detail(id, session) {
   return send('detail', 'GET', '/api/articles/' + id, session, body => validDetail(body, id), { article: id });
 }
 
+function operationId() {
+  // UUID 的两段分别使用 VU 和操作序号，跨 VU 与迭代均不重复。
+  return __ENV.EC_BASELINE_OP + '-0000-4000-' + (0x8000 + exec.vu.idInTest).toString(16) +
+    '-' + (++operationCount).toString(16).padStart(12, '0');
+}
+
 function like(id, session, startingLike, random) {
   const initial = startingLike ?? (random() < 0.5);
   const liked = !(lastLikes.get(id) ?? initial);
-  // UUID 的两段分别使用 VU 和操作序号，跨 VU 与迭代均不重复。
-  const operation = __ENV.EC_BASELINE_OP + '-0000-4000-' + (0x8000 + exec.vu.idInTest).toString(16) +
-    '-' + (++operationCount).toString(16).padStart(12, '0');
+  const operation = operationId();
   const result = send('like', liked ? 'PUT' : 'DELETE', '/api/articles/' + id + '/like', session,
     body => validLike(body, operation, liked), { article: id, liked, operation });
   if (result.ok) lastLikes.set(id, liked);
   return result.ok;
+}
+
+function observeComment(article, submission, session, content, submittedAt) {
+  const deadline = submittedAt + 10000;
+  const path = commentSubmissionPath(article, submission);
+  let published = false;
+  while (Date.now() + 650 < deadline) {
+    sleep(0.65);
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return;
+    const details = { article, submission, timeout: Math.min(4000, remaining) + 'ms' };
+    if (!published) {
+      const status = send('comment-status', 'GET', path, session, validCommentStatus,
+        { ...details, statuses: [200, 202], outcome: (body, ok) => ok || body?.state === 'FAILED' ? body.state : null });
+      if (status.body?.state === 'FAILED') return;
+      published = status.outcome === 'PUBLISHED';
+      continue;
+    }
+    const latest = send('comment-visible', 'GET', commentListPath(article, 'latest', 50), session,
+      body => validCommentPage(body, 50, false),
+      { ...details, outcome: (body, ok) => ok && body.items.some(item => item.content === content) ? 'VISIBLE' : null });
+    if (latest.outcome === 'VISIBLE') return;
+  }
+}
+
+function submitComment(article, session, iteration) {
+  const submission = operationId();
+  const payload = commentPayload(submission);
+  // 每个计划中的五秒窗口只安排一个确认样本，主请求仍使用固定到达率。
+  const sample = __ENV.EC_BASELINE_PHASE === 'measure' && iteration % (load * 5) === 0;
+  const result = send('comment-submit', 'PUT', commentSubmissionPath(article, submission), session, validCommentStatus,
+    { article, submission, payload, sample, statuses: [202] });
+  if (result.ok && sample) observeComment(article, submission, session, payload.content, result.start);
 }
 
 export default function () {
@@ -101,6 +148,18 @@ export default function () {
   }
   if (scenario === 'detail' || scenario === 'detail-cold') {
     detail(detailArticle(config.articles, random), random() < 0.7 ? session : null);
+    return;
+  }
+  if (scenario === 'comment-read') {
+    const article = commentReadArticle(config.commentReadArticles, random);
+    send('comment-first', 'GET', commentListPath(article, 'hot', 20), random() < 0.7 ? session : null,
+      body => validCommentPage(body, 20, true), { article });
+    return;
+  }
+  if (scenario === 'comment-write-spread' || scenario === 'comment-write-hot') {
+    const article = commentWriteArticle(config.commentWriteFirst, config.commentWriteArticles, iteration,
+      scenario === 'comment-write-hot');
+    submitComment(article, session, iteration);
     return;
   }
   if (scenario === 'mixed') {

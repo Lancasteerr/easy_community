@@ -30,9 +30,28 @@ class BaselineToolTests {
             assertTrue(java.util.stream.LongStream.range(0, group.count()).map(index -> group.first() + index * group.step())
                     .allMatch(article -> Math.floorMod(Long.hashCode(article), BaselineData.PARTITIONS) == expected));
         }
-        assertEquals(14, BaselineK6.stages("Standard", "All").size());
+        assertEquals(23, BaselineK6.stages("Standard", "All").size());
         assertEquals(List.of(240, 240), BaselineK6.stages("Exploration", "All").stream().map(BaselineK6.Stage::load).toList());
         assertEquals(200, BaselineK6.stages("Standard", "Mixed").getLast().vus());
+    }
+
+    @Test void resolvesCommentStagesAndSeparatesFollowUpSamples() {
+        assertEquals(List.of("comment-read-5", "comment-write-spread-2", "comment-write-hot-2"),
+                BaselineK6.stages("Smoke", "comment").stream().map(BaselineK6.Stage::directory).toList());
+        assertEquals(List.of("comment-write-spread-20", "comment-write-hot-20"),
+                BaselineK6.stages("Exploration", "CommentWrite").stream().map(BaselineK6.Stage::directory).toList());
+        assertEquals(List.of(5, 5), BaselineK6.stages("Standard", "CommentWrite", List.of(5)).stream()
+                .map(BaselineK6.Stage::load).toList());
+
+        var submit = new BaselineJournal.Event("comment-submit", 0, 20, 202, true, 1, 2, false, null, 0, "", "a", true, null);
+        var pending = new BaselineJournal.Event("comment-status", 650, 660, 202, true, 1, 2, false, null, 0, "", "a", false, "PUBLISHING");
+        var published = new BaselineJournal.Event("comment-status", 1310, 1320, 200, true, 1, 2, false, null, 0, "", "a", false, "PUBLISHED");
+        var latest = new BaselineJournal.Event("comment-visible", 1970, 1980, 200, true, 1, 2, false, null, 0, "", "a", false, "VISIBLE");
+        var events = List.of(submit, pending, published, latest);
+        assertEquals(1, events.stream().filter(event -> !event.auxiliary()).count());
+        assertEquals(new BaselineCommentWrite.Observation(1, 1, 1, 1320, 1980), BaselineCommentWrite.observation(events));
+        assertEquals(new BaselineCommentWrite.Observation(1, 1, 0, 1320, 0),
+                BaselineCommentWrite.observation(List.of(submit, published)));
     }
 
     @Test void preservesPreciseVersionsAndRequiresFinalState() {
@@ -69,9 +88,11 @@ class BaselineToolTests {
     @Test void readsCompleteRecordsAndKeepsSkippedAndRateLimitedSamples() throws Exception {
         var json = new ObjectMapper();
         var file = root.resolve("requests.log");
-        var event = new BaselineJournal.Event("like", 1, 6, 202, true, 1, 5, true, "9007199254740993", 12, "");
-        var limited = new BaselineJournal.Event("like", 5, 9, 429, false, 2, 5, false, null, 2, "");
-        Files.writeString(file, "EC_HTTP " + json.writeValueAsString(event) + "\nEC_HTTP " + json.writeValueAsString(limited));
+        var event = new BaselineJournal.Event("like", 1, 6, 202, true, 1, 5, true, "9007199254740993", 12, "", null, null, null);
+        var limited = new BaselineJournal.Event("like", 5, 9, 429, false, 2, 5, false, null, 2, "", null, false, null);
+        var legacy = json.valueToTree(event);
+        ((tools.jackson.databind.node.ObjectNode) legacy).remove("sample");
+        Files.writeString(file, "EC_HTTP " + json.writeValueAsString(legacy) + "\nEC_HTTP " + json.writeValueAsString(limited));
         var journal = new BaselineJournal(file, json);
         journal.refresh();
         assertEquals(List.of(event), journal.events());

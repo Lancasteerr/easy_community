@@ -1,5 +1,6 @@
 package com.febrie.backend.performance;
 
+import com.febrie.backend.article.comment.BaselineCommentFixture;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -37,7 +38,7 @@ class BaselinePerformanceTests {
         boolean complete = false;
         String failure = null;
         assertTrue(!stages.isEmpty(), "需要至少一个压测场景");
-        try (var environment = new BaselineEnvironment(size)) {
+        try (var environment = new BaselineEnvironment(size, stages.stream().anyMatch(BaselineK6.Stage::readsComments))) {
             environment.seed();
             var seed = new LinkedHashMap<String, Object>();
             seed.put("seed", BaselineData.SEED); seed.put("users", size.users()); seed.put("articles", size.articles());
@@ -45,6 +46,13 @@ class BaselinePerformanceTests {
             seed.put("seedSeconds", Duration.between(started, Instant.now()).toSeconds());
             seed.put("queries", workload.queries()); seed.put("rankScheduling", false);
             seed.put("searchPageSize", smoke ? 5 : 20);
+            if (stages.stream().anyMatch(BaselineK6.Stage::comments)) {
+                seed.put("commentReadArticles", environment.commentReadArticles);
+                seed.put("commentRootsPerReadArticle", BaselineCommentFixture.ROOTS_PER_ARTICLE);
+                seed.put("commentSeedRows", environment.commentSeedMax);
+                seed.put("commentWriteFirst", environment.commentWriteFirst);
+                seed.put("commentWriteArticles", BaselineEnvironment.COMMENT_WRITE_ARTICLES);
+            }
             json.writeValue(root.resolve("seed.json").toFile(), seed);
             for (int round = 1; round <= rounds; round++) {
                 for (var stage : stages) {
@@ -52,7 +60,7 @@ class BaselinePerformanceTests {
                     System.out.println("基线第 " + round + " 轮：" + stage.directory());
                     BaselineReport.Stage outcome;
                     try (var site = environment.stage(stage)) {
-                        outcome = runStage(round, stage, site, script, output, workload, smoke);
+                        outcome = runStage(round, stage, site, script, output, workload, smoke, environment);
                     } catch (Exception error) {
                         outcome = BaselineReport.Stage.failed(round, stage, error.getMessage());
                         System.err.println("基线阶段失败 " + stage.directory() + "：" + error);
@@ -71,13 +79,15 @@ class BaselinePerformanceTests {
     }
 
     private BaselineReport.Stage runStage(int round, BaselineK6.Stage stage, BaselineEnvironment.Site site,
-                                         Path script, Path output, BaselineData.Workload workload, boolean smoke) throws Exception {
+                                         Path script, Path output, BaselineData.Workload workload, boolean smoke,
+                                         BaselineEnvironment environment) throws Exception {
         Path input = Files.createTempFile("ec-k6-session-", ".json");
         try {
             var sessions = stage.needsSessions() ? site.sessions(stage.vus()) : List.of();
             site.json.writeValue(input.toFile(), Map.of("base", site.base, "seed", workload.seed(),
                     "articles", workload.articles(), "partitions", workload.partitions(), "queries", workload.queries(),
-                    "sessions", sessions, "pageSize", smoke ? 5 : 20));
+                    "sessions", sessions, "pageSize", smoke ? 5 : 20, "commentReadArticles", environment.commentReadArticles,
+                    "commentWriteFirst", environment.commentWriteFirst, "commentWriteArticles", BaselineEnvironment.COMMENT_WRITE_ARTICLES));
             return BaselineStage.run(round, stage, site, script, input, output, smoke);
         } finally { Files.deleteIfExists(input); }
     }

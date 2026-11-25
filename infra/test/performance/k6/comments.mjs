@@ -1,0 +1,59 @@
+const decimalId = /^[1-9][0-9]*$/;
+
+export function commentReadArticle(count, random) {
+  const hot = Math.max(1, Math.floor(count / 10));
+  if (random() < 0.6) return 1 + Math.floor(random() * hot);
+  return hot + 1 + Math.floor(random() * (count - hot));
+}
+
+export function commentWriteArticle(first, count, iteration, hot) {
+  // 连续 ID 在四个 RabbitMQ 写分区间轮转，低速档也会触达全部分区。
+  return first + (hot ? 0 : iteration % count);
+}
+
+export function commentListPath(article, sort, size) {
+  return '/api/articles/' + article + '/comments?sort=' + sort + '&size=' + size;
+}
+
+export function commentSubmissionPath(article, submission) {
+  return '/api/articles/' + article + '/comments/submissions/' + submission;
+}
+
+export function commentPayload(submission) {
+  return { content: '基线评论 ' + submission, replyToId: null };
+}
+
+function validId(value) {
+  return typeof value === 'string' && decimalId.test(value);
+}
+
+function validRoot(item) {
+  return validId(item?.id) && item.rootId === null && item.replyToId === null &&
+    validId(item.author?.id) && typeof item.content === 'string' && item.content.length > 0 &&
+    item.status === 'ACTIVE' && Number.isSafeInteger(item.likeCount) && item.likeCount >= 0 &&
+    typeof item.likedByMe === 'boolean';
+}
+
+export function validCommentPage(body, size, hot) {
+  if (!Array.isArray(body?.items) || body.items.length > size ||
+      !Number.isSafeInteger(body.commentCount) || body.commentCount < (hot ? body.items.length : 0) ||
+      typeof body.hasMore !== 'boolean' ||
+      (body.hasMore ? typeof body.nextCursor !== 'string' || !body.nextCursor : body.nextCursor !== null)) return false;
+  if (!body.items.every(validRoot) || new Set(body.items.map(item => item.id)).size !== body.items.length) return false;
+  if (!hot) return true;
+  if (body.items.length !== size || !body.hasMore || typeof body.rankVersion !== 'string' || !body.rankVersion) return false;
+  return body.items.every((item, index) => {
+    const prior = body.items[index - 1];
+    const preview = item.replies;
+    // 同赞数按 ID 降序，比较十进制字符串避免丢失 64 位 ID 精度。
+    const ordered = !prior || prior.likeCount > item.likeCount || prior.likeCount === item.likeCount &&
+      (prior.id.length !== item.id.length ? prior.id.length > item.id.length : prior.id > item.id);
+    return ordered && preview?.items?.length === 2 && preview.hasMore === true &&
+      typeof preview.nextCursor === 'string' && preview.items.every(reply => validId(reply.id) && reply.rootId === item.id);
+  });
+}
+
+export function validCommentStatus(body, status) {
+  return status === 202 && body?.state === 'PUBLISHING' ||
+    status === 200 && body?.state === 'PUBLISHED' && Number.isSafeInteger(body.commentCount) && body.commentCount > 0;
+}

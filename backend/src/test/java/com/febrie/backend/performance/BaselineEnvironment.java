@@ -2,6 +2,7 @@ package com.febrie.backend.performance;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import com.febrie.backend.BackendApplication;
+import com.febrie.backend.article.comment.BaselineCommentFixture;
 import com.febrie.backend.article.like.application.maintenance.LikeRecoveryService;
 import com.febrie.backend.article.like.infrastructure.config.LikeProperties;
 import com.febrie.backend.article.like.infrastructure.messaging.LikeListenerGroup;
@@ -19,6 +20,7 @@ import java.net.http.HttpResponse;
 import java.sql.DriverManager;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -43,19 +45,28 @@ final class BaselineEnvironment implements AutoCloseable {
     private final String token = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
     final String database = "ec_k6_" + token;
     final String index = "ec_k6_" + token;
+    private final String readCommentIndex = index + "-comments";
+    private final LinkedHashSet<String> commentIndexes = new LinkedHashSet<>();
     private final BaselineData.Size size;
+    final int commentReadArticles;
+    final int commentWriteFirst;
+    static final int COMMENT_WRITE_ARTICLES = 32;
+    int commentSeedMax;
+    private boolean dirtyComments;
     private int stageId;
     private boolean created;
 
-    BaselineEnvironment(BaselineData.Size size) {
+    BaselineEnvironment(BaselineData.Size size, boolean readsComments) {
         if (password == null || password.isBlank()) { throw new IllegalStateException("缺少压测专用凭证"); }
         this.size = size;
+        commentReadArticles = readsComments ? Math.min(128, size.articles() - COMMENT_WRITE_ARTICLES) : 0;
+        commentWriteFirst = commentReadArticles + 1;
     }
 
     void seed() throws Exception {
         schema("CREATE DATABASE");
         created = true;
-        try (var app = start("ec:test:baseline:" + token, false, 120, 60)) {
+        try (var app = start("ec:test:baseline:" + token, readCommentIndex, false, 120, 60)) {
             var jdbc = app.getBean(JdbcTemplate.class);
             BaselineData.insert(jdbc, size, app.getBean(PasswordEncoder.class).encode(BaselineData.PASSWORD));
             app.getBean(ArticleIndexAdmin.class).initialize(index, true);
@@ -70,21 +81,37 @@ final class BaselineEnvironment implements AutoCloseable {
             if (es.count(r -> r.index(index).query(q -> q.term(t -> t.field("visible").value(true)))).count() != size.articles()) {
                 throw new IllegalStateException("ES 可见文章数量与 MySQL 种子不一致");
             }
+            if (commentReadArticles > 0) {
+                commentIndexes.add(readCommentIndex);
+                commentSeedMax = BaselineCommentFixture.seed(app, commentReadArticles);
+            }
         }
     }
 
     Site stage(BaselineK6.Stage stage) throws Exception {
         String prefix = "ec:test:baseline:" + token + ":" + (++stageId);
-        try (var maintenance = start(prefix, false, stage.userLimit(), stage.likeLimit())) {
+        // 写档用全新物理索引，读档可复用只读种子索引。
+        String commentIndex = stage.writesComments() ? readCommentIndex + "-" + stageId : readCommentIndex;
+        try (var maintenance = start(prefix, commentIndex, false, stage.userLimit(), stage.likeLimit())) {
             var jdbc = maintenance.getBean(JdbcTemplate.class);
             if (stageId > 1) { BaselineData.restore(jdbc); }
+            if (dirtyComments) {
+                BaselineCommentFixture.resetWrites(maintenance, commentSeedMax, commentWriteFirst,
+                        commentWriteFirst + COMMENT_WRITE_ARTICLES - 1);
+                dirtyComments = false;
+            }
+            if (stage.writesComments()) {
+                commentIndexes.add(commentIndex);
+                BaselineCommentFixture.initializeIndex(maintenance);
+                dirtyComments = true;
+            }
             int epoch = jdbc.queryForObject("SELECT epoch FROM like_version_epoch WHERE id=1", Integer.class);
             maintenance.getBean(LikeRecoveryService.class).recover(epoch);
         }
-        return new Site(start(prefix, true, stage.userLimit(), stage.likeLimit()), prefix);
+        return new Site(start(prefix, commentIndex, true, stage.userLimit(), stage.likeLimit()), prefix, stage, commentIndex);
     }
 
-    private ConfigurableApplicationContext start(String prefix, boolean web, int userLimit, int likeLimit) {
+    private ConfigurableApplicationContext start(String prefix, String commentIndex, boolean web, int userLimit, int likeLimit) {
         return new SpringApplicationBuilder(BackendApplication.class, BaselineInstrumentation.class)
                 .run("--spring.profiles.active=test", "--spring.config.import=",
                         "--spring.main.web-application-type=" + (web ? "servlet" : "none"),
@@ -102,6 +129,9 @@ final class BaselineEnvironment implements AutoCloseable {
                         "--app.search.username=elastic", "--app.search.password=" + password,
                         "--app.search.query-enabled=true", "--app.search.rank-scheduling-enabled=false",
                         "--app.search.cursor-secret=baseline-fixture-only-cursor-secret",
+                        "--app.comment.index-name=" + commentIndex, "--app.comment.index-sync=true", "--app.comment.maintenance=",
+                        "--app.comment.cursor-secret=baseline-fixture-only-comment-secret",
+                        "--app.comment.refresh-queue=" + prefix + ".comment.refresh.q",
                         "--app.auth.login-per-minute=100000", "--app.auth.csrf-per-minute=100000",
                         "--app.auth.user-per-minute=" + userLimit, "--app.like.per-minute=" + likeLimit,
                         "--app.like.partition-count=" + BaselineData.PARTITIONS, "--app.like.batch-size=20",
@@ -120,8 +150,11 @@ final class BaselineEnvironment implements AutoCloseable {
     @Override public void close() throws Exception {
         if (!created) { return; }
         // 索引在建库后才可能创建。显式删除本次物理索引，别名随之消失。
-        try (var app = start("ec:test:baseline:" + token, false, 120, 60)) {
-            app.getBean(ElasticsearchClient.class).indices().delete(d -> d.index(index).ignoreUnavailable(true));
+        try (var app = start("ec:test:baseline:" + token, readCommentIndex, false, 120, 60)) {
+            var indexes = new ArrayList<String>();
+            indexes.add(index);
+            commentIndexes.forEach(name -> indexes.add(name + "-v1"));
+            app.getBean(ElasticsearchClient.class).indices().delete(d -> d.index(indexes).ignoreUnavailable(true));
         } finally { schema("DROP DATABASE"); }
     }
 
@@ -134,9 +167,12 @@ final class BaselineEnvironment implements AutoCloseable {
         final String management;
         final JdbcTemplate jdbc;
         final ObjectMapper json;
+        final BaselineK6.Stage stage;
+        final String commentIndex;
 
-        private Site(ConfigurableApplicationContext app, String prefix) {
+        private Site(ConfigurableApplicationContext app, String prefix, BaselineK6.Stage stage, String commentIndex) {
             this.app = app; this.prefix = prefix;
+            this.stage = stage; this.commentIndex = commentIndex;
             base = "http://127.0.0.1:" + app.getEnvironment().getRequiredProperty("local.server.port");
             management = "http://127.0.0.1:" + app.getEnvironment().getRequiredProperty("local.management.port");
             jdbc = app.getBean(JdbcTemplate.class); json = app.getBean(ObjectMapper.class);
@@ -144,6 +180,8 @@ final class BaselineEnvironment implements AutoCloseable {
 
         String password() { return password; }
         String index() { return index; }
+        int commentSeedMax() { return commentSeedMax; }
+        int commentWriteFirst() { return commentWriteFirst; }
 
         List<Session> sessions(int count) throws Exception {
             try (var workers = Executors.newFixedThreadPool(4)) {
@@ -181,10 +219,15 @@ final class BaselineEnvironment implements AutoCloseable {
             return response.body();
         }
 
-        @Override public void close() {
+        @Override public void close() throws Exception {
             try {
                 app.getBean("likeListener", LikeListenerGroup.class).stop();
                 app.getBean("articleIndexListener", SimpleMessageListenerContainer.class).stop();
+                BaselineCommentFixture.cleanupQueues(app, prefix);
+                if (stage.writesComments()) {
+                    app.getBean(ElasticsearchClient.class).indices().delete(d -> d.index(commentIndex + "-v1").ignoreUnavailable(true));
+                    commentIndexes.remove(commentIndex);
+                }
                 var admin = app.getBean(AmqpAdmin.class);
                 var like = app.getBean(LikeProperties.class);
                 new LikePartitionRouter(like).queues().forEach(admin::deleteQueue);

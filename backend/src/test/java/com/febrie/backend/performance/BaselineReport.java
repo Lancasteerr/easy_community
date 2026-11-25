@@ -79,6 +79,14 @@ final class BaselineReport {
                         .append("，SQL 总量／日量 ").append(stage.pvAudit().sqlTotal()).append('/')
                         .append(stage.pvAudit().sqlDaily()).append("。\n");
             }
+            if (stage.diagnostics().get("commentEs") instanceof Map<?, ?> es) {
+                report.append("- 评论 ES 开放搜索上下文峰值 ").append(es.get("openContextsPeak"))
+                        .append("，ES 堆使用峰值 ").append(es.get("heapUsedBytesPeak"))
+                        .append(" 字节，测量期搜索拒绝增量 ").append(es.get("searchRejected")).append("。\n");
+            }
+            if (stage.diagnostics().get("commentWrite") instanceof BaselineCommentWrite.Result result) {
+                commentWrite(report, result);
+            }
             stage.issues().forEach(issue -> report.append("- ").append(issue.replace('\n', ' ')).append("\n"));
             String telemetry = "round-" + stage.round() + "/" + stage.scenario() + "-" + stage.load() + "/telemetry.jsonl";
             if (Files.exists(root.resolve(telemetry))) { report.append("- [本档监控时序](").append(telemetry).append(")\n"); }
@@ -86,6 +94,24 @@ final class BaselineReport {
         Path pending = root.resolve("report.md.tmp");
         Files.writeString(pending, report);
         Files.move(pending, root.resolve("report.md"), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private static void commentWrite(StringBuilder report, BaselineCommentWrite.Result result) {
+        var audit = result.audit();
+        var seen = result.observation();
+        report.append("- 含预热受理 ").append(audit.accepted()).append(" 笔，落库匹配 ").append(audit.persisted())
+                .append(" 笔，额外或错误结果 ").append(audit.unexpectedResults())
+                .append("，无对应结果的评论 ").append(audit.untrackedRoots()).append("，文章计数差异 ")
+                .append(audit.wrongCounts()).append("，ES 可见 ").append(audit.index().visibleTotal())
+                .append(" 条，索引缺失或不符 ").append(audit.index().missingOrWrong()).append("。\n");
+        report.append("- 测量期抽样 ").append(seen.samples()).append(" 笔，确认发布 ").append(seen.published())
+                .append(" 笔（P95 ").append(format(seen.published() == 0 ? null : seen.publishedP95Ms())).append(" ms）")
+                .append("，在最新首页观测到 ").append(seen.visible()).append(" 笔（P95 ")
+                .append(format(seen.visible() == 0 ? null : seen.visibleP95Ms())).append(" ms），首页未观测到 ")
+                .append(seen.samples() - seen.visible()).append(" 笔。\n");
+        report.append("- 索引 Outbox 峰值 ").append(result.outboxPeak()).append("，最老任务 ")
+                .append(result.oldestOutboxMs()).append(" ms，死信峰值 ").append(result.deadPeak())
+                .append("，排空并完成对账 ").append(format(result.drainMs())).append(" ms。\n");
     }
 
     private static void row(StringBuilder report, Stage stage, String name, BaselineStats.Route route) {

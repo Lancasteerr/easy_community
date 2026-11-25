@@ -10,18 +10,27 @@
 ./infra/test/performance/run.ps1 -Baseline Smoke
 ./infra/test/performance/run.ps1 -Baseline Standard -Scenario Search
 ./infra/test/performance/run.ps1 -Baseline Standard -Scenario Search -Rounds 1 -Rps 50
+./infra/test/performance/run.ps1 -Baseline Smoke -Scenario Comment -Rounds 1
+./infra/test/performance/run.ps1 -Baseline Standard -Scenario CommentRead -Rounds 1 -Rps 25
+./infra/test/performance/run.ps1 -Baseline Standard -Scenario CommentWrite -Rounds 1 -Rps 5
 ./infra/test/performance/run.ps1 -Baseline Standard
 ./infra/test/performance/run.ps1 -Baseline Exploration -Scenario Like
 ```
 
-`-Scenario` 可取 `All`、`Search`、`Detail`、`Like`、`Mixed`，默认 `All`。`-Rounds` 支持 1–5，Smoke 默认 1 轮，Standard 和 Exploration 默认 3 轮。`-Rps '25,50,100'` 按给定顺序替换所选场景的全部默认压力档，取值为 1–1000 的不重复整数。混合默认用 VU，指定 RPS 后按每秒启动的旅程数发压，报告另列实际 HTTP RPS。
+`-Scenario` 可取 `All`、`Search`、`Detail`、`Like`、`Mixed`、`Comment`、`CommentRead`、`CommentWrite`，默认 `All`。Smoke 和 Standard 的 All 包含评论。Exploration 的 All 运行点赞探索档，也可显式选择 CommentWrite。`-Rounds` 支持 1–5，Smoke 默认 1 轮，Standard 和 Exploration 默认 3 轮。`-Rps '25,50,100'` 按给定顺序替换所选场景的全部默认压力档，取值为 1–1000 的不重复整数。混合默认用 VU，指定 RPS 后按每秒启动的旅程数发压，报告另列实际 HTTP RPS。
 
-默认 Smoke 使用 32 账号、96 篇文章、384 条点赞关系。正式基线固定种子，导入 1 万账号、5 万篇文章、50 万条关系并核验 ES 和 SQL。每档预热 60 秒、测量 5 分钟。冷详情有独立缓存命名空间，直接采首分钟。等待自然 PV 刷盘或异步点赞排空最多 120 秒。全量正式基线的测量和预热窗口本身约 4 小时，另计导入、启动和排空。
+默认 Smoke 使用 32 账号、96 篇文章、384 条点赞关系。正式基线固定种子，导入 1 万账号、5 万篇文章、50 万条关系并核验 ES 和 SQL。每档预热 60 秒、测量 5 分钟。冷详情有独立缓存命名空间，直接采首分钟。等待自然 PV 刷盘或异步写入排空最多 120 秒。全量正式基线的测量和预热窗口约 6 小时 40 分钟，另计导入、启动和排空。
 
 - 搜索和详情为 50／100／200 RPS，搜索正式档用默认 20 条分页。点赞分散和单篇热点为 60／120 RPS，探索档为 240 RPS。混合旅程为 50／100／200 VU，游客占 30%。登录与 CSRF 在窗口外完成。混合保留每账号 120 请求／分钟、60 点赞／分钟；独立详情放宽认证请求上限，点赞容量档放宽两种上限。配置逐档保存。
 - 单 JVM 应用与独立 k6 进程同机。数据库和 ES 索引为本次随机生成，Redis 和 MQ 按档隔离。每档还原上档修改的点赞与 PV 数据，复用已验证的种子和 ES 索引。rank 定时任务停用，PV 定时刷盘及点赞消费照常启用。
 - HTTP 保留客户端起止、状态和校验结果。RabbitMQ 管理 API 按分区采样，计数有刷新延迟，排空是采样观察时间。积压趋势把稳态样本分成三段，均值逐段升高且首尾相差至少 10 条时标记持续增长。SQL 锁观测包含 InnoDB 实例增量和专用库当前阻塞。覆盖时序按最近 32 个触达关系有界采样，最终对账覆盖全部受理关系与受影响计数。PV 核对本档预热和测量期间的全部详情 200，搜索档核验零 PV。
 - 全部产物都写入 `artifacts/performance/<run-id>/`。先看 `report.md`，详细口径和现场数据见 `summary.json`、`seed.json`、`metadata.json` 及阶段目录中的 `telemetry.jsonl`、k6 汇总、压缩原始指标与请求日志。预热和测量分文件保存，Maven 构建与开发目录隔离。HTTP 请求日志只含固定测试标识、状态与时间，临时会话文件在运行后删除。
+
+评论档位和口径
+
+- 热门首页每篇准备 32 条一级评论，每条附 3 条回复。测试首页 20 条，Smoke 为 5 RPS，Standard 为 25／50／100 RPS。60% 请求落到热门文章池，70% 请求带已登录会话。关注 ES 开放搜索上下文、堆和搜索拒绝。
+- 一级评论发布 Smoke 为 2 次提交／秒，Standard 为 5／10／15 次，Exploration 为 20 次。每个压力档分别跑四分区分散写和单篇热点写，写档开始前清空上档的评论写数据并切换独立索引。
+- 写档按主提交计算吞吐。每个正式五秒窗口最多抽一个受理样本，确认发布和最新首页观察使用客户端轮询时间，辅助请求有独立路由指标。样本可能滑出首页，报告记录其中未观察到的笔数。停压后逐笔核对预热及测量的已受理写入、文章计数和 ES 搜索可见文档。主请求成功吞吐至少达到目标的 99%，无丢弃迭代，写档还须对账一致、无死信和持续积压。
 
 ```powershell
 node --test infra/test/performance/k6/workload.test.mjs

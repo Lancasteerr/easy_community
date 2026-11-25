@@ -13,6 +13,7 @@ final class BaselineStage {
     private final BaselineEnvironment.Site site;
     private final BaselineK6.Stage stage;
     private final BaselineReconcile reconcile;
+    private final BaselineCommentWrite commentWrite;
     private final List<BaselineProbe.Sample> samples = new ArrayList<>();
     private final List<String> issues = new ArrayList<>();
     private final Map<String, Object> diagnostics = new LinkedHashMap<>();
@@ -20,6 +21,7 @@ final class BaselineStage {
     private BaselineStage(BaselineEnvironment.Site site, BaselineK6.Stage stage) {
         this.site = site; this.stage = stage;
         reconcile = new BaselineReconcile(site.jdbc);
+        commentWrite = stage.writesComments() ? new BaselineCommentWrite(site) : null;
     }
 
     static BaselineReport.Stage run(int round, BaselineK6.Stage stage, BaselineEnvironment.Site site,
@@ -41,6 +43,7 @@ final class BaselineStage {
             if (!cold && !recoveryProbe) { phase(probe, script, input, output, "warm", smoke ? 4 : 60); }
             var first = probe.sample("measure-start", stage.readsDetails());
             checkSample(first);
+            samples.add(first);
             int seconds = smoke ? 8 : cold ? 60 : 300;
             List<BaselineJournal.Event> events;
             var group = site.app.getBean("likeListener", LikeListenerGroup.class);
@@ -57,28 +60,32 @@ final class BaselineStage {
             } finally { if (recoveryProbe) { group.start(); } }
             var end = probe.sample("measure-end", stage.readsDetails());
             checkSample(end);
-            long stopped = events.stream().mapToLong(BaselineJournal.Event::end).max().orElse(System.currentTimeMillis());
+            samples.add(end);
+            var primary = stage.writesComments() ? events.stream().filter(event -> !event.auxiliary()).toList() : events;
+            long stopped = primary.stream().mapToLong(BaselineJournal.Event::end).max().orElse(System.currentTimeMillis());
             var drain = drain(probe, stopped, ready.mq().ack());
             var k6 = BaselineStats.k6(output.resolve("measure-metrics.json.gz"), site.json);
             double window = seconds;
-            if (!events.isEmpty()) {
-                long firstRequest = events.stream().mapToLong(BaselineJournal.Event::start).min().orElseThrow();
-                long lastRequest = events.stream().mapToLong(BaselineJournal.Event::end).max().orElseThrow();
-                window = Math.max(seconds, (lastRequest - firstRequest) / 1000.0);
+            if (!primary.isEmpty()) {
+                long firstRequest = primary.stream().mapToLong(BaselineJournal.Event::start).min().orElseThrow();
+                window = Math.max(seconds, (stopped - firstRequest) / 1000.0);
             }
             var routes = BaselineStats.routes(events, window);
             diagnostics.put("workloadVariants", events.stream().filter(event -> event.variant() != null && !event.variant().isBlank())
                     .collect(java.util.stream.Collectors.groupingBy(BaselineJournal.Event::variant,
                             java.util.stream.Collectors.counting())));
-            long successes = events.stream().filter(BaselineJournal.Event::ok).count();
-            if (events.isEmpty() || successes * 100 < events.size() * 99L) { issues.add("业务检查成功率低于 99% 或没有样本"); }
+            long successes = primary.stream().filter(BaselineJournal.Event::ok).count();
+            if (primary.isEmpty() || successes * 100 < primary.size() * 99L) { issues.add("业务检查成功率低于 99% 或没有样本"); }
             long planned = (long) seconds * stage.load();
             if (!stage.closed()) {
                 // 混合按旅程计数，单接口档仍核对一迭代一条主请求。
-                long started = stage.mixed() ? k6.startedJourneys() : events.size();
+                long started = stage.mixed() ? k6.startedJourneys() : primary.size();
                 if (k6.dropped() * 100 > planned || started != k6.iterations() || started < planned * .99) {
                     issues.add("未达到计划到达率或主负载与 k6 迭代数不符");
                 }
+            }
+            if (stage.comments() && (k6.dropped() > 0 || successes / window < stage.load() * .99)) {
+                issues.add("评论主请求成功吞吐低于目标的 99% 或存在丢弃迭代");
             }
             if (stage.mixed()) {
                 diagnostics.put("journeyStartsPerSecond", k6.startedJourneys() / (double) seconds);
@@ -105,9 +112,23 @@ final class BaselineStage {
             diagnostics.put("deadLetterPeak", samples.stream().filter(sample -> sample.mq() != null)
                     .mapToLong(sample -> sample.mq().dead()).max().orElse(0));
             diagnostics.put("partitionMq", partitionDeltas(first, end, window));
+            long backlog = peakPending();
+            if (stage.comments()) { reportCommentEs(first, end); }
+            if (commentWrite != null) {
+                var writeResult = commentWrite.drain(stopped, ready.comment(), events, samples,
+                        () -> collect(probe, "comment-drain"));
+                diagnostics.put("commentWrite", writeResult);
+                backlog = writeResult.mqPeak();
+                growing |= writeResult.growing();
+                if (writeResult.audit().accepted() == 0) { issues.add("评论写档没有受理样本"); }
+                if (writeResult.deadPeak() > 0) { issues.add("评论写入或索引出现死信"); }
+                if (writeResult.growing()) { issues.add("评论队列或索引 Outbox 持续积压"); }
+                if (!writeResult.audit().passed()) { issues.add("评论受理、落库、文章计数或 ES 搜索对账失败"); }
+                if (writeResult.drainMs() == null) { issues.add("评论队列及索引未完成排空与对账"); }
+            }
             return new BaselineReport.Stage(round, stage.scenario(), stage.load(), stage.model().label,
                     issues.isEmpty(), issues.stream().distinct().toList(), routes, k6, stage.vus(), BaselineStats.overlap(events),
-                    likeOverlap, peakPending(), growing || partitionGrowing, waits, waitMs, drain.coverageMs(), drain.mqMs(),
+                    likeOverlap, backlog, growing || partitionGrowing, waits, waitMs, drain.coverageMs(), drain.mqMs(),
                     drain.like(), drain.pv(), diagnostics);
         }
     }
@@ -131,17 +152,35 @@ final class BaselineStage {
         try {
             while (process.isAlive() && System.nanoTime() < deadline) {
                 journal.refresh();
-                reconcile.append(journal.events(), offset);
+                append(journal.events(), offset);
                 offset = journal.events().size();
                 collect(probe, phase);
                 process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS);
             }
             BaselineK6.verifyExit(process, 0);
             journal.refresh();
-            reconcile.append(journal.events(), offset);
+            append(journal.events(), offset);
             if (journal.events().isEmpty()) { throw new IllegalStateException("k6 未输出 HTTP 样本：" + phase); }
             return journal.events();
         } finally { if (process.isAlive()) { process.destroyForcibly().waitFor(); } }
+    }
+
+    private void append(List<BaselineJournal.Event> events, int offset) {
+        reconcile.append(events, offset);
+        if (commentWrite != null) { commentWrite.append(events, offset); }
+    }
+
+    private void reportCommentEs(BaselineProbe.Sample first, BaselineProbe.Sample end) {
+        var es = new LinkedHashMap<String, Object>();
+        for (String key : List.of("openContexts", "heapUsedBytes")) {
+            es.put(key + "Peak", samples.stream().filter(sample -> sample.es() != null)
+                    .mapToLong(sample -> ((Number) sample.es().get(key)).longValue()).max().orElse(0));
+        }
+        if (first.es() != null && end.es() != null) {
+            es.put("searchRejected", BaselineStats.delta(((Number) first.es().get("rejected")).longValue(),
+                    ((Number) end.es().get("rejected")).longValue()));
+        }
+        diagnostics.put("commentEs", es);
     }
 
     private BaselineProbe.Sample collect(BaselineProbe probe, String phase) throws Exception {

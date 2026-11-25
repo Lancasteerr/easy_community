@@ -25,9 +25,12 @@ final class BaselineK6 {
         boolean closed() { return model == Model.VU; }
         boolean mixed() { return scenario.equals("mixed"); }
         boolean needsSessions() { return !scenario.equals("search"); }
+        boolean readsComments() { return scenario.equals("comment-read"); }
+        boolean writesComments() { return scenario.startsWith("comment-write-"); }
+        boolean comments() { return readsComments() || writesComments(); }
         boolean writes() { return scenario.startsWith("like") || scenario.equals("mixed"); }
         boolean readsDetails() { return scenario.startsWith("detail") || scenario.equals("mixed"); }
-        int userLimit() { return scenario.startsWith("like") || scenario.startsWith("detail") ? 100000 : 120; }
+        int userLimit() { return scenario.startsWith("like") || scenario.startsWith("detail") || comments() ? 100000 : 120; }
         int likeLimit() { return scenario.startsWith("like") ? 100000 : 60; }
     }
 
@@ -58,6 +61,7 @@ final class BaselineK6 {
     }
 
     static List<Stage> stages(String mode, String selected, List<Integer> rates) {
+        if (selected == null) { selected = "All"; }
         boolean smoke = mode.equals("Smoke");
         var stages = new ArrayList<Stage>();
         if (!mode.equals("Exploration")) {
@@ -70,6 +74,18 @@ final class BaselineK6 {
         add(stages, selected, "Like", "like-spread", writes, smoke ? 8 : 96);
         add(stages, selected, "Like", "like-hot", writes, smoke ? 8 : 96);
         if (smoke) { add(stages, selected, "Like", "like-probe", new int[]{8}, 0); }
+        boolean exploration = mode.equals("Exploration");
+        if (!exploration && (selected.equalsIgnoreCase("Comment") || selected.equalsIgnoreCase("CommentRead")
+                || selected.equalsIgnoreCase("All"))) {
+            add(stages, "CommentRead", "CommentRead", "comment-read", smoke ? new int[]{5} : new int[]{25, 50, 100},
+                    smoke ? 8 : 64);
+        }
+        if (selected.equalsIgnoreCase("CommentWrite")
+                || !exploration && (selected.equalsIgnoreCase("Comment") || selected.equalsIgnoreCase("All"))) {
+            int[] commentRates = smoke ? new int[]{2} : exploration ? new int[]{20} : new int[]{5, 10, 15};
+            add(stages, "CommentWrite", "CommentWrite", "comment-write-spread", commentRates, smoke ? 8 : 64);
+            add(stages, "CommentWrite", "CommentWrite", "comment-write-hot", commentRates, smoke ? 8 : 64);
+        }
         if (rates.isEmpty()) { return List.copyOf(stages); }
         // 同一场景只展开一次自定义阶梯，保留用户输入顺序。
         return stages.stream().map(Stage::scenario).distinct()
@@ -86,7 +102,7 @@ final class BaselineK6 {
     }
 
     private static void add(List<Stage> stages, String selected, String group, String scenario, int[] rates, int vus) {
-        if (selected.equals("All") || selected.equals(group)) {
+        if (selected.equalsIgnoreCase("All") || selected.equalsIgnoreCase(group)) {
             for (int load : rates) { stages.add(new Stage(scenario, load, vus == 0 ? load : vus)); }
         }
     }
@@ -104,6 +120,7 @@ final class BaselineK6 {
         command.environment().put("EC_BASELINE_LOAD", Integer.toString(stage.load()));
         command.environment().put("EC_BASELINE_VUS", Integer.toString(stage.vus()));
         command.environment().put("EC_BASELINE_MODEL", stage.model().name());
+        command.environment().put("EC_BASELINE_PHASE", phase);
         command.environment().put("EC_BASELINE_OP", UUID.randomUUID().toString().substring(0, 8));
         return command.redirectOutput(output.resolve(phase + "-http.log").toFile())
                 .redirectError(output.resolve(phase + "-k6.log").toFile()).start();
