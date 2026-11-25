@@ -6,14 +6,31 @@ param(
     [string]$LikeRates = '60,120',
     [switch]$CompareLikeHistory,
     [ValidateSet('Smoke', 'Standard', 'Exploration')][string]$Baseline,
-    [ValidateSet('All', 'Search', 'Detail', 'Like', 'Mixed')][string]$Scenario = 'All'
+    [ValidateSet('All', 'Search', 'Detail', 'Like', 'Mixed')][string]$Scenario = 'All',
+    [string]$Rps
 )
 # 所有性能实验统一入口；仅使用resume-perf专用Compose与测试库，逐轮归档到target之外。
 $ErrorActionPreference = 'Stop'
 if ($Baseline -and ($CompareLikeHistory -or $PSBoundParameters.ContainsKey('Suite') -or
-        $PSBoundParameters.ContainsKey('LikeRates') -or $PSBoundParameters.ContainsKey('Seconds') -or
-        $PSBoundParameters.ContainsKey('Rounds'))) { throw '基线模式使用固定场景参数，请勿混用历史参数' }
+        $PSBoundParameters.ContainsKey('LikeRates') -or $PSBoundParameters.ContainsKey('Seconds'))) {
+    throw '基线模式不可混用 Suite、LikeRates、Seconds 或 CompareLikeHistory'
+}
 if (-not $Baseline -and $PSBoundParameters.ContainsKey('Scenario')) { throw 'Scenario 需要同时指定 Baseline' }
+if ($PSBoundParameters.ContainsKey('Rps')) {
+    if (-not $Baseline) { throw 'Rps 需要同时指定 Baseline' }
+    # 在接触 Docker 和产物目录前校验并归一化，Java 再按统一后的文本编排。
+    $rates = [Collections.Generic.HashSet[int]]::new()
+    $orderedRates = foreach ($item in $Rps.Split(',')) {
+        $rate = 0
+        if ($item.Trim() -notmatch '^[0-9]+$' -or -not [int]::TryParse($item.Trim(), [ref]$rate) -or
+            $rate -lt 1 -or $rate -gt 1000 -or -not $rates.Add($rate)) {
+            throw 'Rps 需为 1–1000 的不重复整数，用逗号分隔'
+        }
+        $rate
+    }
+    $Rps = $orderedRates -join ','
+}
+if ($Baseline -eq 'Smoke' -and -not $PSBoundParameters.ContainsKey('Rounds')) { $Rounds = 1 }
 if ($Baseline -eq 'Exploration' -and $Scenario -notin @('All', 'Like')) { throw '探索档包含 240 RPS 点赞场景' }
 if ($CompareLikeHistory -and ($Suite -ne 'Like' -or $LikeRates -ne '60,120')) { throw '历史对比仅支持Suite Like及60,120主阶梯；240探索固定追加' }
 if ($CompareLikeHistory -and -not (Get-Command python -ErrorAction SilentlyContinue)) { throw '历史对比需要Python及matplotlib' }
@@ -51,7 +68,7 @@ if ($Baseline) {
     $metadata.scenario = $Scenario
     $metadata.purpose = if ($Baseline -eq 'Smoke') { 'smoke' } else { 'measurement' }
     $metadata.seconds = if ($Baseline -eq 'Smoke') { 8 } else { 300 }
-    $metadata.rounds = if ($Baseline -eq 'Smoke') { 1 } else { 3 }
+    $metadata.requestedRps = if ($Rps) { ,@($Rps.Split(',') | ForEach-Object { [int]$_ }) } else { $null }
     $metadata.k6 = (& k6 version | Out-String).Trim()
     $metadata.applicationLimit = '单应用进程，JVM Xmx768m；k6 为独立进程，与应用同机'
 }
@@ -131,6 +148,8 @@ try {
     if ($Baseline) {
         Set-TestVariable 'IT_BASELINE' $Baseline
         Set-TestVariable 'IT_BASELINE_SCENARIO' $Scenario
+        Set-TestVariable 'IT_BASELINE_ROUNDS' "$Rounds"
+        Set-TestVariable 'IT_BASELINE_RPS' $Rps
         Set-TestVariable 'IT_BASELINE_OUTPUT' $output
         Set-TestVariable 'IT_BASELINE_SCRIPT' (Join-Path $sources 'scripts/k6/baseline.js')
         Copy-Item -LiteralPath (Join-Path $backend 'pom.xml') -Destination $sources

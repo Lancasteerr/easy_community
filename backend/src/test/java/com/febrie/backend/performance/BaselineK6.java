@@ -3,15 +3,28 @@ package com.febrie.backend.performance;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /** 每档单独执行 k6，预热与测量各自保存原始样本，避免统计混窗。 */
 final class BaselineK6 {
-    record Stage(String scenario, int load, int vus) {
+    enum Model {
+        VU("VU"), RPS("RPS"), JOURNEYS("旅程/秒");
+
+        final String label;
+        Model(String label) { this.label = label; }
+    }
+
+    record Stage(String scenario, int load, int vus, Model model) {
+        Stage(String scenario, int load, int vus) {
+            this(scenario, load, vus, scenario.equals("mixed") || scenario.equals("like-probe") ? Model.VU : Model.RPS);
+        }
         String directory() { return scenario + "-" + load; }
-        boolean closed() { return scenario.equals("mixed") || scenario.equals("like-probe"); }
+        boolean closed() { return model == Model.VU; }
+        boolean mixed() { return scenario.equals("mixed"); }
+        boolean needsSessions() { return !scenario.equals("search"); }
         boolean writes() { return scenario.startsWith("like") || scenario.equals("mixed"); }
         boolean readsDetails() { return scenario.startsWith("detail") || scenario.equals("mixed"); }
         int userLimit() { return scenario.startsWith("like") || scenario.startsWith("detail") ? 100000 : 120; }
@@ -21,6 +34,30 @@ final class BaselineK6 {
     private BaselineK6() { }
 
     static List<Stage> stages(String mode, String selected) {
+        return stages(mode, selected, List.of());
+    }
+
+    static int rounds(String mode, String value) {
+        if (value == null || value.isBlank()) { return mode.equals("Smoke") ? 1 : 3; }
+        int rounds = Integer.parseInt(value);
+        if (rounds < 1 || rounds > 5) { throw new IllegalArgumentException("Rounds 仅支持 1–5"); }
+        return rounds;
+    }
+
+    static List<Integer> rates(String value) {
+        if (value == null || value.isEmpty()) { return List.of(); }
+        var rates = new LinkedHashSet<Integer>();
+        for (String part : value.split(",", -1)) {
+            if (!part.matches("[0-9]+")) { throw new IllegalArgumentException("Rps 需要逗号分隔的整数"); }
+            int rate = Integer.parseInt(part);
+            if (rate < 1 || rate > 1000 || !rates.add(rate)) {
+                throw new IllegalArgumentException("Rps 需为 1–1000 的不重复整数");
+            }
+        }
+        return List.copyOf(rates);
+    }
+
+    static List<Stage> stages(String mode, String selected, List<Integer> rates) {
         boolean smoke = mode.equals("Smoke");
         var stages = new ArrayList<Stage>();
         if (!mode.equals("Exploration")) {
@@ -33,7 +70,19 @@ final class BaselineK6 {
         add(stages, selected, "Like", "like-spread", writes, smoke ? 8 : 96);
         add(stages, selected, "Like", "like-hot", writes, smoke ? 8 : 96);
         if (smoke) { add(stages, selected, "Like", "like-probe", new int[]{8}, 0); }
-        return List.copyOf(stages);
+        if (rates.isEmpty()) { return List.copyOf(stages); }
+        // 同一场景只展开一次自定义阶梯，保留用户输入顺序。
+        return stages.stream().map(Stage::scenario).distinct()
+                .flatMap(scenario -> rates.stream().map(rate -> custom(scenario, rate, smoke)))
+                .toList();
+    }
+
+    private static Stage custom(String scenario, int rate, boolean smoke) {
+        if (scenario.equals("mixed")) { return new Stage(scenario, rate, rate * 4, Model.JOURNEYS); }
+        // 单请求场景为半秒在途预留槽位，恢复探针还包含迭代内等待。
+        int floor = smoke ? 8 : scenario.startsWith("like") ? 96 : 64;
+        int vus = scenario.equals("like-probe") ? rate : Math.ceilDiv(rate, 2);
+        return new Stage(scenario, rate, Math.max(floor, vus), Model.RPS);
     }
 
     private static void add(List<Stage> stages, String selected, String group, String scenario, int[] rates, int vus) {
@@ -54,6 +103,7 @@ final class BaselineK6 {
         command.environment().put("EC_BASELINE_DURATION", Integer.toString(seconds));
         command.environment().put("EC_BASELINE_LOAD", Integer.toString(stage.load()));
         command.environment().put("EC_BASELINE_VUS", Integer.toString(stage.vus()));
+        command.environment().put("EC_BASELINE_MODEL", stage.model().name());
         command.environment().put("EC_BASELINE_OP", UUID.randomUUID().toString().substring(0, 8));
         return command.redirectOutput(output.resolve(phase + "-http.log").toFile())
                 .redirectError(output.resolve(phase + "-k6.log").toFile()).start();

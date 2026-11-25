@@ -45,6 +45,27 @@ class BaselineToolTests {
         assertFalse(new BaselineReconcile.Pv(100, 99, 99, 90).passed());
     }
 
+    @Test void resolvesExplicitRoundsAndRatesWithoutChangingProfileDefaults() {
+        assertEquals(1, BaselineK6.rounds("Smoke", null));
+        assertEquals(3, BaselineK6.rounds("Standard", null));
+        assertEquals(2, BaselineK6.rounds("Smoke", "2"));
+        assertThrows(IllegalArgumentException.class, () -> BaselineK6.rounds("Standard", "6"));
+        for (String invalid : List.of("0", "1001", "1,01", "1,", "2.5", "-1")) {
+            assertThrows(IllegalArgumentException.class, () -> BaselineK6.rates(invalid), invalid);
+        }
+        var rates = BaselineK6.rates("101,10");
+        var detail = BaselineK6.stages("Standard", "Detail", rates);
+        assertEquals(List.of("detail-cold-101", "detail-cold-10", "detail-101", "detail-10"),
+                detail.stream().map(BaselineK6.Stage::directory).toList());
+        var mixed = BaselineK6.stages("Smoke", "Mixed", rates).getFirst();
+        assertEquals(BaselineK6.Model.JOURNEYS, mixed.model());
+        assertEquals(404, mixed.vus());
+        var probe = BaselineK6.stages("Smoke", "Like", List.of(1)).getLast();
+        assertEquals("like-probe", probe.scenario());
+        assertEquals(BaselineK6.Model.RPS, probe.model());
+        assertEquals(500, BaselineK6.stages("Smoke", "Search", List.of(1000)).getFirst().vus());
+    }
+
     @Test void readsCompleteRecordsAndKeepsSkippedAndRateLimitedSamples() throws Exception {
         var json = new ObjectMapper();
         var file = root.resolve("requests.log");
@@ -71,10 +92,11 @@ class BaselineToolTests {
                     {"type":"Point","metric":"dropped_iterations","data":{"value":3}}
                     {"type":"Point","metric":"journey_completed","data":{"value":0}}
                     {"type":"Point","metric":"journey_completed","data":{"value":1}}
+                    {"type":"Point","metric":"journey_started","data":{"value":1}}
                     {"type":"Point","metric":"vus","data":{"value":10}}
                     """.getBytes(StandardCharsets.UTF_8));
         }
-        assertEquals(new BaselineStats.K6(0, 3, 2, 1, 10), BaselineStats.k6(raw, json));
+        assertEquals(new BaselineStats.K6(0, 3, 2, 1, 10, 1), BaselineStats.k6(raw, json));
     }
 
     @Test void partialResultsExposeMissingOrResetCounters() throws Exception {
@@ -82,10 +104,12 @@ class BaselineToolTests {
         assertEquals(4L, BaselineStats.delta(20, 24));
         assertTrue(BaselineStats.growing(List.of(1L, 1L, 6L, 7L, 19L, 20L)));
         assertFalse(BaselineStats.growing(List.of(1L, 15L, 2L, 17L, 1L, 15L)));
-        var stage = BaselineReport.Stage.failed(1, new BaselineK6.Stage("detail", 50, 64), "采集缺失");
-        BaselineReport.write(root, "Smoke", List.of(stage), false, "运行中断");
+        var planned = new BaselineK6.Stage("detail", 50, 64);
+        var stage = BaselineReport.Stage.failed(1, planned, "采集缺失");
+        BaselineReport.write(root, "Smoke", new BaselineReport.Plan(2, List.of(planned)), List.of(stage), false, "运行中断");
         var report = Files.readString(root.resolve("report.md"));
         assertTrue(report.contains("部分结果") && report.contains("采集缺失"));
         assertFalse(new ObjectMapper().readTree(root.resolve("summary.json").toFile()).path("complete").asBoolean());
+        assertEquals(2, new ObjectMapper().readTree(root.resolve("summary.json").toFile()).path("plan").path("rounds").asInt());
     }
 }

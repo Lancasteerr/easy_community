@@ -9,11 +9,14 @@
 ```powershell
 ./infra/test/performance/run.ps1 -Baseline Smoke
 ./infra/test/performance/run.ps1 -Baseline Standard -Scenario Search
+./infra/test/performance/run.ps1 -Baseline Standard -Scenario Search -Rounds 1 -Rps 50
 ./infra/test/performance/run.ps1 -Baseline Standard
 ./infra/test/performance/run.ps1 -Baseline Exploration -Scenario Like
 ```
 
-`-Scenario` 可取 `All`、`Search`、`Detail`、`Like`、`Mixed`，默认 `All`。Smoke 使用 32 账号、96 篇文章、384 条点赞关系。正式基线固定种子，导入 1 万账号、5 万篇文章、50 万条关系并核验 ES 和 SQL，运行三轮。每档预热 60 秒、测量 5 分钟；冷详情有独立缓存命名空间，直接采首分钟。等待自然 PV 刷盘或异步点赞排空最多 120 秒。全量正式基线的测量和预热窗口本身约 4 小时，另计导入、启动和排空。
+`-Scenario` 可取 `All`、`Search`、`Detail`、`Like`、`Mixed`，默认 `All`。`-Rounds` 支持 1–5，Smoke 默认 1 轮，Standard 和 Exploration 默认 3 轮。`-Rps '25,50,100'` 按给定顺序替换所选场景的全部默认压力档，取值为 1–1000 的不重复整数。混合默认用 VU，指定 RPS 后按每秒启动的旅程数发压，报告另列实际 HTTP RPS。
+
+默认 Smoke 使用 32 账号、96 篇文章、384 条点赞关系。正式基线固定种子，导入 1 万账号、5 万篇文章、50 万条关系并核验 ES 和 SQL。每档预热 60 秒、测量 5 分钟。冷详情有独立缓存命名空间，直接采首分钟。等待自然 PV 刷盘或异步点赞排空最多 120 秒。全量正式基线的测量和预热窗口本身约 4 小时，另计导入、启动和排空。
 
 - 搜索和详情为 50／100／200 RPS，搜索正式档用默认 20 条分页。点赞分散和单篇热点为 60／120 RPS，探索档为 240 RPS。混合旅程为 50／100／200 VU，游客占 30%。登录与 CSRF 在窗口外完成。混合保留每账号 120 请求／分钟、60 点赞／分钟；独立详情放宽认证请求上限，点赞容量档放宽两种上限。配置逐档保存。
 - 单 JVM 应用与独立 k6 进程同机。数据库和 ES 索引为本次随机生成，Redis 和 MQ 按档隔离。每档还原上档修改的点赞与 PV 数据，复用已验证的种子和 ES 索引。rank 定时任务停用，PV 定时刷盘及点赞消费照常启用。

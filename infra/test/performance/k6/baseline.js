@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import exec from 'k6/execution';
 import { check, sleep } from 'k6';
-import { Rate } from 'k6/metrics';
+import { Counter, Rate } from 'k6/metrics';
 import {
   choose, detailArticle, distributedArticle, randomFor, searchPath, sessionFor, utf8Bytes, validDetail, validLike, validSearch,
 } from './workload.mjs';
@@ -11,8 +11,9 @@ const scenario = __ENV.EC_BASELINE_SCENARIO;
 const duration = __ENV.EC_BASELINE_DURATION + 's';
 const load = Number(__ENV.EC_BASELINE_LOAD);
 const vus = Number(__ENV.EC_BASELINE_VUS);
-const closed = scenario === 'mixed' || scenario === 'like-probe';
+const closed = __ENV.EC_BASELINE_MODEL === 'VU';
 const journey = new Rate('journey_completed');
+const journeyStarted = new Counter('journey_started');
 
 export const options = {
   scenarios: {
@@ -103,7 +104,10 @@ export default function () {
     return;
   }
   if (scenario === 'mixed') {
-    const identity = vu <= Math.round(vus * 0.3) ? null : session;
+    journeyStarted.add(1);
+    // 开放模型动态复用 VU，按旅程抽取游客，闭合模型仍沿用固定的游客 VU。
+    const guest = closed ? vu <= Math.round(vus * 0.3) : random() < 0.3;
+    const identity = guest ? null : session;
     const query = choose(config.queries.filter(item => !item.empty), random);
     const page = search(query, identity);
     if (!page) { journey.add(false); return; }

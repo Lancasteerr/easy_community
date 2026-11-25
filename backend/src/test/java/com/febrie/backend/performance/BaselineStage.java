@@ -72,12 +72,21 @@ final class BaselineStage {
                             java.util.stream.Collectors.counting())));
             long successes = events.stream().filter(BaselineJournal.Event::ok).count();
             if (events.isEmpty() || successes * 100 < events.size() * 99L) { issues.add("业务检查成功率低于 99% 或没有样本"); }
-            if (!stage.closed() && (k6.dropped() * 100 > (long) seconds * stage.load()
-                    || events.size() != k6.iterations() || k6.iterations() + k6.dropped() < (long) seconds * stage.load() * .99)) {
-                issues.add("未达到计划到达率或请求样本与 k6 迭代数不符");
+            long planned = (long) seconds * stage.load();
+            if (!stage.closed()) {
+                // 混合按旅程计数，单接口档仍核对一迭代一条主请求。
+                long started = stage.mixed() ? k6.startedJourneys() : events.size();
+                if (k6.dropped() * 100 > planned || started != k6.iterations() || started < planned * .99) {
+                    issues.add("未达到计划到达率或主负载与 k6 迭代数不符");
+                }
             }
-            if (stage.scenario().equals("mixed") && (k6.journeys() == 0
-                    || 100 * k6.successfulJourneys() < 99 * k6.journeys())) { issues.add("完整旅程通过率低于 99%"); }
+            if (stage.mixed()) {
+                diagnostics.put("journeyStartsPerSecond", k6.startedJourneys() / (double) seconds);
+                diagnostics.put("httpRequestsPerSecond", events.size() / window);
+                if (k6.startedJourneys() == 0 || 100 * k6.successfulJourneys() < 99 * k6.startedJourneys()) {
+                    issues.add("完整旅程通过率低于 99%");
+                }
+            }
             if (hostSaturated()) { issues.add("宿主机 CPU 连续三次采样超过 90%，发压与依赖资源可能争用"); }
             var depth = samples.stream().filter(sample -> sample.phase().equals("measure") && sample.mq() != null)
                     .map(sample -> sample.mq().pending()).toList();
@@ -86,7 +95,7 @@ final class BaselineStage {
             if (growing || partitionGrowing) { issues.add("稳态 MQ 积压持续增长"); }
             if (recoveryProbe && peakPending() == 0) { issues.add("暂停消费后未观察到积压"); }
             int likeOverlap = BaselineStats.likeUsersInFlight(events);
-            if (recoveryProbe && likeOverlap < 2) { issues.add("未观察到不同账号的热点写并发"); }
+            if (recoveryProbe && stage.closed() && likeOverlap < 2) { issues.add("未观察到不同账号的热点写并发"); }
             Long waits = sqlDelta(first, end, true), waitMs = sqlDelta(first, end, false);
             diagnostics.put("acceptedInMeasure", events.stream().filter(BaselineJournal.Event::accepted).count());
             diagnostics.put("sampledSqlCoverageCount", reconcile.coverage().size());
@@ -96,7 +105,7 @@ final class BaselineStage {
             diagnostics.put("deadLetterPeak", samples.stream().filter(sample -> sample.mq() != null)
                     .mapToLong(sample -> sample.mq().dead()).max().orElse(0));
             diagnostics.put("partitionMq", partitionDeltas(first, end, window));
-            return new BaselineReport.Stage(round, stage.scenario(), stage.load(), stage.closed() ? "VU" : "RPS",
+            return new BaselineReport.Stage(round, stage.scenario(), stage.load(), stage.model().label,
                     issues.isEmpty(), issues.stream().distinct().toList(), routes, k6, stage.vus(), BaselineStats.overlap(events),
                     likeOverlap, peakPending(), growing || partitionGrowing, waits, waitMs, drain.coverageMs(), drain.mqMs(),
                     drain.like(), drain.pv(), diagnostics);

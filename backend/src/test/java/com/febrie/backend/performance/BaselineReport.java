@@ -11,13 +11,15 @@ import tools.jackson.databind.ObjectMapper;
 
 /** 同一份汇总生成机器可读文件和人读报告，失效与部分成功也写入索引。 */
 final class BaselineReport {
+    record Plan(int rounds, List<BaselineK6.Stage> stages) { }
+
     record Stage(int round, String scenario, int load, String model, boolean passed, List<String> issues,
                  Map<String, BaselineStats.Route> routes, BaselineStats.K6 k6, int configuredVus, int inFlight,
                  int likeInFlight, long backlogPeak, boolean backlogGrowing, Long rowLockWaits, Long rowLockMs,
                  Long sqlCoverageMs, Long mqDrainMs, BaselineReconcile.Audit likeAudit, BaselineReconcile.Pv pvAudit,
                  Map<String, Object> diagnostics) {
         static Stage failed(int round, BaselineK6.Stage stage, String reason) {
-            return new Stage(round, stage.scenario(), stage.load(), stage.closed() ? "VU" : "RPS", false,
+            return new Stage(round, stage.scenario(), stage.load(), stage.model().label, false,
                     List.of(reason == null ? "执行失败" : reason), Map.of(), null, stage.vus(), 0, 0, 0, false,
                     null, null, null, null, null, null, Map.of());
         }
@@ -25,12 +27,16 @@ final class BaselineReport {
 
     private BaselineReport() { }
 
-    static void write(Path root, String mode, List<Stage> stages, boolean complete, String failure) throws IOException {
+    static void write(Path root, String mode, Plan plan, List<Stage> stages, boolean complete, String failure)
+            throws IOException {
         var json = new ObjectMapper();
         json.writerWithDefaultPrettyPrinter().writeValue(root.resolve("summary.json").toFile(),
-                Map.of("mode", mode, "complete", complete, "failure", failure == null ? "" : failure, "stages", stages));
+                Map.of("mode", mode, "plan", plan, "complete", complete, "failure", failure == null ? "" : failure,
+                        "stages", stages));
         var report = new StringBuilder("# k6 压测报告\n\n");
         report.append("模式 **").append(mode).append("** · ").append(complete ? "运行结束" : "部分结果").append("\n\n");
+        report.append("计划 ").append(plan.rounds()).append(" 轮，每轮 ").append(plan.stages().size())
+                .append(" 档，已记录 ").append(stages.size()).append(" 档。\n\n");
         if (failure != null) { report.append("运行错误：").append(failure.replace('\n', ' ')).append("\n\n"); }
         report.append("""
                 环境见 [metadata.json](metadata.json)，数据见 [seed.json](seed.json)，结构化汇总见 [summary.json](summary.json)。
@@ -55,6 +61,10 @@ final class BaselineReport {
                 }
             }
             report.append("。\n");
+            if (stage.diagnostics().containsKey("journeyStartsPerSecond")) {
+                report.append(String.format(Locale.ROOT, "- 实际启动 %.2f 旅程/秒，合计 %.2f HTTP 请求/秒。%n",
+                        stage.diagnostics().get("journeyStartsPerSecond"), stage.diagnostics().get("httpRequestsPerSecond")));
+            }
             if (stage.likeAudit() != null) {
                 report.append("- 点赞并发账号峰值 ").append(stage.likeInFlight()).append("，HTTP 受理 ")
                         .append(stage.likeAudit().accepted()).append("，最终关系 ")

@@ -21,8 +21,15 @@ class BaselinePerformanceTests {
         boolean smoke = mode.equals("Smoke");
         Path root = Path.of(System.getenv("IT_BASELINE_OUTPUT"));
         Path script = Path.of(System.getenv("IT_BASELINE_SCRIPT"));
-        var size = smoke ? BaselineData.Size.SMOKE : BaselineData.Size.STANDARD;
-        var stages = BaselineK6.stages(mode, System.getenv("IT_BASELINE_SCENARIO"));
+        int rounds = BaselineK6.rounds(mode, System.getenv("IT_BASELINE_ROUNDS"));
+        var stages = BaselineK6.stages(mode, System.getenv("IT_BASELINE_SCENARIO"),
+                BaselineK6.rates(System.getenv("IT_BASELINE_RPS")));
+        var baseSize = smoke ? BaselineData.Size.SMOKE : BaselineData.Size.STANDARD;
+        // 自定义到达率可能需要更多 VU，会话槽与测试账号一一对应。
+        int accounts = stages.stream().filter(BaselineK6.Stage::needsSessions).mapToInt(BaselineK6.Stage::vus)
+                .max().orElse(0);
+        var size = new BaselineData.Size(Math.max(accounts, baseSize.users()), baseSize.articles(), baseSize.likesPerArticle());
+        var plan = new BaselineReport.Plan(rounds, stages);
         var workload = BaselineData.workload(size);
         var results = new ArrayList<BaselineReport.Stage>();
         var json = new ObjectMapper();
@@ -39,7 +46,7 @@ class BaselinePerformanceTests {
             seed.put("queries", workload.queries()); seed.put("rankScheduling", false);
             seed.put("searchPageSize", smoke ? 5 : 20);
             json.writeValue(root.resolve("seed.json").toFile(), seed);
-            for (int round = 1; round <= (smoke ? 1 : 3); round++) {
+            for (int round = 1; round <= rounds; round++) {
                 for (var stage : stages) {
                     Path output = Files.createDirectories(root.resolve("round-" + round).resolve(stage.directory()));
                     System.out.println("基线第 " + round + " 轮：" + stage.directory());
@@ -52,14 +59,14 @@ class BaselinePerformanceTests {
                         error.printStackTrace(System.err);
                     }
                     results.add(outcome);
-                    BaselineReport.write(root, mode, results, false, null);
+                    BaselineReport.write(root, mode, plan, results, false, null);
                 }
             }
             complete = true;
         } catch (Exception | LinkageError | AssertionError error) {
             failure = error.getMessage();
             throw error;
-        } finally { BaselineReport.write(root, mode, results, complete, failure); }
+        } finally { BaselineReport.write(root, mode, plan, results, complete, failure); }
         assertTrue(results.stream().allMatch(BaselineReport.Stage::passed), "存在未通过的阶段，请检查 report.md");
     }
 
@@ -67,7 +74,7 @@ class BaselinePerformanceTests {
                                          Path script, Path output, BaselineData.Workload workload, boolean smoke) throws Exception {
         Path input = Files.createTempFile("ec-k6-session-", ".json");
         try {
-            var sessions = stage.scenario().equals("search") ? List.of() : site.sessions(stage.vus());
+            var sessions = stage.needsSessions() ? site.sessions(stage.vus()) : List.of();
             site.json.writeValue(input.toFile(), Map.of("base", site.base, "seed", workload.seed(),
                     "articles", workload.articles(), "partitions", workload.partitions(), "queries", workload.queries(),
                     "sessions", sessions, "pageSize", smoke ? 5 : 20));
