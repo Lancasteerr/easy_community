@@ -1,10 +1,12 @@
 package com.febrie.backend.article.comment.infrastructure.redis;
 
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore.ReplyTarget;
 import com.febrie.backend.shared.cache.CacheProtocol;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -37,5 +39,32 @@ class CommentValuesTests {
         assertTrue(values.objects(List.of(7L)).isEmpty());
         verify(store).findAll(anyCollection());
         verify(commands, times(3)).multiGet(List.of(key));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void replyTargetMetadataDoesNotUseThePublicCommentObjectCache() {
+        var redis = mock(StringRedisTemplate.class);
+        var commands = (ValueOperations<String, String>) mock(ValueOperations.class);
+        var store = mock(CommentStore.class);
+        var json = new JsonMapper();
+        String key = "test:comment:v1:reply-target:{7}";
+        String lock = key + ":lock";
+        var target = new ReplyTarget(1, 3, 9);
+        var payload = json.writeValueAsString(target);
+        var missing = Collections.<String>singletonList(null);
+        // 已删除目标可能在公开对象缓存中缺失，回复组装仍能回源并缓存其作者元数据。
+        when(redis.opsForValue()).thenReturn(commands);
+        when(commands.multiGet(List.of(key))).thenReturn(missing, missing, List.of(payload));
+        when(commands.setIfAbsent(eq(lock), anyString(), eq(CacheProtocol.LOCK_TTL))).thenReturn(true);
+        when(store.findReplyTargets(Set.of(7L))).thenReturn(Map.of(7L, target));
+        when(redis.execute(any(RedisScript.class), eq(List.of(lock, key)),
+                anyString(), eq("write"), eq("120000"), eq(payload))).thenReturn(1L);
+
+        var values = new CommentValues(store, redis, json, "test");
+        assertEquals(target, values.replyTargets(List.of(7L)).get(7L));
+        assertEquals(target, values.replyTargets(List.of(7L)).get(7L));
+        verify(store).findReplyTargets(Set.of(7L));
+        verifyNoMoreInteractions(store);
     }
 }

@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { CommentItem, CommentSort } from '../../api/comments';
 import type { PublicUserProfile } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
@@ -8,6 +8,7 @@ import { CommentComposer } from './CommentComposer';
 import { CommentThread } from './CommentThread';
 import { useCommentDrafts, type ReplyTarget } from './useCommentDrafts';
 import { useComments } from './useComments';
+import { mergePublishedComments, usePublishedComments } from './usePublishedComments';
 import './comments.css';
 
 interface CommentSectionProps {
@@ -23,19 +24,26 @@ interface CommentSectionProps {
 /** 评论卡片先挂载定位锚点，列表请求独立于文章阅读。 */
 export function CommentSection({ articleId, authorId, count, viewerProfile, anchor, onCount, onLogin }: CommentSectionProps) {
   const [sort, setSort] = useState<CommentSort>('hot');
-  const [threadSubmissions, setThreadSubmissions] = useState<Record<string, string>>({});
   const countRevision = useRef(0);
   const { page, loading, failure, load } = useComments(articleId, sort, onCount, countRevision);
   const auth = useAuth();
+  const userId = auth.identity?.userId;
+  const { byRoot, remember, reconcile } = usePublishedComments(articleId, userId);
+  const publishedRoots = byRoot.get(null);
+  const officialRoots = page?.items;
+  const roots = mergePublishedComments(publishedRoots, officialRoots);
+  useEffect(() => {
+    if (publishedRoots?.length && officialRoots) reconcile(null, officialRoots);
+  }, [officialRoots, publishedRoots, reconcile]);
+
   const notify = useToast();
   const canPublish = auth.status === 'authenticated' && !auth.refreshing && !auth.error;
   const canReply = auth.status === 'guest' || canPublish;
-  const drafts = useCommentDrafts(articleId, canPublish, auth.identity?.userId, (target, submissionId, confirmedCount) => {
-    if (target) {
-      setThreadSubmissions((previous) => ({ ...previous, [target.rootId]: submissionId }));
-    } else if (typeof confirmedCount === 'number') {
+  const drafts = useCommentDrafts(articleId, canPublish, userId, (target, result) => {
+    if (result.comment) remember(result.comment);
+    if (!target && typeof result.commentCount === 'number') {
       countRevision.current++;
-      onCount(confirmedCount);
+      onCount(result.commentCount);
     }
     notify('已发布');
   });
@@ -65,9 +73,10 @@ export function CommentSection({ articleId, authorId, count, viewerProfile, anch
         <button type="button" aria-pressed={sort === 'latest'} onClick={() => setSort('latest')}>最新</button>
       </div>
     </div>
-    {page?.items.length ? <ul className="comment-list" aria-label="评论列表">
-      {page.items.map((root) => <CommentThread key={root.id} articleId={articleId} authorId={authorId} root={root} onLogin={onLogin}
-        onReply={openReply} canReply={canReply} editingId={drafts.target?.id} refreshSubmission={threadSubmissions[root.id]}
+    {roots.length ? <ul className="comment-list" aria-label="评论列表">
+      {roots.map((root) => <CommentThread key={root.id} articleId={articleId} authorId={authorId} root={root} onLogin={onLogin}
+        onReply={openReply} canReply={canReply} editingId={drafts.target?.id} publishedReplies={byRoot.get(root.id)}
+        reconcilePublishedReplies={reconcile}
         editor={drafts.target?.rootId === root.id && auth.status === 'authenticated' ? composer(drafts.target) : null} />)}
     </ul> : null}
     {loading && <p className="comment-status" role="status">正在加载评论…</p>}
@@ -77,7 +86,7 @@ export function CommentSection({ articleId, authorId, count, viewerProfile, anch
     </div>}
     {!loading && !failure && page && <div className="comment-status">
       {page.hasMore ? <button type="button" className="comment-action" onClick={() => void load(page.nextCursor)}>加载更多评论</button>
-        : page.items.length ? '已显示全部评论'
+        : roots.length ? '已显示全部评论'
           : count ? <>暂未加载到评论 <button type="button" className="comment-action" onClick={() => void load(null)}>重新加载</button></>
             : '还没有评论，来分享你的想法吧'}
     </div>}

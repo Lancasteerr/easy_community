@@ -51,7 +51,7 @@ it('导航和两个评论编辑器共用当前登录账号的头像资料', asyn
   vi.mocked(getSession).mockResolvedValue(viewer);
   vi.mocked(getPublicProfile).mockResolvedValue(viewer);
   vi.mocked(getComments).mockResolvedValue({
-    items: [{ id: '1', rootId: null, replyToId: null, author: { id: '8', username: '评论作者' },
+    items: [{ id: '1', rootId: null, author: { id: '8', username: '评论作者' },
       content: '已有评论', createdAt: viewer.createdAt }],
     nextCursor: null, hasMore: false, commentCount: 1,
   });

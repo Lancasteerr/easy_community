@@ -1,7 +1,6 @@
 package com.febrie.backend.article.comment.infrastructure.persistence;
 
 import com.febrie.backend.article.comment.application.query.CommentListKey;
-import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshot;
 import java.sql.Statement;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -31,14 +30,49 @@ public class CommentStore {
         this.sql = sql;
     }
 
+    /** 删除回复只检查查询时的文章可见性。 */
+    public boolean isPublicArticle(long id) {
+        return Boolean.TRUE.equals(sql.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM article WHERE id = ? AND hidden = FALSE)", Boolean.class, id));
+    }
+
     public boolean lockPublicArticle(long id, boolean exclusive) {
         return sql.query("SELECT hidden FROM article WHERE id = ? " + (exclusive ? "FOR UPDATE" : "FOR SHARE"),
                 (rs, index) -> !rs.getBoolean(1), id).stream().findFirst().orElse(false);
     }
 
+    /** 文章共享锁已阻止隐藏和删除一级评论，查询仅对实际回复目标加共享锁。 */
+    public ReplyTarget lockReplyTargetAndFindRoot(long article, long replyToId) {
+        return sql.query("""
+                SELECT root.id, target.author_id
+                FROM article_comment target
+                JOIN article_comment root
+                  ON root.id = CASE WHEN target.root_id = 0 THEN target.id ELSE target.root_id END
+                 AND root.article_id = target.article_id
+                 AND root.root_id = 0 AND root.deleted = FALSE
+                WHERE target.id = ? AND target.article_id = ? AND target.deleted = FALSE
+                FOR SHARE OF target
+                """, (rs, index) -> new ReplyTarget(article, rs.getLong(1), rs.getLong(2)), replyToId, article)
+                .stream().findFirst().orElse(null);
+    }
+
     public CommentRow find(long id, boolean lock) {
         return sql.query("SELECT " + COLUMNS + " FROM article_comment WHERE id = ?" + (lock ? " FOR UPDATE" : ""),
                 ROW, id).stream().findFirst().orElse(null);
+    }
+
+    /** 仅在回显已提交结果时读取单条评论，同时检查文章及楼层的当前可见性。 */
+    public CommentRow findVisiblePublished(long article, long author, long id) {
+        return sql.query("SELECT " + COLUMNS + " " + """
+                FROM article_comment c
+                 WHERE c.id = ? AND c.article_id = ? AND c.author_id = ? AND c.deleted = FALSE
+                   AND EXISTS (SELECT 1 FROM article a WHERE a.id = c.article_id AND a.hidden = FALSE)
+                   AND (c.root_id = 0 OR EXISTS (
+                       SELECT 1 FROM article_comment root
+                       WHERE root.id = c.root_id AND root.article_id = c.article_id
+                         AND root.root_id = 0 AND root.deleted = FALSE
+                   ))
+                """, ROW, id, article, author).stream().findFirst().orElse(null);
     }
 
     public Map<Long, CommentRow> findAll(Collection<Long> ids) {
@@ -49,6 +83,24 @@ public class CommentStore {
         }
         return result;
     }
+
+    /** 目标软删除后仍保留归属与作者；这里不读取正文，也不参与可见性判断。 */
+    public Map<Long, ReplyTarget> findReplyTargets(Collection<Long> ids) {
+        var result = new HashMap<Long, ReplyTarget>();
+        if (!ids.isEmpty()) {
+            sql.query("SELECT id, article_id, root_id, author_id FROM article_comment WHERE id IN ("
+                    + placeholders(ids.size()) + ")", (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                        long id = rs.getLong("id");
+                        long rootId = rs.getLong("root_id");
+                        result.put(id, new ReplyTarget(rs.getLong("article_id"), rootId == 0 ? id : rootId,
+                                rs.getLong("author_id")));
+                    }, ids.toArray());
+        }
+        return result;
+    }
+
+    /** rootId 始终是所属楼层 ID；目标本身是一级评论时取目标自己的 ID。 */
+    public record ReplyTarget(long articleId, long rootId, long authorId) { }
 
     public CommentRow insert(long article, long root, Long replyTo, long author, String content, Instant now) {
         var key = new GeneratedKeyHolder();
@@ -73,9 +125,16 @@ public class CommentStore {
     }
 
     public void delete(CommentRow row) {
-        int changed = sql.update("UPDATE article_comment SET deleted = TRUE, content = NULL, index_version = index_version + (root_id = 0) WHERE id = ? AND deleted = FALSE",
-                row.id());
-        if (changed != 1) throw new IllegalStateException("评论删除状态发生变化");
+        if (!deleteIfActive(row)) throw new IllegalStateException("评论删除状态发生变化");
+    }
+
+    /** 只有首次软删除返回成功，一级评论同时递增索引版本。 */
+    public boolean deleteIfActive(CommentRow row) {
+        return sql.update("""
+                UPDATE article_comment
+                SET deleted = TRUE, content = NULL, index_version = index_version + (root_id = 0)
+                WHERE id = ? AND deleted = FALSE
+                """, row.id()) == 1;
     }
 
     public void appendIndex(long id) {
@@ -121,16 +180,6 @@ public class CommentStore {
                     result.computeIfAbsent(row.rootId(), ignored -> new ArrayList<>(3)).add(row));
         }
         return result;
-    }
-
-    /** 发布后沿用回复游标补读一页，避免为了单次确认重建共享快照。 */
-    public List<CommentRow> repliesAfter(CommentListKey key, String position, int limit) {
-        String scope = "SELECT " + COLUMNS + " FROM article_comment WHERE article_id = ? AND root_id = ? AND deleted = FALSE ";
-        String order = "ORDER BY created_at, id LIMIT ?";
-        if (position.isEmpty()) return sql.query(scope + order, ROW, key.articleId(), key.rootId(), limit);
-        var time = LocalDateTime.ofInstant(Instant.ofEpochMilli(Long.parseLong(position.substring(0, 19))), ZoneOffset.UTC);
-        return sql.query(scope + "AND (created_at > ? OR (created_at = ? AND id > ?)) " + order, ROW,
-                key.articleId(), key.rootId(), time, time, CommentSnapshot.commentId(position), limit);
     }
 
     /** 主库按不可变时间键读取，查询返回后才向 Redis 写这一批。 */

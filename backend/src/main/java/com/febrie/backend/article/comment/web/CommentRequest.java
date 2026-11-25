@@ -6,7 +6,8 @@ import com.febrie.backend.article.common.ArticleIds;
 import tools.jackson.databind.JsonNode;
 
 /** 两个发布入口共用纯文字及可选回复对象的请求格式。 */
-final class CommentRequest {
+final class
+CommentRequest {
     private CommentRequest() { }
 
     static CommentInput read(JsonNode body) {

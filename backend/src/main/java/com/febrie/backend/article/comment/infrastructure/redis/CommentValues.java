@@ -3,6 +3,7 @@ package com.febrie.backend.article.comment.infrastructure.redis;
 import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore.ReplyTarget;
 import com.febrie.backend.shared.cache.CacheProtocol;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -59,6 +60,12 @@ public class CommentValues {
     public Map<Long, CommentRow> objects(Collection<Long> ids) {
         return load("visible-object", ids, 120_000, store::findAll, json::writeValueAsString,
                 value -> json.readValue(value, CommentRow.class));
+    }
+
+    /** 回复目标归属与作者在软删除时保持有效，与公开评论对象使用不同的缓存键。 */
+    public Map<Long, ReplyTarget> replyTargets(Collection<Long> ids) {
+        return load("reply-target", ids, 120_000, store::findReplyTargets, json::writeValueAsString,
+                value -> json.readValue(value, ReplyTarget.class));
     }
 
     void invalidateCount(long articleId) {

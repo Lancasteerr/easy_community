@@ -26,17 +26,18 @@ public class CommentWriteService {
             access.article(article);
             return commands.submit(new CommentCommand(article, actor, operation, null, input.content()));
         }
-        var row = writes.createReply(article, actor, input.replyToId(), input.content());
-        return new CreatedReply(views.created(row, username));
+        var created = writes.createReply(article, actor, input.replyToId(), input.content());
+        return new CreatedReply(views.createdReply(created.row(), username, created.targetAuthorId()));
     }
 
     /** 一级评论返回异步凭证，回复删除完成后返回空结果。 */
     public Optional<Accepted> delete(long article, long comment, UserActor actor, String operation) {
-        if (writes.deletionTarget(article, comment, actor).rootId() == 0) {
+        var target = writes.deletionTarget(article, comment, actor);
+        if (target.rootId() == 0) {
             access.article(article);
             return Optional.of(commands.submit(new CommentCommand(article, actor, operation, comment, null)));
         }
-        writes.deleteReply(article, comment, actor);
+        writes.deleteReply(target);
         return Optional.empty();
     }
 

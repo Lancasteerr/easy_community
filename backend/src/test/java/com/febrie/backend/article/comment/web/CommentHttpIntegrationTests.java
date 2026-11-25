@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +40,7 @@ class CommentHttpIntegrationTests {
     private static final String PREFIX = "ec:test:comment:" + UUID.randomUUID();
     @LocalServerPort int port;
     @Autowired JdbcTemplate sql;
+    @Autowired DataSource dataSource;
     @Autowired StringRedisTemplate redis;
     @Autowired CommentSnapshotCache cache;
     @Autowired ObjectMapper json;
@@ -90,14 +92,19 @@ class CommentHttpIntegrationTests {
             String replyRoute = route + "/" + root + "/replies";
             var first = json.readTree(send(ownerBrowser, "POST", route,
                     Map.of("content", "旧回复", "replyToId", Long.toString(root)), csrf, 201));
+            assertFalse(first.has("replyToUsername"));
+            assertFalse(first.has("replyToId"));
             var old = get(http, replyRoute, 200);
             assertEquals(first.path("id").asString(), old.at("/items/0/id").asString());
+            assertFalse(old.at("/items/0").has("replyToUsername"));
             assertFalse(old.path("hasMore").asBoolean());
             var oldSnapshot = cache.current(key);
             send(ownerBrowser, "POST", route, Map.of("content", "新回复", "replyToId", Long.toString(root)), null, 403);
-            var created = json.readTree(send(ownerBrowser, "POST", route,
-                    Map.of("content", "新回复", "replyToId", Long.toString(root)), csrf, 201));
+            String firstId = first.path("id").asString();
+            var created = replyWhileRowsAreLocked(ownerBrowser, route, csrf, root, firstId);
             assertEquals(Long.toString(root), created.path("rootId").asString());
+            assertEquals(authorName, created.path("replyToUsername").asString());
+            assertFalse(created.has("replyToId"));
 
             // 人工推进逻辑到期，通过真实刷新监听器生成下一版楼层索引。
             String base = PREFIX + ":comment:v1:list:{" + article + ":" + root + ":REPLIES}";
@@ -113,10 +120,14 @@ class CommentHttpIntegrationTests {
 
             String replyId = created.path("id").asString();
             assertEquals("", send(ownerBrowser, "DELETE", route + "/" + replyId, null, csrf, 204));
+            send(ownerBrowser, "POST", route, Map.of("content", "回复", "replyToId", replyId), csrf, 404);
 
             String operation = UUID.randomUUID().toString();
             send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
             awaitNotVisible(http, replyRoute);
+            var rejected = json.readTree(send(ownerBrowser, "PUT", route + "/submissions/" + UUID.randomUUID(),
+                    Map.of("content", "回复", "replyToId", firstId), csrf, 200));
+            assertEquals("FAILED", rejected.path("state").asString());
             send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
             assertEquals(0L, get(http, "/api/articles/" + article, 200).path("commentCount").asLong());
             get(http, route + "/" + root, 401);
@@ -131,6 +142,26 @@ class CommentHttpIntegrationTests {
             sql.update("DELETE FROM article WHERE id=?", article);
             sql.update("DELETE FROM user_auth_identity WHERE user_id=?", owner);
             sql.update("DELETE FROM users WHERE id=?", owner);
+        }
+    }
+
+    private JsonNode replyWhileRowsAreLocked(HttpClient client, String route, String csrf, long root, String target)
+            throws Exception {
+        // 模拟索引任务锁住楼层及其他写入共享实际目标，回复仍应在这两个锁释放前提交。
+        try (var connection = dataSource.getConnection();
+             var lockRoot = connection.prepareStatement("SELECT id FROM article_comment WHERE id = ? FOR UPDATE");
+             var lockTarget = connection.prepareStatement("SELECT id FROM article_comment WHERE id = ? FOR SHARE")) {
+            connection.setAutoCommit(false);
+            lockRoot.setLong(1, root);
+            lockTarget.setLong(1, Long.parseLong(target));
+            try (var rootRow = lockRoot.executeQuery(); var targetRow = lockTarget.executeQuery()) {
+                assertTrue(rootRow.next());
+                assertTrue(targetRow.next());
+                return json.readTree(send(client, "POST", route,
+                        Map.of("content", "新回复", "replyToId", target), csrf, 201));
+            } finally {
+                connection.rollback();
+            }
         }
     }
 

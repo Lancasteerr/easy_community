@@ -3,11 +3,11 @@ import type { ArticleLikeAccepted, CsrfToken } from './types';
 
 export type CommentSort = 'hot' | 'latest';
 
-/** 回复沿用楼层和被回复对象的字符串标识。 */
+/** 回复保持在所属楼层，展示时可附带实际回复对象的账号名。 */
 export interface CommentItem {
   id: string;
   rootId: string | null;
-  replyToId: string | null;
+  replyToUsername?: string;
   author: { id: string; username: string; avatarUrl?: string };
   content: string;
   createdAt: string;
@@ -27,6 +27,7 @@ export interface CommentPage {
 export interface CommentSubmission {
   state: 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
   commentCount?: number;
+  comment?: CommentItem;
 }
 
 function commentsPath(articleId: string) {
@@ -39,11 +40,10 @@ export function getComments(articleId: string, sort: CommentSort, cursor: string
   return request<CommentPage>(`${commentsPath(articleId)}?${query}`, { signal });
 }
 
-export function getReplies(articleId: string, rootId: string, cursor: string | null, signal: AbortSignal, submissionId?: string) {
+export function getReplies(articleId: string, rootId: string, cursor: string | null, signal: AbortSignal) {
   const path = `${commentsPath(articleId)}/${encodeURIComponent(rootId)}/replies`;
   const query = new URLSearchParams();
   if (cursor !== null) query.set('cursor', cursor);
-  if (submissionId) query.set('submissionId', submissionId);
   return request<CommentPage>(query.size ? `${path}?${query}` : path, { signal });
 }
 

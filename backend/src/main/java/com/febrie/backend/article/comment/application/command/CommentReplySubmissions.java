@@ -20,19 +20,23 @@ class CommentReplySubmissions {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
-    public CommentCommandResults.Result apply(long article, UserActor actor, String id, CommentInput input, String fingerprint) {
+    public Applied apply(long article, UserActor actor, String id, CommentInput input, String fingerprint) {
         var existing = results.find(article, actor.userId(), id);
-        if (existing != null) return existing.requireFingerprint(fingerprint);
+        if (existing != null) return new Applied(existing.requireFingerprint(fingerprint), null);
 
-        Long commentId = null;
+        CommentWrites.CreatedReply created = null;
         String error = null;
         try {
-            commentId = writes.insertReply(article, actor, input.replyToId(), input.content()).id();
+            created = writes.insertReply(article, actor, input.replyToId(), input.content());
         } catch (ApiException failure) {
             if (failure.status() != HttpStatus.NOT_FOUND) throw failure;
             error = failure.code();
         }
+        Long commentId = created == null ? null : created.row().id();
         results.insert(article, actor.userId(), id, fingerprint, commentId, error);
-        return new CommentCommandResults.Result(fingerprint, commentId, error);
+        return new Applied(new CommentCommandResults.Result(fingerprint, commentId, error), created);
     }
+
+    /** 仅首次写入携带当前事务生成的评论；重放以已持久化的提交结果为准。 */
+    record Applied(CommentCommandResults.Result result, CommentWrites.CreatedReply created) { }
 }

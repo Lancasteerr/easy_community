@@ -83,14 +83,8 @@ public class CommentController {
     @GetMapping("/{rootId}/replies")
     public CommentLists.Response replies(@PathVariable String articleId, @PathVariable String rootId,
                                          @RequestParam(required = false) String cursor,
-                                         @RequestParam(required = false) String submissionId,
                                          @AuthenticationPrincipal SessionPrincipal principal) {
         var key = new CommentListKey(ArticleIds.parse(articleId), ArticleIds.parse(rootId), CommentListKey.Sort.REPLIES);
-        if (submissionId != null) {
-            var actor = actor(principal);
-            submissions.requirePublishedReply(key.articleId(), key.rootId(), actor, submissionId);
-            return lists.publishedReplyPage(key, 10, cursor, actor.userId());
-        }
         return lists.page(key, 10, cursor, user(principal));
     }
 
@@ -111,7 +105,8 @@ public class CommentController {
     public ResponseEntity<CommentSubmissions.View> submit(@PathVariable String articleId, @PathVariable String submissionId,
                                                           @RequestBody JsonNode body,
                                                           @AuthenticationPrincipal SessionPrincipal principal) {
-        return submission(submissions.submit(ArticleIds.parse(articleId), actor(principal), submissionId, CommentRequest.read(body)));
+        return submission(submissions.submit(ArticleIds.parse(articleId), actor(principal), principal.username(),
+                submissionId, CommentRequest.read(body)));
     }
 
     @GetMapping("/submissions/{submissionId}")

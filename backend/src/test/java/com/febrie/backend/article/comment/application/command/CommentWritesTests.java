@@ -1,5 +1,7 @@
 package com.febrie.backend.article.comment.application.command;
 
+import com.febrie.backend.article.comment.application.CommentAccess;
+import com.febrie.backend.article.comment.application.query.CommentViews;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentMaintenance;
@@ -20,6 +22,8 @@ class CommentWritesTests {
     private final CommentStore store = mock(CommentStore.class);
     private final CommentMaintenance maintenance = mock(CommentMaintenance.class);
     private final CommentWrites writes = new CommentWrites(store, maintenance, Clock.systemUTC());
+    private final CommentWriteService service = new CommentWriteService(
+            mock(CommentAccess.class), mock(CommentCommands.class), writes, mock(CommentViews.class));
     private final UserActor author = new UserActor(2, Role.USER, 1);
 
     @Test
@@ -33,15 +37,19 @@ class CommentWritesTests {
     @Test
     void firstDeleteWritesOnceAndPublishesOnlyAfterCommit() {
         var active = row(1);
-        when(store.lockPublicArticle(1, false)).thenReturn(true);
-        when(store.find(3, false)).thenReturn(active);
-        when(store.find(7, true)).thenReturn(new CommentRow(7, 1, 0, null, 2, "楼层", Instant.EPOCH, false));
-        when(store.find(3, true)).thenReturn(active, new CommentRow(3, 1, 7, 7L, 2, null, Instant.EPOCH, true));
+        var deleted = new CommentRow(3, 1, 7, 7L, 2, null, Instant.EPOCH, true);
+        when(store.find(3, false)).thenReturn(active, deleted);
+        when(store.isPublicArticle(1)).thenReturn(true);
+        when(store.deleteIfActive(active)).thenReturn(true);
         TransactionSynchronizationManager.initSynchronization();
         try {
-            writes.deleteReply(1, 3, author);
-            writes.deleteReply(1, 3, author);
-            verify(store).delete(active);
+            assertTrue(service.delete(1, 3, author, null).isEmpty());
+            assertTrue(service.delete(1, 3, author, null).isEmpty());
+            // 每次只读取一次目标和文章，不查询楼层，也不执行加锁查询。
+            verify(store, times(2)).find(3, false);
+            verify(store, times(2)).isPublicArticle(1);
+            verify(store).deleteIfActive(active);
+            verifyNoMoreInteractions(store);
             verifyNoInteractions(maintenance);
             var callbacks = TransactionSynchronizationManager.getSynchronizations();
             assertEquals(1, callbacks.size());
@@ -53,19 +61,54 @@ class CommentWritesTests {
     }
 
     @Test
-    void foreignReplyAndUnauthorizedDeletionAreRejected() {
+    void concurrentDeleteSucceedsWithoutRegisteringInvalidation() {
+        var active = row(1);
+        when(store.find(3, false)).thenReturn(active);
+        when(store.isPublicArticle(1)).thenReturn(true);
+        // 查询时回复仍有效，但在条件更新前已被另一个请求删除。
+        when(store.deleteIfActive(active)).thenReturn(false);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertTrue(service.delete(1, 3, author, null).isEmpty());
+            verify(store).deleteIfActive(active);
+            assertTrue(TransactionSynchronizationManager.getSynchronizations().isEmpty());
+            verifyNoInteractions(maintenance);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void hiddenArticleRejectsReplyDeletion() {
+        when(store.find(3, false)).thenReturn(row(1));
+        when(store.isPublicArticle(1)).thenReturn(false);
+        assertEquals("COMMENT_NOT_FOUND", assertThrows(ApiException.class,
+                () -> service.delete(1, 3, author, null)).code());
+        verify(store, never()).deleteIfActive(any());
+        verifyNoInteractions(maintenance);
+    }
+
+    @Test
+    void createReplyRejectsForeignTarget() {
         when(store.lockPublicArticle(1, false)).thenReturn(true);
-        when(store.find(3, false)).thenReturn(row(2));
+        // 主库查询未找到属于当前文章的可见目标。
+        when(store.lockReplyTargetAndFindRoot(1, 3)).thenReturn(null);
         assertEquals("COMMENT_NOT_FOUND", assertThrows(ApiException.class,
                 () -> writes.createReply(1, author, 3L, "正文")).code());
-        when(store.lockPublicArticle(1, false)).thenReturn(true);
-        when(store.find(3, false)).thenReturn(row(1));
-        when(store.find(7, true)).thenReturn(new CommentRow(7, 1, 0, null, 2, "楼层", Instant.EPOCH, false));
-        when(store.find(3, true)).thenReturn(row(1));
+        verify(store).lockReplyTargetAndFindRoot(1, 3);
+        verify(store, never()).insert(anyLong(), anyLong(), anyLong(), anyLong(), anyString(), any());
+    }
+
+    @Test
+    void deleteReplyRejectsForeignTargetAndUnauthorizedActor() {
+        when(store.find(3, false)).thenReturn(row(2), row(1));
+        assertEquals("COMMENT_NOT_FOUND", assertThrows(ApiException.class,
+                () -> service.delete(1, 3, author, null)).code());
         var otherUser = new UserActor(9, Role.USER, 1);
         assertEquals("COMMENT_FORBIDDEN", assertThrows(ApiException.class,
-                () -> writes.deleteReply(1, 3, otherUser)).code());
-        verify(store, never()).delete(any());
+                () -> service.delete(1, 3, otherUser, null)).code());
+        verify(store, never()).deleteIfActive(any());
+        verifyNoInteractions(maintenance);
     }
 
     private static CommentRow row(long article) {

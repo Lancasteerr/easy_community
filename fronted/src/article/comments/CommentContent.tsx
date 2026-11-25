@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 const expandLabel = '…展开';
 const graphemes = typeof Intl.Segmenter === 'function'
@@ -41,7 +41,7 @@ function measurePreview(paragraph: HTMLParagraphElement, text: HTMLSpanElement, 
 }
 
 /** 一级评论和二级回复共用折叠布局，各自保存展开状态。 */
-export function CommentContent({ content, maxLines }: { content: string; maxLines: number }) {
+export function CommentContent({ content, maxLines, prefix }: { content: string; maxLines: number; prefix?: ReactNode }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
@@ -71,11 +71,11 @@ export function CommentContent({ content, maxLines }: { content: string; maxLine
       observer?.disconnect();
       document.fonts?.removeEventListener('loadingdone', measure);
     };
-  }, [content, maxLines]);
+  }, [content, maxLines, prefix]);
 
   return <div className="comment-content-wrap">
     <p className="comment-content">
-      <span id={contentId}>{expanded ? content : preview ?? content}</span>
+      <span id={contentId}>{prefix}{expanded ? content : preview ?? content}</span>
       {preview !== null && <button type="button" className="comment-action comment-content-toggle"
         aria-controls={contentId} aria-expanded={expanded} onClick={() => setExpanded((previous) => !previous)}>
         {expanded ? '收起' : expandLabel}
@@ -83,7 +83,7 @@ export function CommentContent({ content, maxLines }: { content: string; maxLine
     </p>
     <div className="comment-content-measure" aria-hidden="true" inert>
       <p className="comment-content" ref={measureParagraph}>
-        <span ref={measureText} />
+        <span>{prefix}<span ref={measureText} /></span>
         <button type="button" className="comment-action comment-content-toggle" ref={measureButton} hidden>{expandLabel}</button>
       </p>
     </div>

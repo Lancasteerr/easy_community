@@ -29,34 +29,30 @@ class CommentWrites {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
-    public CommentRow createReply(long article, UserActor actor, long replyToId, String supplied) {
+    public CreatedReply createReply(long article, UserActor actor, long replyToId, String supplied) {
         return insertReply(article, actor, replyToId, content(supplied));
     }
 
-    /** 调用方先校验文字，并开启事务以持有文章与楼层锁。 */
-    CommentRow insertReply(long article, UserActor actor, long replyToId, String content) {
+    /** 调用方先校验文字，并在 READ COMMITTED 事务中持有共享锁直至提交。 */
+    CreatedReply insertReply(long article, UserActor actor, long replyToId, String content) {
         if (!store.lockPublicArticle(article, false)) throw CommentErrors.missing();
-        var candidate = CommentAccess.belonging(article, store.find(replyToId, false));
-        long rootId = candidate.rootId() == 0 ? candidate.id() : candidate.rootId();
-        // 固定文章、楼层、实际目标的加锁顺序，与删楼串行。
-        var root = CommentAccess.belonging(article, store.find(rootId, true));
-        var target = replyToId == rootId ? root : CommentAccess.belonging(article, store.find(replyToId, true));
-        if (root.deleted() || target.deleted()) throw CommentErrors.missing();
-        return store.insert(article, rootId, replyToId, actor.userId(), content,
+        var target = store.lockReplyTargetAndFindRoot(article, replyToId);
+        if (target == null) throw CommentErrors.missing();
+        var row = store.insert(article, target.rootId(), replyToId, actor.userId(), content,
                 clock.instant().truncatedTo(ChronoUnit.MILLIS));
+        return new CreatedReply(row, target.authorId());
     }
 
+    /** 携带已经校验的目标作者，供事务外组装发布响应。 */
+    record CreatedReply(CommentRow row, long targetAuthorId) { }
+
+    /** 调用方已校验归属和删除权限，并确认目标是二级评论。 */
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
-    public void deleteReply(long article, long id, UserActor actor) {
-        if (!store.lockPublicArticle(article, false)) throw CommentErrors.missing();
-        var candidate = CommentAccess.belonging(article, store.find(id, false));
-        if (candidate.rootId() == 0) throw CommentErrors.invalid();
-        CommentAccess.belonging(article, store.find(candidate.rootId(), true));
-        var row = CommentAccess.belonging(article, store.find(id, true));
-        requireDeletePermission(row, actor);
-        if (row.deleted()) return;
-        store.delete(row);
-        afterCommit(() -> maintenance.visibility(row));
+    public void deleteReply(CommentRow row) {
+        if (!store.isPublicArticle(row.articleId())) throw CommentErrors.missing();
+        if (!row.deleted() && store.deleteIfActive(row)) {
+            afterCommit(() -> maintenance.visibility(row));
+        }
     }
 
     CommentRow deletionTarget(long article, long id, UserActor actor) {

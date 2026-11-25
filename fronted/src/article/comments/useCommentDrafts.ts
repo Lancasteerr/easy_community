@@ -40,7 +40,7 @@ async function confirm(articleId: string, id: string, signal: AbortSignal): Prom
 
 /** 按被回复的评论保存草稿，只有成功的对应提交才能清空它。 */
 export function useCommentDrafts(articleId: string, enabled: boolean, userId: string | undefined,
-  onPublished: (target: ReplyTarget | null, submissionId: string, count?: number) => void) {
+  onPublished: (target: ReplyTarget | null, result: CommentSubmission) => void) {
   const [drafts, setDrafts] = useState<Record<string, CommentDraft>>({});
   const [target, setTarget] = useState<ReplyTarget | null>(null);
   const pending = useRef(new Map<string, AbortController>());
@@ -92,7 +92,7 @@ export function useCommentDrafts(articleId: string, enabled: boolean, userId: st
       if (result?.state === 'PUBLISHED') {
         update(key, emptyDraft);
         if (reply) setTarget((active) => active?.id === reply.id ? null : active);
-        onPublished(reply, id, result.commentCount);
+        onPublished(reply, result);
       } else if (result?.state === 'FAILED') {
         update(key, { text: draft.text, state: 'failed' });
       } else {

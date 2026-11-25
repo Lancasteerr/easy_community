@@ -37,6 +37,7 @@ public class CommentCommandTransactions {
                 || commands.stream().anyMatch(command -> command.articleId() != article)) {
             throw CommentErrors.invalid();
         }
+        // 先锁文章，再修改一级评论及计数。同步回复用同一文章的共享锁阻止删楼。
         boolean visible = store.lockPublicArticle(article, true);
         int delta = 0;
         var deleted = new ArrayList<CommentRow>();

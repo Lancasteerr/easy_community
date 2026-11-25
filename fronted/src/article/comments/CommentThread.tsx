@@ -8,6 +8,7 @@ import { useToast } from '../../components/Toast';
 import { useCooldown } from '../../hooks/useCooldown';
 import { useArticleLike } from '../useArticleLike';
 import { CommentContent } from './CommentContent';
+import { mergePublishedComments, visibleReplies } from './usePublishedComments';
 
 interface ThreadProps {
   articleId: string;
@@ -17,7 +18,8 @@ interface ThreadProps {
   onReply: (item: CommentItem) => void;
   canReply: boolean;
   editingId?: string;
-  refreshSubmission?: string;
+  publishedReplies?: readonly CommentItem[];
+  reconcilePublishedReplies: (rootId: string, official: readonly CommentItem[]) => void;
   editor: ReactNode;
 }
 
@@ -36,7 +38,11 @@ function CommentTime({ value }: { value: string }) {
 
 function Name({ item, authorId }: { item: CommentItem; authorId: string }) {
   return <div className="comment-name"><strong>{item.author.username}</strong>
-    {item.author.id === authorId && <span className="comment-author">作者</span>}</div>;
+    <AuthorBadge item={item} authorId={authorId} /></div>;
+}
+
+function AuthorBadge({ item, authorId }: { item: CommentItem; authorId: string }) {
+  return item.author.id === authorId ? <span className="comment-author">作者</span> : null;
 }
 
 function CommentLike({ articleId, root, onLogin }: Pick<ThreadProps, 'articleId' | 'root' | 'onLogin'>) {
@@ -57,37 +63,39 @@ function CommentLike({ articleId, root, onLogin }: Pick<ThreadProps, 'articleId'
   </button>;
 }
 
-/** 在预览游标之后继续读取，回复始终平铺在同一楼层。 */
-export function CommentThread({ articleId, authorId, root, onLogin, onReply, canReply, editingId, refreshSubmission, editor }: ThreadProps) {
-  const [page, setPage] = useState<CommentPage | undefined>(root.replies);
+/** 临时回复排在楼层顶部，分页仍使用服务端的预览及续读游标。 */
+export function CommentThread({ articleId, authorId, root, onLogin, onReply, canReply, editingId,
+  publishedReplies, reconcilePublishedReplies, editor }: ThreadProps) {
+  const preview = root.replies;
+  const [loaded, setLoaded] = useState<{ preview: CommentPage | undefined; page: CommentPage }>();
+  // 列表重新取得楼层预览时，从该预览的游标重新开始。
+  const page = loaded && loaded.preview === preview ? loaded.page : preview;
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [failure, setFailure] = useState<{ cursor: string | null; submissionId?: string } | null>(null);
+  const [failure, setFailure] = useState<{ cursor: string | null; preview: CommentPage | undefined } | null>(null);
   const pending = useRef<AbortController | null>(null);
-  const loadedSubmission = useRef(refreshSubmission);
-  const refreshedFrom = useRef<string | undefined>(undefined);
   useEffect(() => () => { pending.current?.abort(); pending.current = null; }, []);
 
-  const load = useCallback(async (cursor: string | null, submissionId?: string) => {
+  const load = useCallback(async (cursor: string | null) => {
     if (pending.current) return;
     const controller = new AbortController();
     pending.current = controller;
     setLoading(true);
     setFailure(null);
     try {
-      const next = await getReplies(articleId, root.id, cursor, controller.signal, submissionId);
+      const next = await getReplies(articleId, root.id, cursor, controller.signal);
       if (controller.signal.aborted) return;
-      refreshedFrom.current = submissionId;
-      setPage((previous) => {
-        if (cursor === null || !previous) return next;
-        const shown = new Set(previous.items.map((item) => item.id));
-        return { ...next, items: [...previous.items, ...next.items.filter((item) => !shown.has(item.id))] };
+      setLoaded((previous) => {
+        const existing = previous && previous.preview === preview ? previous.page : preview;
+        if (cursor === null || !existing) return { preview, page: next };
+        const shown = new Set(existing.items.map((item) => item.id));
+        return { preview, page: { ...next, items: [...existing.items, ...next.items.filter((item) => !shown.has(item.id))] } };
       });
     } catch (error) {
       if (!controller.signal.aborted) {
         const expired = error instanceof ApiError && error.code === 'COMMENT_CURSOR_EXPIRED';
         const missing = error instanceof ApiError && error.status === 404;
-        setFailure({ cursor: expired || missing ? null : cursor, submissionId: missing ? undefined : submissionId });
+        setFailure({ cursor: expired || missing ? null : cursor, preview });
       }
     } finally {
       if (pending.current === controller) {
@@ -95,18 +103,18 @@ export function CommentThread({ articleId, authorId, root, onLogin, onReply, can
         setLoading(false);
       }
     }
-  }, [articleId, root.id]);
+  }, [articleId, root.id, preview]);
 
+  const officialReplies = page?.items;
   useEffect(() => {
-    if (!refreshSubmission || loadedSubmission.current === refreshSubmission || pending.current) return;
-    loadedSubmission.current = refreshSubmission;
-    // 写入确认后续读本楼层尾部，保留已加载内容和预览是否展开。
-    void load(page?.nextCursor ?? null, refreshSubmission);
-  }, [load, loading, page?.nextCursor, refreshSubmission]);
+    if (publishedReplies?.length && officialReplies) reconcilePublishedReplies(root.id, officialReplies);
+  }, [officialReplies, publishedReplies, reconcilePublishedReplies, root.id]);
 
-  const visibleReplies = expanded ? page?.items : page?.items.slice(0, 2);
-  const buffered = !expanded && (page?.items.length ?? 0) > 2;
+  const replies = mergePublishedComments(publishedReplies, officialReplies);
+  const visible = visibleReplies(replies, expanded);
+  const buffered = replies.length > visible.length;
   const canExpand = buffered || page?.hasMore;
+  const currentFailure = failure && failure.preview === preview ? failure : null;
   const replyButton = (item: CommentItem) => <button type="button" className="comment-action"
     disabled={!canReply} aria-expanded={editingId === item.id} onClick={() => onReply(item)}>回复</button>;
 
@@ -121,21 +129,23 @@ export function CommentThread({ articleId, authorId, root, onLogin, onReply, can
         {replyButton(root)}
         <CommentLike articleId={articleId} root={root} onLogin={onLogin} /></div>
       {editingId === root.id && editor}
-      {(page?.items.length || page?.hasMore || loading || failure) ? <div className="comment-replies">
-        {visibleReplies?.length ? <ul className="comment-list">
-          {visibleReplies.map((item) => <li key={item.id} className="comment-reply">
-            <Name item={item} authorId={authorId} />
-            <CommentContent content={item.content} maxLines={3} />
+      {(replies.length || page?.hasMore || loading || currentFailure) ? <div className="comment-replies">
+        {visible.length ? <ul className="comment-list">
+          {visible.map((item) => <li key={item.id} className="comment-reply">
+            <CommentContent content={item.content} maxLines={3} prefix={<>
+              <strong>{item.author.username}</strong><AuthorBadge item={item} authorId={authorId} />
+              {'：'}{item.replyToUsername && <>回复<strong>{item.replyToUsername}</strong>：</>}
+            </>} />
             <div className="comment-meta"><CommentTime value={item.createdAt} />{replyButton(item)}</div>
             {editingId === item.id && editor}
           </li>)}
         </ul> : null}
         {loading && <p className="comment-status" role="status">正在加载回复…</p>}
-        {failure && <button type="button" className="comment-action" onClick={() => void load(failure.cursor, failure.submissionId)}>重新加载回复</button>}
-        {!loading && !failure && canExpand
+        {currentFailure && <button type="button" className="comment-action" onClick={() => void load(currentFailure.cursor)}>重新加载回复</button>}
+        {!loading && !currentFailure && canExpand
           && <button type="button" className="comment-action" onClick={() => {
             setExpanded(true);
-            if (!buffered) void load(page?.nextCursor ?? null, refreshedFrom.current);
+            if (!buffered) void load(page?.nextCursor ?? null);
           }}>展开更多回复 ›</button>}
       </div> : null}
     </div>
