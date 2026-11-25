@@ -1,8 +1,11 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.command;
 
+import com.febrie.backend.article.comment.application.CommentAccess;
+import com.febrie.backend.article.comment.application.query.CommentLists;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
+import com.febrie.backend.article.comment.web.CommentController;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;

@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.command;
 
+import com.febrie.backend.article.comment.application.CommentAccess;
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -15,7 +17,7 @@ import org.springframework.stereotype.Service;
 
 /** 发布接口使用会话与提交编号查询落库结果，界面无需感知消息或签名协议。 */
 @Service
-class CommentSubmissions {
+public class CommentSubmissions {
     private static final Logger log = LoggerFactory.getLogger(CommentSubmissions.class);
     private final CommentCommands commands;
     private final CommentReplySubmissions replies;
@@ -32,7 +34,7 @@ class CommentSubmissions {
         this.store = store;
     }
 
-    View submit(long article, UserActor actor, String submissionId, CommentInput supplied) {
+    public View submit(long article, UserActor actor, String submissionId, CommentInput supplied) {
         String id = CommentCommand.operation(submissionId);
         var input = new CommentInput(CommentWrites.content(supplied.content()), supplied.replyToId());
         if (input.replyToId() == null) {
@@ -60,16 +62,16 @@ class CommentSubmissions {
         }
     }
 
-    View status(long article, UserActor actor, String submissionId) {
+    public View status(long article, UserActor actor, String submissionId) {
         var result = results.find(article, actor.userId(), CommentCommand.operation(submissionId));
         return view(article, result, true);
     }
 
     /** 仅允许从同一登录用户已发布的回复确认结果刷新对应楼层。 */
-    void requirePublishedReply(long article, long root, UserActor actor, String submissionId) {
+    public void requirePublishedReply(long article, long root, UserActor actor, String submissionId) {
         var result = results.find(article, actor.userId(), CommentCommand.operation(submissionId));
         if (result == null || result.error() != null || result.commentId() == null) throw CommentErrors.missing();
-        var row = CommentWrites.belonging(article, store.find(result.commentId(), false));
+        var row = CommentAccess.belonging(article, store.find(result.commentId(), false));
         if (row.rootId() != root || row.authorId() != actor.userId() || row.deleted()) throw CommentErrors.missing();
     }
 
@@ -85,7 +87,7 @@ class CommentSubmissions {
         }
     }
 
-    enum State { PUBLISHING, PUBLISHED, FAILED }
+    public enum State { PUBLISHING, PUBLISHED, FAILED }
 
-    record View(State state, @JsonInclude(JsonInclude.Include.NON_NULL) Long commentCount) { }
+    public record View(State state, @JsonInclude(JsonInclude.Include.NON_NULL) Long commentCount) { }
 }

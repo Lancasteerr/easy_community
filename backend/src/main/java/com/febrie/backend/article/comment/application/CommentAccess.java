@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application;
 
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
 import com.febrie.backend.article.content.application.ArticleListHydrator;
 import com.febrie.backend.shared.error.ApiException;
@@ -29,9 +30,15 @@ public class CommentAccess {
         }
     }
 
+    /** 写入和公开读取都必须验证评论归属。 */
+    public static CommentRow belonging(long article, CommentRow row) {
+        if (row == null || row.articleId() != article) throw CommentErrors.missing();
+        return row;
+    }
+
     public void root(long article, long id) {
         try {
-            var row = CommentWrites.belonging(article, values.objects(List.of(id)).get(id));
+            var row = belonging(article, values.objects(List.of(id)).get(id));
             if (row.rootId() != 0 || row.deleted()) throw CommentErrors.missing();
         } catch (DataAccessException failure) {
             throw CommentErrors.unavailable();

@@ -1,4 +1,4 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application;
 
 import com.febrie.backend.shared.error.ApiException;
 import org.springframework.http.HttpStatus;

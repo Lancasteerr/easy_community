@@ -1,7 +1,7 @@
 package com.febrie.backend.article.comment.infrastructure.messaging;
 
-import com.febrie.backend.article.comment.CommentListKey;
-import com.febrie.backend.article.comment.CommentSnapshots;
+import com.febrie.backend.article.comment.application.query.CommentListKey;
+import com.febrie.backend.article.comment.application.query.CommentSnapshots;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshotCache;
 import com.rabbitmq.client.Channel;
 import io.micrometer.core.instrument.MeterRegistry;

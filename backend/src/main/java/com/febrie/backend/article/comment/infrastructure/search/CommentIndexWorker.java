@@ -1,6 +1,6 @@
 package com.febrie.backend.article.comment.infrastructure.search;
 
-import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.messaging.CommentBroker;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
 import com.rabbitmq.client.Channel;

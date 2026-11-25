@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.query;
 
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshot;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshotCache;

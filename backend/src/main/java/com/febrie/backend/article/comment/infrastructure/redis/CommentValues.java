@@ -1,6 +1,6 @@
 package com.febrie.backend.article.comment.infrastructure.redis;
 
-import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.shared.cache.CacheProtocol;

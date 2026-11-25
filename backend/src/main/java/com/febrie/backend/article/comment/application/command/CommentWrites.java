@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.command;
 
+import com.febrie.backend.article.comment.application.CommentAccess;
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentMaintenance;
@@ -34,11 +36,11 @@ public class CommentWrites {
     /** 调用方先校验文字，并开启事务以持有文章与楼层锁。 */
     CommentRow insertReply(long article, UserActor actor, long replyToId, String content) {
         if (!store.lockPublicArticle(article, false)) throw CommentErrors.missing();
-        var candidate = belonging(article, store.find(replyToId, false));
+        var candidate = CommentAccess.belonging(article, store.find(replyToId, false));
         long rootId = candidate.rootId() == 0 ? candidate.id() : candidate.rootId();
         // 固定文章、楼层、实际目标的加锁顺序，与删楼串行。
-        var root = belonging(article, store.find(rootId, true));
-        var target = replyToId == rootId ? root : belonging(article, store.find(replyToId, true));
+        var root = CommentAccess.belonging(article, store.find(rootId, true));
+        var target = replyToId == rootId ? root : CommentAccess.belonging(article, store.find(replyToId, true));
         if (root.deleted() || target.deleted()) throw CommentErrors.missing();
         return store.insert(article, rootId, replyToId, actor.userId(), content,
                 clock.instant().truncatedTo(ChronoUnit.MILLIS));
@@ -47,18 +49,18 @@ public class CommentWrites {
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
     public void deleteReply(long article, long id, UserActor actor) {
         if (!store.lockPublicArticle(article, false)) throw CommentErrors.missing();
-        var candidate = belonging(article, store.find(id, false));
+        var candidate = CommentAccess.belonging(article, store.find(id, false));
         if (candidate.rootId() == 0) throw CommentErrors.invalid();
-        belonging(article, store.find(candidate.rootId(), true));
-        var row = belonging(article, store.find(id, true));
+        CommentAccess.belonging(article, store.find(candidate.rootId(), true));
+        var row = CommentAccess.belonging(article, store.find(id, true));
         requireDeletePermission(row, actor);
         if (row.deleted()) return;
         store.delete(row);
         afterCommit(() -> maintenance.visibility(row));
     }
 
-    CommentRow deletionTarget(long article, long id, UserActor actor) {
-        var row = belonging(article, store.find(id, false));
+    public CommentRow deletionTarget(long article, long id, UserActor actor) {
+        var row = CommentAccess.belonging(article, store.find(id, false));
         requireDeletePermission(row, actor);
         return row;
     }
@@ -67,11 +69,6 @@ public class CommentWrites {
         if (row.authorId() != actor.userId() && actor.role() != Role.ADMIN && actor.role() != Role.PATROLLER) {
             throw CommentErrors.forbidden();
         }
-    }
-
-    static CommentRow belonging(long article, CommentRow row) {
-        if (row == null || row.articleId() != article) throw CommentErrors.missing();
-        return row;
     }
 
     static String content(String value) {

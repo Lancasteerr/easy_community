@@ -1,6 +1,6 @@
 package com.febrie.backend.article.comment.infrastructure.redis;
 
-import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.application.CommentErrors;
 import java.util.UUID;
 
 /** Redis 元数据同时用于校验单页读取与有条件发布。 */

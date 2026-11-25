@@ -1,7 +1,7 @@
 package com.febrie.backend.article.comment.infrastructure.messaging;
 
-import com.febrie.backend.article.comment.CommentCommand;
-import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.application.CommentErrors;
+import com.febrie.backend.article.comment.application.command.CommentCommand;
 import com.febrie.backend.article.search.infrastructure.messaging.IndexPublisher;
 import java.util.concurrent.TimeUnit;
 import org.springframework.amqp.core.Message;

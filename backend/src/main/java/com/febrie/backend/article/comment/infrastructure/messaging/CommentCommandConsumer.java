@@ -1,8 +1,8 @@
 package com.febrie.backend.article.comment.infrastructure.messaging;
 
-import com.febrie.backend.article.comment.CommentCommand;
-import com.febrie.backend.article.comment.CommentCommandTransactions;
-import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.application.CommentErrors;
+import com.febrie.backend.article.comment.application.command.CommentCommand;
+import com.febrie.backend.article.comment.application.command.CommentCommandTransactions;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentMaintenance;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;

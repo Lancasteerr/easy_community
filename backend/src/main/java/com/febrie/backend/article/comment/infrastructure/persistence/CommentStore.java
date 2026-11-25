@@ -1,6 +1,6 @@
 package com.febrie.backend.article.comment.infrastructure.persistence;
 
-import com.febrie.backend.article.comment.CommentListKey;
+import com.febrie.backend.article.comment.application.query.CommentListKey;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentSnapshot;
 import java.sql.Statement;
 import java.time.Instant;

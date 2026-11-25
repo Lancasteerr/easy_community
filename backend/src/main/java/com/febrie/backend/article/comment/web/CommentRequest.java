@@ -1,10 +1,14 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.web;
 
+import com.febrie.backend.article.comment.application.CommentErrors;
+import com.febrie.backend.article.comment.application.command.CommentInput;
 import com.febrie.backend.article.common.ArticleIds;
 import tools.jackson.databind.JsonNode;
 
 /** 两个发布入口共用纯文字及可选回复对象的请求格式。 */
-record CommentInput(String content, Long replyToId) {
+final class CommentRequest {
+    private CommentRequest() { }
+
     static CommentInput read(JsonNode body) {
         var content = body.path("content");
         var reply = body.path("replyToId");

@@ -1,4 +1,4 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.query;
 
 import com.febrie.backend.article.comment.infrastructure.messaging.CommentRefreshes;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;

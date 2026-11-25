@@ -1,4 +1,4 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.command;
 
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
 import com.febrie.backend.shared.error.ApiException;

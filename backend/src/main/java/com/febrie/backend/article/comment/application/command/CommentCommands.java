@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.command;
 
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.CommentCursorCodec;
 import com.febrie.backend.article.comment.infrastructure.messaging.CommentBroker;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
@@ -11,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 /** 受理凭证由会话主体及摘要签名，允许在消费者写结果前查询待处理状态。 */
 @Service
-class CommentCommands {
+public class CommentCommands {
     private final CommentBroker broker;
     private final CommentCommandResults results;
     private final CommentCursorCodec tokens;
@@ -24,7 +25,7 @@ class CommentCommands {
         this.clock = clock;
     }
 
-    Accepted submit(CommentCommand command) {
+    public Accepted submit(CommentCommand command) {
         enqueue(command);
         var receipt = new Receipt(command.articleId(), command.actor().userId(), command.operationId(), command.fingerprint(),
                 clock.millis() + Duration.ofDays(1).toMillis());
@@ -53,7 +54,7 @@ class CommentCommands {
         }
     }
 
-    Status status(long article, UserActor actor, String suppliedOperation, String receipt) {
+    public Status status(long article, UserActor actor, String suppliedOperation, String receipt) {
         String operation = CommentCommand.operation(suppliedOperation);
         var issued = tokens.open(receipt, Receipt.class, 1024);
         if (issued.articleId() != article || issued.actorId() != actor.userId()
@@ -68,6 +69,6 @@ class CommentCommands {
     }
 
     record Receipt(long articleId, long actorId, String operationId, String fingerprint, long expiresAt) { }
-    record Accepted(String operationId, String receipt) { }
-    record Status(String operationId, String status, String commentId, String errorCode) { }
+    public record Accepted(String operationId, String receipt) { }
+    public record Status(String operationId, String status, String commentId, String errorCode) { }
 }

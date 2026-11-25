@@ -1,6 +1,6 @@
 package com.febrie.backend.article.comment.infrastructure.persistence;
 
-import com.febrie.backend.article.comment.CommentErrors;
+import com.febrie.backend.article.comment.application.CommentErrors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 

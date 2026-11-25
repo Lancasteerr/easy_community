@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.query;
 
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.febrie.backend.article.like.application.LikeQueryService;
@@ -40,7 +41,7 @@ public class CommentViews {
         }).toList();
     }
 
-    Item created(CommentRow row, String username) {
+    public Item created(CommentRow row, String username) {
         return view(row, new Author(text(row.authorId()), username, null),
                 row.rootId() == 0 ? new LikeQueryService.Summary(0, false) : null);
     }

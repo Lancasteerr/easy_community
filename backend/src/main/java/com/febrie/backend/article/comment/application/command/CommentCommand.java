@@ -1,5 +1,6 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.command;
 
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.user.application.dto.UserActor;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;

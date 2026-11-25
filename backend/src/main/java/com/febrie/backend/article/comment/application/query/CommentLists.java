@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.query;
 
+import com.febrie.backend.article.comment.application.CommentAccess;
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.CommentCursorCodec;
 import com.febrie.backend.article.comment.infrastructure.messaging.CommentRefreshes;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
@@ -62,7 +64,7 @@ public class CommentLists {
     }
 
     /** 已确认发布后的刷新读一段主库分页，避免仍有效的共享快照遮住刚提交的回复。 */
-    Response publishedReplyPage(CommentListKey key, int size, String encoded, long user) {
+    public Response publishedReplyPage(CommentListKey key, int size, String encoded, long user) {
         try {
             access.article(key.articleId());
             access.root(key.articleId(), key.rootId());

@@ -1,6 +1,6 @@
 package com.febrie.backend.article.comment.infrastructure.search;
 
-import com.febrie.backend.article.comment.CommentListKey;
+import com.febrie.backend.article.comment.application.query.CommentListKey;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentIndexTasks;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.SortOrder;

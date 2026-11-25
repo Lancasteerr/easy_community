@@ -1,5 +1,15 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.web;
 
+import com.febrie.backend.article.comment.application.CommentAccess;
+import com.febrie.backend.article.comment.application.CommentErrors;
+import com.febrie.backend.article.comment.application.command.CommentCommand;
+import com.febrie.backend.article.comment.application.command.CommentCommands;
+import com.febrie.backend.article.comment.application.command.CommentSubmissions;
+import com.febrie.backend.article.comment.application.command.CommentWrites;
+import com.febrie.backend.article.comment.application.query.CommentListKey;
+import com.febrie.backend.article.comment.application.query.CommentLists;
+import com.febrie.backend.article.comment.application.query.CommentRootLists;
+import com.febrie.backend.article.comment.application.query.CommentViews;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
@@ -96,7 +106,7 @@ public class CommentController {
                                     @RequestHeader(value = "X-Operation-Id", required = false) String operation,
                                     @AuthenticationPrincipal SessionPrincipal principal) {
         var actor = actor(principal);
-        var input = CommentInput.read(body);
+        var input = CommentRequest.read(body);
         long article = ArticleIds.parse(articleId);
         if (input.replyToId() == null) {
             access.article(article);
@@ -111,7 +121,7 @@ public class CommentController {
     public ResponseEntity<CommentSubmissions.View> submit(@PathVariable String articleId, @PathVariable String submissionId,
                                                           @RequestBody JsonNode body,
                                                           @AuthenticationPrincipal SessionPrincipal principal) {
-        return submission(submissions.submit(ArticleIds.parse(articleId), actor(principal), submissionId, CommentInput.read(body)));
+        return submission(submissions.submit(ArticleIds.parse(articleId), actor(principal), submissionId, CommentRequest.read(body)));
     }
 
     @GetMapping("/submissions/{submissionId}")

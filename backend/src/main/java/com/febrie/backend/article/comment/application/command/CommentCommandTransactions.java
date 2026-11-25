@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.command;
 
+import com.febrie.backend.article.comment.application.CommentAccess;
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.messaging.CommentBroker;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
@@ -63,7 +65,7 @@ public class CommentCommandTransactions {
             }
             var row = store.find(command.commentId(), true);
             try {
-                if (CommentWrites.belonging(article, row).rootId() != 0) throw CommentErrors.missing();
+                if (CommentAccess.belonging(article, row).rootId() != 0) throw CommentErrors.missing();
                 CommentWrites.requireDeletePermission(row, actor);
             } catch (ApiException rejected) {
                 saveResult(command, null, rejected.code());

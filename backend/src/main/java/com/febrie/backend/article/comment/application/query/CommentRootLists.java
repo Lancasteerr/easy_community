@@ -1,5 +1,7 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.query;
 
+import com.febrie.backend.article.comment.application.CommentAccess;
+import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.infrastructure.CommentCursorCodec;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentValues;
@@ -19,7 +21,7 @@ import org.springframework.stereotype.Service;
 /** PIT 固定一级顺序，Redis 对象缓存独立裁决每个候选的当前可见性。 */
 @Service
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-class CommentRootLists {
+public class CommentRootLists {
     private static final String PREFIX = "es1.";
     private static final int MAX_BATCHES = 8;
     private final CommentAccess access;
@@ -41,7 +43,7 @@ class CommentRootLists {
         this.clock = clock;
     }
 
-    CommentLists.Response page(CommentListKey key, int size, String encoded, Long user) {
+    public CommentLists.Response page(CommentListKey key, int size, String encoded, Long user) {
         if (size < 1 || size > 50) throw CommentErrors.invalid();
         var cursor = encoded == null ? null : decode(key, encoded);
         String pit = cursor == null ? null : cursor.pit();

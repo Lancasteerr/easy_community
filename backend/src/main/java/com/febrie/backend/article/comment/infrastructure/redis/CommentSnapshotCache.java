@@ -1,7 +1,7 @@
 package com.febrie.backend.article.comment.infrastructure.redis;
 
-import com.febrie.backend.article.comment.CommentErrors;
-import com.febrie.backend.article.comment.CommentListKey;
+import com.febrie.backend.article.comment.application.CommentErrors;
+import com.febrie.backend.article.comment.application.query.CommentListKey;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;

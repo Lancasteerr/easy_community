@@ -1,4 +1,4 @@
-package com.febrie.backend.article.comment;
+package com.febrie.backend.article.comment.application.query;
 
 /** 一个列表仅对应一个文章、楼层和排序，命令与游标都需要校验归属。 */
 public record CommentListKey(long articleId, long rootId, Sort sort) {

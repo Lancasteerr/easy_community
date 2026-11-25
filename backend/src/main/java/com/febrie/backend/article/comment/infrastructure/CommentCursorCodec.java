@@ -1,7 +1,7 @@
 package com.febrie.backend.article.comment.infrastructure;
 
-import com.febrie.backend.article.comment.CommentErrors;
-import com.febrie.backend.article.comment.CommentListKey;
+import com.febrie.backend.article.comment.application.CommentErrors;
+import com.febrie.backend.article.comment.application.query.CommentListKey;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
