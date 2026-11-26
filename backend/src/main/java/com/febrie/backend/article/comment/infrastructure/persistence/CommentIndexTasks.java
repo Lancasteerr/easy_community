@@ -2,9 +2,11 @@ package com.febrie.backend.article.comment.infrastructure.persistence;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -51,18 +53,21 @@ public class CommentIndexTasks {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
-    public Claim claimLifecycle() {
+    public Claim claimLifecycle(int limit) {
         var events = sql.query("""
                 SELECT id, comment_id, index_version FROM comment_index_outbox
                 WHERE available_at <= CURRENT_TIMESTAMP(3)
-                ORDER BY available_at, id LIMIT 20 FOR UPDATE SKIP LOCKED
-                """, (rs, row) -> new Event(rs.getLong(1), rs.getLong(2), rs.getLong(3)));
+                ORDER BY available_at, id LIMIT ? FOR UPDATE SKIP LOCKED
+                """, (rs, row) -> new Event(rs.getLong(1), rs.getLong(2), rs.getLong(3)), limit);
         var token = UUID.randomUUID().toString();
-        for (var event : events) {
+        if (!events.isEmpty()) {
+            var args = new ArrayList<Object>();
+            args.add(token);
+            events.forEach(event -> args.add(event.id()));
             sql.update("""
                     UPDATE comment_index_outbox SET claim_token = ?, available_at = CURRENT_TIMESTAMP(3) + INTERVAL 30 SECOND
-                    WHERE id = ?
-                    """, token, event.id());
+                    WHERE id IN (%s)
+                    """.formatted(marks(events.size())), args.toArray());
         }
         return new Claim(token, events);
     }
@@ -84,15 +89,21 @@ public class CommentIndexTasks {
         return new Claim(token, events);
     }
 
-    public void finishLifecycle(Event event, String token, boolean success) {
-        if (success) {
-            sql.update("DELETE FROM comment_index_outbox WHERE id = ? AND claim_token = ?", event.id(), token);
-        } else {
-            sql.update("""
-                    UPDATE comment_index_outbox SET claim_token = NULL, available_at = CURRENT_TIMESTAMP(3) + INTERVAL 5 SECOND
-                    WHERE id = ? AND claim_token = ?
-                    """, event.id(), token);
+    public void finishLifecycle(Claim claim, Set<Long> confirmed) {
+        var sent = new ArrayList<Object>();
+        var retry = new ArrayList<Object>();
+        sent.add(claim.token());
+        retry.add(claim.token());
+        for (var event : claim.events()) {
+            (confirmed.contains(event.id()) ? sent : retry).add(event.id());
         }
+        // 确认只清理本轮租约，超时或发布失败的事件统一延后重试。
+        if (sent.size() > 1) sql.update("DELETE FROM comment_index_outbox WHERE claim_token = ? AND id IN ("
+                + marks(sent.size() - 1) + ")", sent.toArray());
+        if (retry.size() > 1) sql.update("""
+                UPDATE comment_index_outbox SET claim_token = NULL, available_at = CURRENT_TIMESTAMP(3) + INTERVAL 5 SECOND
+                WHERE claim_token = ? AND id IN (%s)
+                """.formatted(marks(retry.size() - 1)), retry.toArray());
     }
 
     public void finishLike(Event event, String token, boolean success) {
@@ -110,9 +121,10 @@ public class CommentIndexTasks {
 
     public List<Document> load(Collection<Long> ids) {
         if (ids.isEmpty()) return List.of();
-        String marks = String.join(",", Collections.nCopies(ids.size(), "?"));
-        return sql.query(PROJECTION + " AND c.id IN (" + marks + ")", DOCUMENT, ids.toArray());
+        return sql.query(PROJECTION + " AND c.id IN (" + marks(ids.size()) + ")", DOCUMENT, ids.toArray());
     }
+
+    private static String marks(int size) { return String.join(",", Collections.nCopies(size, "?")); }
 
     public long maxId() {
         return sql.queryForObject("SELECT COALESCE(MAX(id), 0) FROM article_comment WHERE root_id = 0", Long.class);

@@ -1,10 +1,12 @@
 package com.febrie.backend.article.comment.infrastructure.messaging;
 
 import com.febrie.backend.article.comment.infrastructure.search.CommentIndexWorker;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.amqp.ImmediateRequeueAmqpException;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Declarable;
 import org.springframework.amqp.core.Declarables;
@@ -14,6 +16,7 @@ import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.api.ChannelAwareBatchMessageListener;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
@@ -86,12 +89,24 @@ class CommentMessageConfiguration {
     @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
             name = "app.comment.index-sync", havingValue = "true", matchIfMissing = true)
     SimpleMessageListenerContainer commentIndexListener(ConnectionFactory factory, CommentBroker broker,
-                                                         CommentIndexWorker worker) {
+                                                         CommentIndexWorker worker,
+                                                         @Value("${app.comment.index-batch-size}") int batchSize) {
         var listener = new SimpleMessageListenerContainer(factory);
         listener.setQueueNames(broker.indexQueue());
         listener.setAcknowledgeMode(AcknowledgeMode.MANUAL);
-        listener.setPrefetchCount(4);
-        listener.setMessageListener((org.springframework.amqp.rabbit.listener.api.ChannelAwareMessageListener) worker::consume);
+        // 保留 relay 的投递节奏，消费端以短窗口收集消息并合并 ES 写入。
+        listener.setPrefetchCount(batchSize);
+        listener.setBatchSize(batchSize);
+        listener.setConsumerBatchEnabled(true);
+        listener.setReceiveTimeout(100);
+        listener.setBatchReceiveTimeout(100);
+        listener.setMessageListener((ChannelAwareBatchMessageListener) (messages, channel) -> {
+            try {
+                worker.consume(messages, channel);
+            } catch (IOException failure) {
+                throw new ImmediateRequeueAmqpException("评论索引确认失败", failure);
+            }
+        });
         return listener;
     }
 
