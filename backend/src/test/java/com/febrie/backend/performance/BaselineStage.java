@@ -70,29 +70,31 @@ final class BaselineStage {
             checkSample(end);
             samples.add(end);
             var events = measure.events();
-            var primary = stage.writesComments() ? events.stream().filter(event -> !event.auxiliary()).toList() : events;
-            long stopped = primary.stream().mapToLong(BaselineJournal.Event::end).max().orElse(System.currentTimeMillis());
+            long stopped = events.stream().mapToLong(BaselineJournal.Event::end).max().orElse(System.currentTimeMillis());
             var drain = drain(probe, stopped, ready.mq().ack());
+            // 对账和排空先于原始指标解析，避免把报告的计算时间计入排空。
+            long scheduledEnd = measure.startedAt() == null ? stopped : measure.startedAt() + seconds * 1_000L;
+            var writeResult = commentWrite == null ? null : drainComments(probe, Math.max(stopped, scheduledEnd), ready);
             var k6 = phaseMetrics(measure, output, "measure", seconds);
             if (warm != null) { diagnostics.put("warmK6", phaseMetrics(warm, output, "warm", warmSeconds)); }
             double window = seconds;
-            if (!primary.isEmpty()) {
-                long firstRequest = primary.stream().mapToLong(BaselineJournal.Event::start).min().orElseThrow();
+            if (!events.isEmpty()) {
+                long firstRequest = events.stream().mapToLong(BaselineJournal.Event::start).min().orElseThrow();
                 window = Math.max(seconds, (stopped - firstRequest) / 1000.0);
             }
             var routes = BaselineStats.routes(events, window);
             diagnostics.put("workloadVariants", events.stream().filter(event -> event.variant() != null && !event.variant().isBlank())
                     .collect(java.util.stream.Collectors.groupingBy(BaselineJournal.Event::variant,
                             java.util.stream.Collectors.counting())));
-            long successes = primary.stream().filter(BaselineJournal.Event::ok).count();
-            if (primary.isEmpty() || successes * 100 < primary.size() * 99L) { issues.add("业务检查成功率低于 99% 或没有样本"); }
+            long successes = events.stream().filter(BaselineJournal.Event::ok).count();
+            if (events.isEmpty() || successes * 100 < events.size() * 99L) { issues.add("业务检查成功率低于 99% 或没有样本"); }
             long planned = (long) seconds * stage.load();
             long started = k6.startedIterations();
             if (!stage.closed() && (k6.dropped() * 100 > planned || started < planned * .99)) {
                 issues.add("未达到计划到达率");
             }
             if (started != k6.iterations()) { issues.add("已启动与完成迭代数不符"); }
-            if (events.size() != k6.httpRequests() || !stage.mixed() && primary.size() != started) {
+            if (events.size() != k6.httpRequests() || !stage.mixed() && events.size() != started) {
                 issues.add("HTTP 请求记录与 k6 指标或主迭代数不符");
             }
             if (stage.comments() && (k6.dropped() > 0 || successes / window < stage.load() * .99)) {
@@ -125,17 +127,9 @@ final class BaselineStage {
             diagnostics.put("partitionMq", partitionDeltas(first, end, window));
             long backlog = peakPending();
             if (stage.readsComments() || stage.writesComments()) { reportCommentEs(first, end); }
-            if (commentWrite != null) {
-                var writeResult = commentWrite.drain(stopped, ready.comment(), events, samples,
-                        () -> collect(probe, "comment-drain"));
-                diagnostics.put("commentWrite", writeResult);
+            if (writeResult != null) {
                 backlog = writeResult.mqPeak();
                 growing |= writeResult.growing();
-                if (writeResult.audit().accepted() == 0) { issues.add("评论写档没有受理样本"); }
-                if (writeResult.deadPeak() > 0) { issues.add("评论写入或索引出现死信"); }
-                if (writeResult.growing()) { issues.add("评论队列或索引 Outbox 持续积压"); }
-                if (!writeResult.audit().passed()) { issues.add("评论受理、落库、文章计数或 ES 搜索对账失败"); }
-                if (writeResult.drainMs() == null) { issues.add("评论队列及索引未完成排空与对账"); }
             }
             if (replyWrite != null) {
                 var audit = replyWrite.audit();
@@ -147,6 +141,20 @@ final class BaselineStage {
                     likeOverlap, backlog, growing || partitionGrowing, waits, waitMs, drain.coverageMs(), drain.mqMs(),
                     drain.like(), drain.pv(), diagnostics);
         }
+    }
+
+    private BaselineCommentWrite.Result drainComments(BaselineProbe probe, long stopped, BaselineProbe.Sample ready)
+            throws Exception {
+        var result = commentWrite.drain(stopped, ready.comment(), samples, () -> collect(probe, "comment-drain"));
+        diagnostics.put("commentWrite", result);
+        if (result.audit().confirmed() == 0) { issues.add("一级评论写档没有确认提交"); }
+        if (result.deadPeak() > 0) { issues.add("一级评论计数或索引出现死信"); }
+        if (result.growing()) { issues.add("一级评论队列或 Outbox 持续积压"); }
+        if (result.drainMs() == null) { issues.add("一级评论计数或索引未完成排空"); }
+        if (!result.audit().passed() || result.reconciledMs() == null && result.drainMs() != null) {
+            issues.add("一级评论落库、文章计数或 ES 搜索对账失败");
+        }
+        return result;
     }
 
     private BaselineProbe.Sample awaitProbe(BaselineProbe probe) throws Exception {

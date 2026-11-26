@@ -9,28 +9,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
 
 /** 将每笔已发布请求与幂等结果、一级评论、文章计数及 ES 可见文档逐一关联。 */
 final class BaselineCommentWrite {
-    record Audit(long accepted, long persisted, long unexpectedResults, long untrackedRoots, long wrongCounts,
+    record Audit(long confirmed, long persisted, long unexpectedResults, long untrackedRoots, long wrongCounts,
                  BaselineCommentFixture.IndexAudit index) {
-        boolean sqlMatches() { return persisted == accepted && unexpectedResults == 0 && untrackedRoots == 0 && wrongCounts == 0; }
+        boolean sqlMatches() { return persisted == confirmed && unexpectedResults == 0 && untrackedRoots == 0 && wrongCounts == 0; }
         boolean passed() {
-            return sqlMatches() && index.missingOrWrong() == 0 && index.visibleTotal() == accepted;
+            return sqlMatches() && index.missingOrWrong() == 0 && index.visibleTotal() == confirmed;
         }
     }
 
-    record Observation(long samples, int published, int visible, long publishedP95Ms, long visibleP95Ms) { }
-    record Result(Audit audit, Observation observation, long indexOutboxPeak, long oldestIndexOutboxMs,
-                  long countOutboxPeak, long deadPeak,
-                  long mqPeak, boolean growing, Long drainMs, List<BaselineProbe.Queue> endQueues) { }
+    record Result(Audit audit, long indexOutboxPeak, long oldestIndexOutboxMs, long countOutboxPeak, long deadPeak,
+                  long mqPeak, boolean growing, Long drainMs, Long reconciledMs, List<BaselineProbe.Queue> endQueues) { }
 
-    private record Stored(String submission, long article, long actor, Long id, String error,
-                          long commentArticle, long author, long root, boolean deleted, String content) { }
+    record Stored(String submission, long article, long actor, Long id, String error,
+                  long commentArticle, long author, long root, boolean deleted, String content) {
+        boolean matches(BaselineJournal.Event expected) {
+            return expected != null && article == expected.article() && actor == expected.user() && error == null
+                    && id != null && id.toString().equals(expected.commentId()) && commentArticle == expected.article()
+                    && author == expected.user() && root == 0 && !deleted && ("基线评论 " + submission).equals(content);
+        }
+    }
 
     private final BaselineEnvironment.Site site;
-    private final Map<String, BaselineJournal.Event> accepted = new HashMap<>();
+    private final Map<String, BaselineJournal.Event> confirmed = new HashMap<>();
 
     BaselineCommentWrite(BaselineEnvironment.Site site) { this.site = site; }
 
@@ -41,53 +44,59 @@ final class BaselineCommentWrite {
             if (event.article() < first || event.article() >= first + BaselineEnvironment.COMMENT_WRITE_ARTICLES) {
                 throw new IllegalStateException("评论发压目标超出写档文章范围");
             }
-            if (event.submission() == null || accepted.putIfAbsent(event.submission(), event) != null) {
-                throw new IllegalStateException("评论发布记录缺少唯一提交 ID");
+            if (event.commentId() == null || event.submission() == null
+                    || confirmed.putIfAbsent(event.submission(), event) != null) {
+                throw new IllegalStateException("评论发布记录缺少评论 ID 或唯一提交 ID");
             }
         }
     }
 
-    Result drain(long stopped, BaselineProbe.CommentWork initial, List<BaselineJournal.Event> events,
-                 List<BaselineProbe.Sample> samples, Callable<BaselineProbe.Sample> probe) throws Exception {
+    Result drain(long stopped, BaselineProbe.CommentWork initial, List<BaselineProbe.Sample> samples,
+                 Callable<BaselineProbe.Sample> probe) throws Exception {
         Audit audit = null;
         Long drainedMs = null;
+        Long reconciledMs = null;
+        long deadline = stopped + 120_000;
         List<BaselineProbe.Queue> latestQueues = List.of();
         do {
-            var comment = probe.call().comment();
+            var sample = probe.call();
+            var comment = sample.comment();
             if (comment != null) {
                 latestQueues = comment.mq().partitions();
+                if (comment.mq().dead() > 0) { break; }
                 // 同时核对两条链路的 ACK，避免用管理接口暂未刷新的空队列提前判定排空。
                 if (drained(initial, comment)) {
+                    if (drainedMs == null) { drainedMs = Math.max(0, sample.at() - stopped); }
                     audit = audit();
                     if (!audit.sqlMatches()) { break; }
                     if (audit.passed()) {
-                        drainedMs = Math.max(0, System.currentTimeMillis() - stopped);
+                        reconciledMs = Math.max(0, System.currentTimeMillis() - stopped);
                         break;
                     }
                 }
-                if (comment.mq().dead() > 0) { break; }
             }
-            if (System.currentTimeMillis() - stopped >= 120000) { break; }
-            Thread.sleep(2000);
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) { break; }
+            Thread.sleep(Math.min(2_000, remaining));
         } while (true);
-        if (audit == null || drainedMs == null) { audit = audit(); }
+        if (audit == null) { audit = audit(); }
         var observed = samples.stream().map(BaselineProbe.Sample::comment).filter(Objects::nonNull).toList();
         var measured = samples.stream().filter(sample -> sample.phase().equals("measure"))
                 .map(BaselineProbe.Sample::comment).filter(Objects::nonNull).toList();
-        return new Result(audit, observation(events),
+        return new Result(audit,
                 observed.stream().mapToLong(BaselineProbe.CommentWork::indexOutbox).max().orElse(0),
                 observed.stream().mapToLong(BaselineProbe.CommentWork::oldestIndexOutboxMs).max().orElse(0),
                 observed.stream().mapToLong(BaselineProbe.CommentWork::countOutbox).max().orElse(0),
                 observed.stream().mapToLong(value -> value.mq().dead()).max().orElse(0),
                 observed.stream().mapToLong(value -> value.mq().pending()).max().orElse(0),
-                backlogGrowing(measured), drainedMs, latestQueues);
+                backlogGrowing(measured), drainedMs, reconciledMs, latestQueues);
     }
 
     private boolean drained(BaselineProbe.CommentWork first, BaselineProbe.CommentWork current) {
         long indexAck = current.mq().partitions().getLast().ack() - first.mq().partitions().getLast().ack();
         long countAck = current.mq().ack() - first.mq().ack() - indexAck;
         return current.indexOutbox() == 0 && current.countOutbox() == 0 && current.mq().pending() == 0
-                && countAck >= accepted.size() && indexAck >= accepted.size();
+                && countAck >= confirmed.size() && indexAck >= confirmed.size();
     }
 
     private static boolean backlogGrowing(List<BaselineProbe.CommentWork> measured) {
@@ -116,18 +125,14 @@ final class BaselineCommentWrite {
         var indexed = new HashMap<Long, Long>();
         var trackedRoots = new HashSet<Long>();
         var expectedCounts = new HashMap<Long, Long>();
-        accepted.values().forEach(event -> expectedCounts.merge(event.article(), 1L, Long::sum));
+        confirmed.values().forEach(event -> expectedCounts.merge(event.article(), 1L, Long::sum));
         long unexpected = 0;
         for (var row : stored) {
             if (row.id() != null && row.id() > site.commentSeedMax() && row.commentArticle() > 0 && row.root() == 0) {
                 trackedRoots.add(row.id());
             }
-            var expected = accepted.get(row.submission());
-            if (expected == null || row.article() != expected.article() || row.actor() != expected.user()
-                    || row.error() != null || row.id() == null || row.commentArticle() != expected.article()
-                    || row.author() != expected.user() || row.root() != 0 || row.deleted()
-                    || !("基线评论 " + row.submission()).equals(row.content())
-                    || indexed.putIfAbsent(row.id(), row.article()) != null) {
+            var expected = confirmed.get(row.submission());
+            if (!row.matches(expected) || indexed.putIfAbsent(row.id(), row.article()) != null) {
                 unexpected++;
             }
         }
@@ -143,29 +148,6 @@ final class BaselineCommentWrite {
             if (((Number) row.get("comment_count")).longValue() != expectedCounts.getOrDefault(article, 0L)) { wrongCounts++; }
         }
         var es = BaselineCommentFixture.verifyVisible(site.app, site.commentIndex, indexed);
-        return new Audit(accepted.size(), indexed.size(), unexpected, roots - trackedRoots.size(), wrongCounts, es);
-    }
-
-    static Observation observation(List<BaselineJournal.Event> events) {
-        var samples = events.stream().filter(event -> event.commentSubmit() && event.ok() && event.sampled())
-                .collect(Collectors.toMap(BaselineJournal.Event::submission, event -> event));
-        // PUT 成功已经确认事务提交，列表请求仅用于测量索引可见延迟。
-        var published = samples.values().stream().collect(Collectors.toMap(
-                BaselineJournal.Event::submission, event -> event.end() - event.start()));
-        var visible = new HashMap<String, Long>();
-        for (var event : events) {
-            if (!event.auxiliary() || !event.ok() || event.submission() == null) { continue; }
-            var sample = samples.get(event.submission());
-            if (sample != null && "VISIBLE".equals(event.outcome())) {
-                visible.merge(event.submission(), event.end() - sample.start(), Math::min);
-            }
-        }
-        return new Observation(samples.size(), published.size(), visible.size(), p95(published), p95(visible));
-    }
-
-    private static long p95(Map<String, Long> latencies) {
-        var sorted = new ArrayList<>(latencies.values());
-        sorted.sort(null);
-        return BaselineStats.percentile(sorted, .95);
+        return new Audit(confirmed.size(), indexed.size(), unexpected, roots - trackedRoots.size(), wrongCounts, es);
     }
 }

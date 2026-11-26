@@ -34,14 +34,13 @@ function validRoot(item) {
     typeof item.likedByMe === 'boolean';
 }
 
-export function validCommentPage(body, size, hot) {
-  if (!Array.isArray(body?.items) || body.items.length > size ||
-      !Number.isSafeInteger(body.commentCount) || body.commentCount < (hot ? body.items.length : 0) ||
-      typeof body.hasMore !== 'boolean' ||
-      (body.hasMore ? typeof body.nextCursor !== 'string' || !body.nextCursor : body.nextCursor !== null)) return false;
+export function validCommentPage(body, size) {
+  // 热门首页的种子有超过一页的一级评论，并且每条带有回复预览。
+  if (!Array.isArray(body?.items) || body.items.length !== size ||
+      !Number.isSafeInteger(body.commentCount) || body.commentCount < size ||
+      body.hasMore !== true || typeof body.nextCursor !== 'string' || !body.nextCursor ||
+      typeof body.rankVersion !== 'string' || !body.rankVersion) return false;
   if (!body.items.every(validRoot) || new Set(body.items.map(item => item.id)).size !== body.items.length) return false;
-  if (!hot) return true;
-  if (body.items.length !== size || !body.hasMore || typeof body.rankVersion !== 'string' || !body.rankVersion) return false;
   return body.items.every((item, index) => {
     const prior = body.items[index - 1];
     const preview = item.replies;

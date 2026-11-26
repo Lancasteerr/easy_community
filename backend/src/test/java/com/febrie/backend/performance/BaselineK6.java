@@ -127,7 +127,6 @@ final class BaselineK6 {
         command.environment().put("EC_BASELINE_LOAD", Integer.toString(stage.load()));
         command.environment().put("EC_BASELINE_VUS", Integer.toString(stage.vus()));
         command.environment().put("EC_BASELINE_MODEL", stage.model().name());
-        command.environment().put("EC_BASELINE_PHASE", phase);
         command.environment().put("EC_BASELINE_OP", UUID.randomUUID().toString().substring(0, 8));
         return command.redirectOutput(output.resolve(phase + "-http.log").toFile())
                 .redirectError(output.resolve(phase + "-k6.log").toFile()).start();

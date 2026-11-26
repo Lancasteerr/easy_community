@@ -12,6 +12,7 @@
 ./infra/test/performance/run.ps1 -Baseline Standard -Scenario Search -Rounds 1 -Rps 50
 ./infra/test/performance/run.ps1 -Baseline Smoke -Scenario Comment -Rounds 1
 ./infra/test/performance/run.ps1 -Baseline Standard -Scenario CommentRead -Rounds 1 -Rps 25
+./infra/test/performance/run.ps1 -Baseline Standard -Scenario CommentRead -Rounds 1 -Rps '150,200'
 ./infra/test/performance/run.ps1 -Baseline Standard -Scenario CommentWrite -Rounds 1 -Rps 5
 ./infra/test/performance/run.ps1 -Baseline Standard -Scenario CommentReplyWrite -Rounds 1 -Rps 10
 ./infra/test/performance/run.ps1 -Baseline Standard
@@ -32,7 +33,7 @@
 
 - 热门首页每篇准备 32 条一级评论，每条附 3 条回复。测试首页 20 条，Smoke 为 5 RPS，Standard 为 25／50／100 RPS。60% 请求落到热门文章池，70% 请求带已登录会话。关注 ES 开放搜索上下文、堆和搜索拒绝。
 - 一级评论发布 Smoke 为 2 次提交／秒，Standard 为 5／10／15 次，Exploration 为 20 次。每个压力档分别跑四分区分散写和单篇热点写，写档开始前清空上档的评论写数据并切换独立索引。
-- 写档按主提交计算吞吐。每个正式五秒窗口最多抽一个受理样本，确认发布和最新首页观察使用客户端轮询时间，辅助请求有独立路由指标。样本可能滑出首页，报告记录其中未观察到的笔数。停压后逐笔核对预热及测量的已受理写入、文章计数和 ES 搜索可见文档。主请求成功吞吐至少达到目标的 99%，无丢弃迭代，写档还须对账一致、无死信和持续积压。
+- 一级写档每次迭代发一条 PUT，成功须返回 200/PUBLISHED 和一级评论。日志保留提交号与字符串评论 ID。请求延迟覆盖同步提交，停压后分别记录计数及索引链路排空和全量对账耗时。对账覆盖预热与测量的每笔确认提交、文章计数与经自然刷新的 ES 搜索文档。主请求成功吞吐至少达到目标的 99%，无丢弃迭代，写档还须对账一致、无死信和持续积压。
 - 二级回复发布分别轮转 32 个不同文章的首楼，以及集中写同一篇文章的同一楼。两档均直接回复楼主。Smoke 为 2 次提交／秒，Standard 为 10／25／50 次。检查 HTTP `200/PUBLISHED` 及回复内容、作者、楼层。停压后逐笔核对预热与测量期间的回复、提交记录，并核验文章一级评论数保持为种子值。
 
 ```powershell

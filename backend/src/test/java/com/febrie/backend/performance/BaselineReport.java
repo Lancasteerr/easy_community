@@ -133,21 +133,16 @@ final class BaselineReport {
 
     private static void commentWrite(StringBuilder report, BaselineCommentWrite.Result result) {
         var audit = result.audit();
-        var seen = result.observation();
-        report.append("- 含预热发布 ").append(audit.accepted()).append(" 笔，落库匹配 ").append(audit.persisted())
+        report.append("- 含预热确认提交 ").append(audit.confirmed()).append(" 笔，落库匹配 ").append(audit.persisted())
                 .append(" 笔，额外或错误结果 ").append(audit.unexpectedResults())
                 .append("，无对应结果的评论 ").append(audit.untrackedRoots()).append("，文章计数差异 ")
                 .append(audit.wrongCounts()).append("，ES 可见 ").append(audit.index().visibleTotal())
                 .append(" 条，索引缺失或不符 ").append(audit.index().missingOrWrong()).append("。\n");
-        report.append("- 测量期抽样 ").append(seen.samples()).append(" 笔，确认发布 ").append(seen.published())
-                .append(" 笔（P95 ").append(format(seen.published() == 0 ? null : seen.publishedP95Ms())).append(" ms）")
-                .append("，在最新首页观测到 ").append(seen.visible()).append(" 笔（P95 ")
-                .append(format(seen.visible() == 0 ? null : seen.visibleP95Ms())).append(" ms），首页未观测到 ")
-                .append(seen.samples() - seen.visible()).append(" 笔。\n");
         report.append("- 索引 Outbox 峰值 ").append(result.indexOutboxPeak()).append("，最老索引任务 ")
                 .append(result.oldestIndexOutboxMs()).append(" ms，计数 Outbox 峰值 ").append(result.countOutboxPeak())
                 .append("，死信峰值 ").append(result.deadPeak())
-                .append("，排空并完成对账 ").append(format(result.drainMs())).append(" ms。\n");
+                .append("，停压后排空 ").append(format(result.drainMs()))
+                .append(" ms，停压后完成全量对账 ").append(format(result.reconciledMs())).append(" ms。\n");
     }
 
     private static void row(StringBuilder report, Stage stage, String name, BaselineStats.Route route) {

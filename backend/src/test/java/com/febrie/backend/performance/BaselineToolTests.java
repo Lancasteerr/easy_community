@@ -35,7 +35,7 @@ class BaselineToolTests {
         assertEquals(200, BaselineK6.stages("Standard", "Mixed").getLast().vus());
     }
 
-    @Test void resolvesCommentStagesAndSeparatesFollowUpSamples() {
+    @Test void resolvesCommentStages() {
         assertEquals(List.of("comment-read-5", "comment-write-spread-2", "comment-write-hot-2"),
                 BaselineK6.stages("Smoke", "comment").stream().map(BaselineK6.Stage::directory).toList());
         assertEquals(List.of("comment-write-spread-20", "comment-write-hot-20"),
@@ -47,13 +47,15 @@ class BaselineToolTests {
         assertTrue(new BaselineCommentReplyWrite.Audit(2, 2, 0, 0, 0).passed());
         assertFalse(new BaselineCommentReplyWrite.Audit(2, 2, 0, 1, 0).passed());
 
-        var submit = new BaselineJournal.Event("comment-submit", 0, 20, 200, true, 1, 2, false, null, 0, "", "a", true, null);
-        var latest = new BaselineJournal.Event("comment-visible", 1970, 1980, 200, true, 1, 2, false, null, 0, "", "a", false, "VISIBLE");
-        var events = List.of(submit, latest);
-        assertEquals(1, events.stream().filter(event -> !event.auxiliary()).count());
-        assertEquals(new BaselineCommentWrite.Observation(1, 1, 1, 20, 1980), BaselineCommentWrite.observation(events));
-        assertEquals(new BaselineCommentWrite.Observation(1, 1, 0, 20, 0),
-                BaselineCommentWrite.observation(List.of(submit)));
+    }
+
+    @Test void reconcilesTheExactCommentIdReturnedByTheWrite() {
+        var submit = new BaselineJournal.Event("comment-submit", 0, 20, 200, true, 1, 2, false,
+                null, null, "", "a", "9007199254740993");
+        var matching = new BaselineCommentWrite.Stored("a", 2, 1, 9007199254740993L, null, 2, 1, 0, false, "基线评论 a");
+        var different = new BaselineCommentWrite.Stored("a", 2, 1, 9007199254740992L, null, 2, 1, 0, false, "基线评论 a");
+        assertTrue(matching.matches(submit));
+        assertFalse(different.matches(submit));
     }
 
     @Test void preservesPreciseVersionsAndRequiresFinalState() {
@@ -90,10 +92,11 @@ class BaselineToolTests {
     @Test void readsCompleteRecordsAndKeepsSkippedAndRateLimitedSamples() throws Exception {
         var json = new ObjectMapper();
         var file = root.resolve("requests.log");
-        var event = new BaselineJournal.Event("like", 1, 6, 202, true, 1, 5, true, "9007199254740993", 12, "", null, null, null);
-        var limited = new BaselineJournal.Event("like", 5, 9, 429, false, 2, 5, false, null, 2, "", null, false, null);
-        var legacy = json.valueToTree(event);
-        ((tools.jackson.databind.node.ObjectNode) legacy).remove("sample");
+        var event = new BaselineJournal.Event("like", 1, 6, 202, true, 1, 5, true, "9007199254740993", 12, "", null, null);
+        var limited = new BaselineJournal.Event("like", 5, 9, 429, false, 2, 5, false, null, 2, "", null, null);
+        var legacy = (tools.jackson.databind.node.ObjectNode) json.valueToTree(event);
+        legacy.remove("commentId");
+        legacy.put("sample", false).putNull("outcome");
         Files.writeString(file, "EC_HTTP " + json.writeValueAsString(legacy) + "\nEC_HTTP " + json.writeValueAsString(limited));
         var journal = new BaselineJournal(file, json);
         journal.refresh();
@@ -135,7 +138,7 @@ class BaselineToolTests {
         long start = java.time.Instant.parse("2026-11-26T05:00:00Z").toEpochMilli();
         var log = root.resolve("timeline-http.log");
         var request = new BaselineJournal.Event("detail", start + 380, start + 2_001, 200, true,
-                0, 1, false, null, null, "", null, null, null);
+                0, 1, false, null, null, "", null, null);
         Files.writeString(log, "EC_SCENARIO_START " + start + "\nEC_HTTP " + json.writeValueAsString(request) + "\n");
         var journal = new BaselineJournal(log, json);
         journal.refresh();

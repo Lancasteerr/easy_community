@@ -46,14 +46,13 @@ function send(name, method, path, session, validator, details = {}) {
   }
   const start = Date.now();
   const response = http.request(method, config.base + path, details.payload ? JSON.stringify(details.payload) : null, {
-    headers, redirects: 0, tags: { name }, timeout: details.timeout ?? '4s',
+    headers, redirects: 0, tags: { name }, timeout: '4s',
   });
   const end = Date.now();
   let body;
   try { body = response.json(); } catch (_) { /* 网络错误和非 JSON 响应由检查统一记录。 */ }
-  const expected = details.statuses ?? (details.operation ? [202] : [200]);
-  const ok = expected.includes(response.status) && validator(body, response.status);
-  const outcome = details.outcome?.(body, ok) ?? null;
+  const expectedStatus = details.operation ? 202 : 200;
+  const ok = response.status === expectedStatus && validator(body);
   check(ok, { '业务响应有效': value => value }, { name });
   // 日志只保存测试标识、状态与时间，省略响应正文、Cookie 和 CSRF。
   console.log('EC_HTTP ' + JSON.stringify({
@@ -61,9 +60,11 @@ function send(name, method, path, session, validator, details = {}) {
     article: details.article ?? 0, liked: details.liked ?? false,
     version: ok && details.operation ? body.version : null,
     variant: details.variant ?? '',
-    ...(details.submission ? { submission: details.submission, sample: details.sample ?? false, outcome } : {}),
+    ...(details.submission ? { submission: details.submission } : {}),
+    // 一级提交按响应原样留存评论 ID，避免 JavaScript 数字精度影响对账。
+    ...(name === 'comment-submit' && ok ? { commentId: body.comment.id } : {}),
   }));
-  return { ok, body, start, outcome };
+  return { ok, body };
 }
 
 function search(query, session, cursor, previous) {
@@ -92,28 +93,12 @@ function like(id, session, startingLike, random) {
   return result.ok;
 }
 
-function observeComment(article, submission, session, commentId, submittedAt) {
-  const deadline = submittedAt + 10000;
-  while (Date.now() + 650 < deadline) {
-    sleep(0.65);
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) return;
-    const details = { article, submission, timeout: Math.min(4000, remaining) + 'ms' };
-    const latest = send('comment-visible', 'GET', commentListPath(article, 'latest', 50), session,
-      body => validCommentPage(body, 50, false),
-      { ...details, outcome: (body, ok) => ok && body.items.some(item => item.id === commentId) ? 'VISIBLE' : null });
-    if (latest.outcome === 'VISIBLE') return;
-  }
-}
-
-function submitComment(article, session, iteration) {
+function submitComment(article, session) {
   const submission = operationId();
   const payload = commentPayload(submission);
-  // PUT 已确认落库，每五秒只安排一个通过正式列表观察索引可见性的样本。
-  const sample = __ENV.EC_BASELINE_PHASE === 'measure' && iteration % (load * 5) === 0;
-  const result = send('comment-submit', 'PUT', commentSubmissionPath(article, submission), session,
-    body => validRootSubmission(body, session.user, payload.content), { article, submission, payload, sample });
-  if (result.ok && sample) observeComment(article, submission, session, result.body.comment.id, result.start);
+  // PUT 成功已确认同步落库，计数和索引留到停压后核对。
+  send('comment-submit', 'PUT', commentSubmissionPath(article, submission), session,
+    body => validRootSubmission(body, session.user, payload.content), { article, submission, payload });
 }
 
 function submitReply(session, iteration) {
@@ -156,13 +141,13 @@ export default function () {
   if (scenario === 'comment-read') {
     const article = commentReadArticle(config.commentReadArticles, random);
     send('comment-first', 'GET', commentListPath(article, 'hot', 20), random() < 0.7 ? session : null,
-      body => validCommentPage(body, 20, true), { article });
+      body => validCommentPage(body, 20), { article });
     return;
   }
   if (scenario === 'comment-write-spread' || scenario === 'comment-write-hot') {
     const article = commentWriteArticle(config.commentWriteFirst, config.commentWriteArticles, iteration,
       scenario === 'comment-write-hot');
-    submitComment(article, session, iteration);
+    submitComment(article, session);
     return;
   }
   if (scenario === 'comment-reply-write-spread' || scenario === 'comment-reply-write-hot') {
