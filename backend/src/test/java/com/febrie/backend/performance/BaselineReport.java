@@ -61,6 +61,7 @@ final class BaselineReport {
                 }
             }
             report.append("。\n");
+            load(report, stage);
             if (stage.diagnostics().containsKey("journeyStartsPerSecond")) {
                 report.append(String.format(Locale.ROOT, "- 实际启动 %.2f 旅程/秒，合计 %.2f HTTP 请求/秒。%n",
                         stage.diagnostics().get("journeyStartsPerSecond"), stage.diagnostics().get("httpRequestsPerSecond")));
@@ -94,12 +95,40 @@ final class BaselineReport {
                         .append("，一级评论数差异 ").append(audit.wrongCounts()).append("。\n");
             }
             stage.issues().forEach(issue -> report.append("- ").append(issue.replace('\n', ' ')).append("\n"));
-            String telemetry = "round-" + stage.round() + "/" + stage.scenario() + "-" + stage.load() + "/telemetry.jsonl";
-            if (Files.exists(root.resolve(telemetry))) { report.append("- [本档监控时序](").append(telemetry).append(")\n"); }
+            String directory = "round-" + stage.round() + "/" + stage.scenario() + "-" + stage.load() + "/";
+            link(report, root, directory + "telemetry.jsonl", "本档监控时序");
+            link(report, root, directory + "warm-load.jsonl", "预热发压时序");
+            link(report, root, directory + "measure-load.jsonl", "测量发压时序");
         }
         Path pending = root.resolve("report.md.tmp");
         Files.writeString(pending, report);
         Files.move(pending, root.resolve("report.md"), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private static void load(StringBuilder report, Stage stage) {
+        if (stage.diagnostics().get("sessionPreparation") instanceof BaselineStage.SessionPreparation preparation) {
+            report.append("- 发压前准备会话 ").append(preparation.count()).append(" 个，耗时 ")
+                    .append(preparation.durationMs()).append(" ms。\n");
+        }
+        var k6 = stage.k6();
+        if (k6 == null) { return; }
+        report.append("- 测量期计划／启动／完成迭代 ").append(format((Long) stage.diagnostics().get("plannedIterations")))
+                .append(" / ").append(k6.startedIterations()).append(" / ").append(k6.iterations())
+                .append("，k6 HTTP 请求 ").append(k6.httpRequests()).append("，宽限期完成的已记录请求 ")
+                .append(format((Long) stage.diagnostics().get("measureHttpCompletedInGrace")))
+                .append("，接收 ").append(format(k6.dataReceivedBytes())).append(" 字节。\n");
+        report.append("- P95/P99（ms）迭代 ").append(latency(k6, "iteration_duration"))
+                .append("，HTTP 等待 ").append(latency(k6, "http_req_waiting"))
+                .append("，HTTP 连接阻塞 ").append(latency(k6, "http_req_blocked")).append("。\n");
+    }
+
+    private static String latency(BaselineStats.K6 k6, String metric) {
+        var value = k6.latency().get(metric);
+        return value == null ? "—" : String.format(Locale.ROOT, "%.2f / %.2f", value.p95Ms(), value.p99Ms());
+    }
+
+    private static void link(StringBuilder report, Path root, String path, String label) {
+        if (Files.exists(root.resolve(path))) { report.append("- [").append(label).append("](").append(path).append(")\n"); }
     }
 
     private static void commentWrite(StringBuilder report, BaselineCommentWrite.Result result) {

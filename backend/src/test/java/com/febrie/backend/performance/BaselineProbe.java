@@ -39,9 +39,21 @@ final class BaselineProbe implements AutoCloseable {
     }
     record Mysql(long waits, long waitMs, List<Map<String, Object>> blocking) { }
     record CommentWork(Mq mq, long indexOutbox, long oldestIndexOutboxMs, long countOutbox) { }
+    record K6Process(Long cpuMs, Long httpLogBytes, Long metricsFileBytes) {
+        static K6Process read(Process process, Path log, Path metrics) {
+            // 文件大小和进程 CPU 都是累计值，采样差值只反映产物增长和进程 CPU 时间。
+            return new K6Process(process.info().totalCpuDuration().map(Duration::toMillis).orElse(null),
+                    fileSize(log), fileSize(metrics));
+        }
+
+        private static Long fileSize(Path file) {
+            try { return Files.size(file); }
+            catch (IOException unavailable) { return null; }
+        }
+    }
     record Sample(long at, String phase, Mq mq, Mysql mysql, Map<String, Object> es, Map<String, Number> app,
                   Map<String, Object> pv, Map<String, Object> coverage, CommentWork comment,
-                  double hostCpu, List<String> missing) { }
+                  double hostCpu, List<String> missing, K6Process k6Process) { }
 
     private final BaselineEnvironment.Site site;
     private final BaselineReconcile reconcile;
@@ -73,6 +85,10 @@ final class BaselineProbe implements AutoCloseable {
     }
 
     Sample sample(String phase, boolean views) throws IOException {
+        return sample(phase, views, null);
+    }
+
+    Sample sample(String phase, boolean views, K6Process generator) throws IOException {
         long now = System.currentTimeMillis();
         var missing = new ArrayList<String>();
         var queueResponse = read("RabbitMQ", missing,
@@ -87,7 +103,7 @@ final class BaselineProbe implements AutoCloseable {
         boolean includePv = views && (samples++ % 5 == 0 || !phase.equals("measure"));
         var pv = includePv ? read("PV 采样", missing, this::pv) : null;
         var sample = new Sample(now, phase, mq, mysql, es, app, pv, coverage, comment,
-                os == null ? -1 : os.getCpuLoad(), missing);
+                os == null ? -1 : os.getCpuLoad(), missing, generator);
         output.write(site.json.writeValueAsString(sample));
         output.newLine();
         output.flush();
@@ -168,7 +184,8 @@ final class BaselineProbe implements AutoCloseable {
             var id = meter.getId();
             String name = id.getName();
             if (!(name.startsWith("article.") || name.startsWith("hikaricp.") || name.startsWith("jvm.gc.")
-                    || name.startsWith("baseline.pv.") || name.equals("community.cache.events"))) { continue; }
+                    || name.startsWith("baseline.pv.") || name.equals("community.cache.events")
+                    || name.equals("http.server.requests"))) { continue; }
             String key = id.getTags().isEmpty() ? name : name + id.getTags();
             for (var statistic : meter.measure()) {
                 if (Double.isFinite(statistic.getValue())) {

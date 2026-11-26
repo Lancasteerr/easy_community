@@ -21,14 +21,17 @@ final class BaselineJournal {
     }
 
     private static final String MARKER = "EC_HTTP ";
+    private static final String SCENARIO_START = "EC_SCENARIO_START ";
     private final Path file;
     private final ObjectMapper json;
     private final List<Event> events = new ArrayList<>();
     private long offset;
+    private Long startedAt;
 
     BaselineJournal(Path file, ObjectMapper json) { this.file = file; this.json = json; }
 
     List<Event> events() { return events; }
+    Long startedAt() { return startedAt; }
 
     void refresh() throws IOException {
         if (!Files.exists(file)) { return; }
@@ -43,6 +46,8 @@ final class BaselineJournal {
                 int marker = line.indexOf(MARKER);
                 if (marker >= 0) {
                     events.add(json.readValue(line.substring(marker + MARKER.length()), Event.class));
+                } else if ((marker = line.indexOf(SCENARIO_START)) >= 0) {
+                    startedAt = Long.parseLong(line.substring(marker + SCENARIO_START.length()).strip());
                 }
                 offset = input.getFilePointer();
             }

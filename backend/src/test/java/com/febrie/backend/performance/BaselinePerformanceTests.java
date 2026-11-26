@@ -84,7 +84,10 @@ class BaselinePerformanceTests {
                                          BaselineEnvironment environment) throws Exception {
         Path input = Files.createTempFile("ec-k6-session-", ".json");
         try {
+            long preparationStarted = System.nanoTime();
             var sessions = stage.needsSessions() ? site.sessions(stage.vus()) : List.of();
+            var preparation = new BaselineStage.SessionPreparation(sessions.size(),
+                    Duration.ofNanos(System.nanoTime() - preparationStarted).toMillis());
             site.json.writeValue(input.toFile(), Map.ofEntries(
                     Map.entry("base", site.base), Map.entry("seed", workload.seed()),
                     Map.entry("articles", workload.articles()), Map.entry("partitions", workload.partitions()),
@@ -93,7 +96,7 @@ class BaselinePerformanceTests {
                     Map.entry("commentRootsPerArticle", BaselineCommentFixture.ROOTS_PER_ARTICLE),
                     Map.entry("commentWriteFirst", environment.commentWriteFirst),
                     Map.entry("commentWriteArticles", BaselineEnvironment.COMMENT_WRITE_ARTICLES)));
-            return BaselineStage.run(round, stage, site, script, input, output, smoke);
+            return BaselineStage.run(round, stage, site, script, input, output, smoke, preparation);
         } finally { Files.deleteIfExists(input); }
     }
 }

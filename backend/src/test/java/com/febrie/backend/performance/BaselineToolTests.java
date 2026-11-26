@@ -126,7 +126,44 @@ class BaselineToolTests {
                     {"type":"Point","metric":"data_received","data":{"value":20}}
                     """.getBytes(StandardCharsets.UTF_8));
         }
-        assertEquals(new BaselineStats.K6(0, 3, 2, 1, 10, 1, 30L), BaselineStats.k6(raw, json));
+        assertEquals(new BaselineStats.K6(0, 3, 2, 1, 10, 1, 30L, 0, 0, java.util.Map.of()),
+                BaselineStats.k6(raw, json, null));
+    }
+
+    @Test void alignsIterationAndHttpTimesWithoutCountingGraceAsPlannedLoad() throws Exception {
+        var json = new ObjectMapper();
+        long start = java.time.Instant.parse("2026-11-26T05:00:00Z").toEpochMilli();
+        var log = root.resolve("timeline-http.log");
+        var request = new BaselineJournal.Event("detail", start + 380, start + 2_001, 200, true,
+                0, 1, false, null, null, "", null, null, null);
+        Files.writeString(log, "EC_SCENARIO_START " + start + "\nEC_HTTP " + json.writeValueAsString(request) + "\n");
+        var journal = new BaselineJournal(log, json);
+        journal.refresh();
+        assertEquals(start, journal.startedAt());
+        var raw = root.resolve("timeline.json.gz");
+        try (var gzip = new GZIPOutputStream(Files.newOutputStream(raw))) {
+            gzip.write("""
+                    {"type":"Point","metric":"iteration_started","data":{"time":"2026-11-26T13:00:00.120+08:00","value":2}}
+                    {"type":"Point","metric":"dropped_iterations","data":{"time":"2026-11-26T13:00:00.123456789+08:00","value":1}}
+                    {"type":"Point","metric":"iterations","data":{"time":"2026-11-26T05:00:02.020Z","value":1}}
+                    {"type":"Point","metric":"http_reqs","data":{"value":1}}
+                    {"type":"Point","metric":"iteration_duration","data":{"value":140.13}}
+                    {"type":"Point","metric":"http_req_waiting","data":{"value":120.25}}
+                    {"type":"Point","metric":"http_req_blocked","data":{"value":0.14}}
+                    """.getBytes(StandardCharsets.UTF_8));
+        }
+        var timeline = new BaselineTimeline(journal.startedAt(), 2, 3);
+        var stats = BaselineStats.k6(raw, json, timeline);
+        timeline.requests(journal.events());
+        assertEquals(2, stats.startedIterations());
+        assertEquals(1, stats.iterations());
+        assertEquals(1, stats.dropped());
+        assertEquals(1, stats.httpRequests());
+        assertEquals(new BaselineStats.Latency(0.14, 0.14), stats.latency().get("http_req_blocked"));
+        assertEquals(List.of(new BaselineTimeline.Second(0, "scheduled", 3, 2, 0, 1, 1, 0, 0),
+                new BaselineTimeline.Second(1, "scheduled", 3, 0, 0, 0, 0, 0, 0),
+                new BaselineTimeline.Second(2, "grace", 0, 0, 1, 0, 0, 1, 1)), timeline.rows());
+        assertNull(new BaselineTimeline(start, 2, null).rows().getFirst().plannedIterations());
     }
 
     @Test void partialResultsExposeMissingOrResetCounters() throws Exception {

@@ -10,6 +10,8 @@ import java.util.Map;
 
 /** 单档串联相同时间轴上的预热、正式发压、自然刷盘和异步排空。 */
 final class BaselineStage {
+    record SessionPreparation(int count, long durationMs) { }
+
     private final BaselineEnvironment.Site site;
     private final BaselineK6.Stage stage;
     private final BaselineReconcile reconcile;
@@ -27,8 +29,11 @@ final class BaselineStage {
     }
 
     static BaselineReport.Stage run(int round, BaselineK6.Stage stage, BaselineEnvironment.Site site,
-                                    Path script, Path input, Path output, boolean smoke) throws Exception {
-        return new BaselineStage(site, stage).measure(round, script, input, output, smoke);
+                                    Path script, Path input, Path output, boolean smoke,
+                                    SessionPreparation preparation) throws Exception {
+        var run = new BaselineStage(site, stage);
+        run.diagnostics.put("sessionPreparation", preparation);
+        return run.measure(round, script, input, output, smoke);
     }
 
     private BaselineReport.Stage measure(int round, Path script, Path input, Path output, boolean smoke) throws Exception {
@@ -42,16 +47,17 @@ final class BaselineStage {
             if (smoke && stage.scenario().equals("search")) {
                 diagnostics.put("lockProbe", BaselineFailureProbe.verify(site, probe));
             }
-            if (!cold && !recoveryProbe) { phase(probe, script, input, output, "warm", smoke ? 4 : 60); }
+            int warmSeconds = smoke ? 4 : 60;
+            var warm = cold || recoveryProbe ? null : phase(probe, script, input, output, "warm", warmSeconds);
             var first = probe.sample("measure-start", stage.readsDetails());
             checkSample(first);
             samples.add(first);
             int seconds = smoke ? 8 : cold ? 60 : 300;
-            List<BaselineJournal.Event> events;
+            BaselineJournal measure;
             var group = site.app.getBean("likeListener", LikeListenerGroup.class);
             if (recoveryProbe) { group.stop(); }
             try {
-                events = phase(probe, script, input, output, "measure", seconds);
+                measure = phase(probe, script, input, output, "measure", seconds);
                 if (recoveryProbe) {
                     long until = System.currentTimeMillis() + 8000;
                     while (peakPending() == 0 && System.currentTimeMillis() < until) {
@@ -63,10 +69,12 @@ final class BaselineStage {
             var end = probe.sample("measure-end", stage.readsDetails());
             checkSample(end);
             samples.add(end);
+            var events = measure.events();
             var primary = stage.writesComments() ? events.stream().filter(event -> !event.auxiliary()).toList() : events;
             long stopped = primary.stream().mapToLong(BaselineJournal.Event::end).max().orElse(System.currentTimeMillis());
             var drain = drain(probe, stopped, ready.mq().ack());
-            var k6 = BaselineStats.k6(output.resolve("measure-metrics.json.gz"), site.json);
+            var k6 = phaseMetrics(measure, output, "measure", seconds);
+            if (warm != null) { diagnostics.put("warmK6", phaseMetrics(warm, output, "warm", warmSeconds)); }
             double window = seconds;
             if (!primary.isEmpty()) {
                 long firstRequest = primary.stream().mapToLong(BaselineJournal.Event::start).min().orElseThrow();
@@ -79,20 +87,21 @@ final class BaselineStage {
             long successes = primary.stream().filter(BaselineJournal.Event::ok).count();
             if (primary.isEmpty() || successes * 100 < primary.size() * 99L) { issues.add("业务检查成功率低于 99% 或没有样本"); }
             long planned = (long) seconds * stage.load();
-            if (!stage.closed()) {
-                // 混合按旅程计数，单接口档仍核对一迭代一条主请求。
-                long started = stage.mixed() ? k6.startedJourneys() : primary.size();
-                if (k6.dropped() * 100 > planned || started != k6.iterations() || started < planned * .99) {
-                    issues.add("未达到计划到达率或主负载与 k6 迭代数不符");
-                }
+            long started = k6.startedIterations();
+            if (!stage.closed() && (k6.dropped() * 100 > planned || started < planned * .99)) {
+                issues.add("未达到计划到达率");
+            }
+            if (started != k6.iterations()) { issues.add("已启动与完成迭代数不符"); }
+            if (events.size() != k6.httpRequests() || !stage.mixed() && primary.size() != started) {
+                issues.add("HTTP 请求记录与 k6 指标或主迭代数不符");
             }
             if (stage.comments() && (k6.dropped() > 0 || successes / window < stage.load() * .99)) {
                 issues.add("评论主请求成功吞吐低于目标的 99% 或存在丢弃迭代");
             }
             if (stage.mixed()) {
-                diagnostics.put("journeyStartsPerSecond", k6.startedJourneys() / (double) seconds);
+                diagnostics.put("journeyStartsPerSecond", started / (double) seconds);
                 diagnostics.put("httpRequestsPerSecond", events.size() / window);
-                if (k6.startedJourneys() == 0 || 100 * k6.successfulJourneys() < 99 * k6.startedJourneys()) {
+                if (started == 0 || 100 * k6.successfulJourneys() < 99 * started) {
                     issues.add("完整旅程通过率低于 99%");
                 }
             }
@@ -150,9 +159,11 @@ final class BaselineStage {
         } while (true);
     }
 
-    private List<BaselineJournal.Event> phase(BaselineProbe probe, Path script, Path input, Path output,
-                                             String phase, int seconds) throws Exception {
-        var journal = new BaselineJournal(output.resolve(phase + "-http.log"), site.json);
+    private BaselineJournal phase(BaselineProbe probe, Path script, Path input, Path output,
+                                  String phase, int seconds) throws Exception {
+        var log = output.resolve(phase + "-http.log");
+        var metrics = output.resolve(phase + "-metrics.json.gz");
+        var journal = new BaselineJournal(log, site.json);
         var process = BaselineK6.start(script, input, output, phase, stage, seconds);
         int offset = 0;
         long deadline = System.nanoTime() + Duration.ofSeconds(seconds + 25L).toNanos();
@@ -161,15 +172,32 @@ final class BaselineStage {
                 journal.refresh();
                 append(journal.events(), offset);
                 offset = journal.events().size();
-                collect(probe, phase);
+                collect(probe, phase, BaselineProbe.K6Process.read(process, log, metrics));
                 process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS);
             }
             BaselineK6.verifyExit(process, 0);
             journal.refresh();
             append(journal.events(), offset);
-            if (journal.events().isEmpty()) { throw new IllegalStateException("k6 未输出 HTTP 样本：" + phase); }
-            return journal.events();
+            if (journal.events().isEmpty()) { issues.add("k6 未输出 HTTP 样本 " + phase); }
+            return journal;
         } finally { if (process.isAlive()) { process.destroyForcibly().waitFor(); } }
+    }
+
+    private BaselineStats.K6 phaseMetrics(BaselineJournal journal, Path output, String phase, int seconds)
+            throws Exception {
+        var raw = output.resolve(phase + "-metrics.json.gz");
+        if (journal.startedAt() == null) {
+            issues.add("k6 未记录场景起点 " + phase);
+            return BaselineStats.k6(raw, site.json, null);
+        }
+        diagnostics.put(phase + "StartedAt", journal.startedAt());
+        var timeline = new BaselineTimeline(journal.startedAt(), seconds, stage.closed() ? null : stage.load());
+        var result = BaselineStats.k6(raw, site.json, timeline);
+        timeline.requests(journal.events());
+        diagnostics.put(phase + "HttpCompletedInGrace", timeline.rows().stream()
+                .filter(row -> row.window().equals("grace")).mapToLong(BaselineTimeline.Second::httpCompleted).sum());
+        timeline.write(output.resolve(phase + "-load.jsonl"), site.json);
+        return result;
     }
 
     private void append(List<BaselineJournal.Event> events, int offset) {
@@ -192,7 +220,12 @@ final class BaselineStage {
     }
 
     private BaselineProbe.Sample collect(BaselineProbe probe, String phase) throws Exception {
-        var sample = probe.sample(phase, stage.readsDetails());
+        return collect(probe, phase, null);
+    }
+
+    private BaselineProbe.Sample collect(BaselineProbe probe, String phase, BaselineProbe.K6Process generator)
+            throws Exception {
+        var sample = probe.sample(phase, stage.readsDetails(), generator);
         checkSample(sample);
         samples.add(sample);
         return sample;

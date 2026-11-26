@@ -17,7 +17,7 @@ const load = Number(__ENV.EC_BASELINE_LOAD);
 const vus = Number(__ENV.EC_BASELINE_VUS);
 const closed = __ENV.EC_BASELINE_MODEL === 'VU';
 const journey = new Rate('journey_completed');
-const journeyStarted = new Counter('journey_started');
+const iterationStarted = new Counter('iteration_started');
 
 export const options = {
   scenarios: {
@@ -128,6 +128,9 @@ function submitReply(session, iteration) {
 
 export default function () {
   const iteration = exec.scenario.iterationInTest;
+  // 每阶段只有一个场景。使用调度器时间，避免进程初始化被计入发压窗口。
+  if (iteration === 0) console.log('EC_SCENARIO_START ' + exec.scenario.startTime);
+  iterationStarted.add(1);
   const vu = exec.vu.idInTest;
   const random = randomFor(config.seed, iteration, vu);
   const session = sessionFor(config.sessions, vu);
@@ -167,7 +170,6 @@ export default function () {
     return;
   }
   if (scenario === 'mixed') {
-    journeyStarted.add(1);
     // 开放模型动态复用 VU，按旅程抽取游客，闭合模型仍沿用固定的游客 VU。
     const guest = closed ? vu <= Math.round(vus * 0.3) : random() < 0.3;
     const identity = guest ? null : session;

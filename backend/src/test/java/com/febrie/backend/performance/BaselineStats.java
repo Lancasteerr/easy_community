@@ -19,9 +19,12 @@ import tools.jackson.databind.ObjectMapper;
 final class BaselineStats {
     record Route(long total, long success, long throttled, double rps, long p50, long p95, long p99,
                  Long responseBytes, Map<Integer, Long> statuses) { }
+    record Latency(double p95Ms, double p99Ms) { }
     record K6(long iterations, long dropped, long journeys, long successfulJourneys, long peakVus,
-              long startedJourneys, Long dataReceivedBytes) { }
+              long startedJourneys, Long dataReceivedBytes, long startedIterations, long httpRequests,
+              Map<String, Latency> latency) { }
     private record Edge(long at, int change, long user) { }
+    private static final List<String> TIMINGS = List.of("iteration_duration", "http_req_waiting", "http_req_blocked");
 
     private BaselineStats() { }
 
@@ -80,27 +83,51 @@ final class BaselineStats {
         return peak;
     }
 
-    static K6 k6(Path raw, ObjectMapper json) throws IOException {
-        long iterations = 0, dropped = 0, journeys = 0, success = 0, vus = 0, startedJourneys = 0;
+    static K6 k6(Path raw, ObjectMapper json, BaselineTimeline timeline) throws IOException {
+        long iterations = 0, dropped = 0, journeys = 0, success = 0, vus = 0;
+        long started = 0, journeyStarts = 0, httpRequests = 0;
         Long received = null;
+        var durations = new TreeMap<String, List<Double>>();
         try (var reader = new BufferedReader(new InputStreamReader(new GZIPInputStream(Files.newInputStream(raw)),
                 StandardCharsets.UTF_8))) {
             for (String line; (line = reader.readLine()) != null;) {
                 var node = json.readTree(line);
                 if (!node.path("type").asString().equals("Point")) { continue; }
-                long value = node.path("data").path("value").asLong();
-                switch (node.path("metric").asString()) {
+                String metric = node.path("metric").asString();
+                var data = node.path("data");
+                var point = data.path("value");
+                if (TIMINGS.contains(metric)) {
+                    durations.computeIfAbsent(metric, ignored -> new ArrayList<>()).add(point.asDouble());
+                    continue;
+                }
+                long value = point.asLong();
+                switch (metric) {
+                    case "iteration_started" -> {
+                        started += value;
+                        if (data.path("tags").path("scenario").asString().equals("mixed")) { journeyStarts += value; }
+                    }
                     case "iterations" -> iterations += value;
                     case "dropped_iterations" -> dropped += value;
                     case "journey_completed" -> { journeys++; success += value; }
-                    case "journey_started" -> startedJourneys += value;
+                    case "journey_started" -> journeyStarts += value;
                     case "vus" -> vus = Math.max(vus, value);
                     case "data_received" -> received = (received == null ? 0L : received) + value;
-                    default -> { /* 延迟和状态使用可与业务对账关联的请求记录。 */ }
+                    case "http_reqs" -> httpRequests += value;
+                    default -> { continue; }
+                }
+                if (timeline != null && (metric.equals("iteration_started") || metric.equals("iterations")
+                        || metric.equals("dropped_iterations"))) {
+                    timeline.iteration(metric, data.path("time").asString(), value);
                 }
             }
         }
-        return new K6(iterations, dropped, journeys, success, vus, startedJourneys, received);
+        var latency = new TreeMap<String, Latency>();
+        durations.forEach((metric, values) -> {
+            values.sort(null);
+            latency.put(metric, new Latency(values.get((int) Math.ceil(values.size() * .95) - 1),
+                    values.get((int) Math.ceil(values.size() * .99) - 1)));
+        });
+        return new K6(iterations, dropped, journeys, success, vus, journeyStarts, received, started, httpRequests, latency);
     }
 
     static Long delta(long first, long last) { return last < first ? null : last - first; }
