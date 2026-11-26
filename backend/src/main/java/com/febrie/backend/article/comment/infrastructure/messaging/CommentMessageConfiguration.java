@@ -22,6 +22,7 @@ import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 /** 写分片与 ES 投影独立限流及死信，楼层刷新继续使用现有队列。 */
 @Configuration(proxyBeanMethods = false)
@@ -31,10 +32,12 @@ class CommentMessageConfiguration {
     Declarables commentBusinessQueues(CommentBroker broker) {
         var queues = new ArrayList<Declarable>();
         queues.add(dead(broker.writeDeadQueue()));
+        queues.add(dead(broker.countDeadQueue()));
         queues.add(dead(broker.indexDeadQueue()));
         queues.add(work(broker.indexQueue(), broker.indexDeadQueue(), false));
         for (int partition = 0; partition < CommentBroker.PARTITIONS; partition++) {
             queues.add(work(broker.writeQueue(partition), broker.writeDeadQueue(), true));
+            queues.add(work(broker.countQueue(partition), broker.countDeadQueue(), true));
         }
         return new Declarables(queues);
     }
@@ -78,11 +81,37 @@ class CommentMessageConfiguration {
     }
 
     @Bean
-    org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler commentIndexScheduler() {
-        var scheduler = new org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler();
+    ThreadPoolTaskScheduler commentIndexScheduler() {
+        var scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(2);
         scheduler.setThreadNamePrefix("comment-index-");
         return scheduler;
+    }
+
+    @Bean
+    ThreadPoolTaskScheduler commentCountScheduler() {
+        var scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setThreadNamePrefix("comment-count-");
+        return scheduler;
+    }
+
+    @Bean
+    WriteListeners commentCountListeners(ConnectionFactory factory, CommentBroker broker, CommentCountWorker worker) {
+        var listeners = new ArrayList<SimpleMessageListenerContainer>();
+        for (int index = 0; index < CommentBroker.PARTITIONS; index++) {
+            int partition = index;
+            var listener = batchListener(factory, broker.countQueue(partition), CommentCountWorker.BATCH_SIZE);
+            listener.setBeanName("commentCount-" + partition);
+            listener.setMessageListener((ChannelAwareBatchMessageListener) (messages, channel) -> {
+                try {
+                    worker.consume(partition, messages, channel);
+                } catch (IOException failure) {
+                    throw new ImmediateRequeueAmqpException("评论计数确认失败", failure);
+                }
+            });
+            listeners.add(listener);
+        }
+        return new WriteListeners(List.copyOf(listeners));
     }
 
     @Bean
@@ -91,15 +120,8 @@ class CommentMessageConfiguration {
     SimpleMessageListenerContainer commentIndexListener(ConnectionFactory factory, CommentBroker broker,
                                                          CommentIndexWorker worker,
                                                          @Value("${app.comment.index-batch-size}") int batchSize) {
-        var listener = new SimpleMessageListenerContainer(factory);
-        listener.setQueueNames(broker.indexQueue());
-        listener.setAcknowledgeMode(AcknowledgeMode.MANUAL);
         // 保留 relay 的投递节奏，消费端以短窗口收集消息并合并 ES 写入。
-        listener.setPrefetchCount(batchSize);
-        listener.setBatchSize(batchSize);
-        listener.setConsumerBatchEnabled(true);
-        listener.setReceiveTimeout(100);
-        listener.setBatchReceiveTimeout(100);
+        var listener = batchListener(factory, broker.indexQueue(), batchSize);
         listener.setMessageListener((ChannelAwareBatchMessageListener) (messages, channel) -> {
             try {
                 worker.consume(messages, channel);
@@ -107,6 +129,19 @@ class CommentMessageConfiguration {
                 throw new ImmediateRequeueAmqpException("评论索引确认失败", failure);
             }
         });
+        return listener;
+    }
+
+    private static SimpleMessageListenerContainer batchListener(ConnectionFactory factory, String queue, int batchSize) {
+        var listener = new SimpleMessageListenerContainer(factory);
+        listener.setQueueNames(queue);
+        listener.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        listener.setPrefetchCount(batchSize);
+        listener.setBatchSize(batchSize);
+        listener.setConsumerBatchEnabled(true);
+        listener.setReceiveTimeout(100);
+        listener.setBatchReceiveTimeout(100);
+        listener.setForceStop(true);
         return listener;
     }
 

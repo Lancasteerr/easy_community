@@ -39,6 +39,7 @@ class CommentIndexMaintenance implements ApplicationRunner {
             case "backfill" -> traverse(false);
             case "audit" -> traverse(true);
             case "replay-index" -> log.info("重放评论索引死信数量={}", broker.replay(false, 1000));
+            case "replay-count" -> log.info("重放评论计数死信数量={}", broker.replayCounts(1000));
             case "replay-write" -> log.info("重放评论写命令死信数量={}", broker.replay(true, 1000));
             default -> throw new IllegalArgumentException("未知评论索引维护动作");
         }

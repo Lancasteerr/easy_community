@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
@@ -148,6 +149,21 @@ public class CommentStore {
         if (sql.update("UPDATE article SET comment_count = comment_count + ? WHERE id = ?", delta, article) != 1) {
             throw new IllegalStateException("文章评论计数缺失");
         }
+    }
+
+    /** 调用方已去重并按 ID 排序，同一批次按固定顺序取得文章行锁。 */
+    public void recount(List<Long> articles) {
+        if (articles.isEmpty()) return;
+        var totals = new HashMap<Long, Long>();
+        sql.query("""
+                SELECT article_id, COUNT(*) FROM article_comment
+                WHERE root_id = 0 AND deleted = FALSE AND article_id IN (%s)
+                GROUP BY article_id
+                """.formatted(placeholders(articles.size())),
+                (RowCallbackHandler) rs -> totals.put(rs.getLong(1), rs.getLong(2)), articles.toArray());
+        // 没有有效楼层的文章没有分组结果，仍需把已物化的旧计数归零。
+        var updates = articles.stream().map(article -> new Object[]{totals.getOrDefault(article, 0L), article}).toList();
+        sql.batchUpdate("UPDATE article SET comment_count = ? WHERE id = ?", updates);
     }
 
     public Map<Long, Long> counts(Collection<Long> ids) {

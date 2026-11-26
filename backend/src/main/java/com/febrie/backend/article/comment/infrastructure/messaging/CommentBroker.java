@@ -2,8 +2,10 @@ package com.febrie.backend.article.comment.infrastructure.messaging;
 
 import com.febrie.backend.article.comment.application.CommentErrors;
 import com.febrie.backend.article.comment.application.command.CommentCommand;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentCountOutbox;
 import com.febrie.backend.article.search.infrastructure.messaging.IndexPublisher;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
@@ -15,7 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
-/** 两条持久化链路共用发布确认、退回检查与死信重放。 */
+/** 评论消息链路共用发布确认、退回检查与死信重放。 */
 @Component
 public class CommentBroker {
     public static final int PARTITIONS = 4;
@@ -34,6 +36,8 @@ public class CommentBroker {
 
     public String writeQueue(int partition) { return prefix + ".write." + partition + ".q"; }
     String writeDeadQueue() { return prefix + ".write.dead.q"; }
+    public String countQueue(int partition) { return prefix + ".count." + partition + ".q"; }
+    String countDeadQueue() { return prefix + ".count.dead.q"; }
     public String indexQueue() { return prefix + ".index.q"; }
     String indexDeadQueue() { return prefix + ".index.dead.q"; }
 
@@ -65,7 +69,16 @@ public class CommentBroker {
     }
 
     public int replay(boolean write, int limit) {
-        String deadQueue = write ? writeDeadQueue() : indexDeadQueue();
+        return replay(write ? writeDeadQueue() : indexDeadQueue(), limit, message -> write
+                ? writeQueue(partition(decode(message, CommentCommand.class).articleId())) : indexQueue());
+    }
+
+    public int replayCounts(int limit) {
+        return replay(countDeadQueue(), limit,
+                message -> countQueue(partition(decode(message, CommentCountOutbox.Event.class).articleId())));
+    }
+
+    private int replay(String deadQueue, int limit, Function<Message, String> destination) {
         return rabbit.execute(channel -> {
             var converter = new DefaultMessagePropertiesConverter();
             int completed = 0;
@@ -76,9 +89,7 @@ public class CommentBroker {
                 var message = new Message(source.getBody(), converter.toMessageProperties(
                         source.getProps(), source.getEnvelope(), "UTF-8"));
                 try {
-                    String queue = write
-                            ? writeQueue(partition(decode(message, CommentCommand.class).articleId()))
-                            : indexQueue();
+                    String queue = destination.apply(message);
                     if (!confirmed(send(queue, message), System.nanoTime() + TimeUnit.SECONDS.toNanos(5))) {
                         throw new IllegalStateException("评论死信重放未获确认");
                     }
