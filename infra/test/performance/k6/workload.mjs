@@ -16,15 +16,6 @@ export function sessionFor(sessions, vu) {
   return sessions[vu - 1];
 }
 
-export function utf8Bytes(value) {
-  let bytes = 0;
-  for (const char of value) {
-    const code = char.codePointAt(0);
-    bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
-  }
-  return bytes;
-}
-
 export function distributedArticle(partitions, iteration, random) {
   const group = partitions[iteration % partitions.length];
   return group.first + group.step * Math.floor(random() * group.count);

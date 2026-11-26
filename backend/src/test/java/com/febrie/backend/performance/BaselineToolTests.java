@@ -108,6 +108,11 @@ class BaselineToolTests {
         assertEquals(1, route.throttled());
         assertEquals(.5, route.rps());
         assertEquals(5, route.p99());
+        assertEquals(14L, route.responseBytes());
+        var current = (tools.jackson.databind.node.ObjectNode) json.valueToTree(event);
+        current.remove("bytes");
+        var withoutBytes = json.treeToValue(current, BaselineJournal.Event.class);
+        assertNull(BaselineStats.routes(List.of(withoutBytes), 2).get("like").responseBytes());
 
         var raw = root.resolve("metrics.json.gz");
         try (var gzip = new GZIPOutputStream(Files.newOutputStream(raw))) {
@@ -117,9 +122,11 @@ class BaselineToolTests {
                     {"type":"Point","metric":"journey_completed","data":{"value":1}}
                     {"type":"Point","metric":"journey_started","data":{"value":1}}
                     {"type":"Point","metric":"vus","data":{"value":10}}
+                    {"type":"Point","metric":"data_received","data":{"value":10}}
+                    {"type":"Point","metric":"data_received","data":{"value":20}}
                     """.getBytes(StandardCharsets.UTF_8));
         }
-        assertEquals(new BaselineStats.K6(0, 3, 2, 1, 10, 1), BaselineStats.k6(raw, json));
+        assertEquals(new BaselineStats.K6(0, 3, 2, 1, 10, 1, 30L), BaselineStats.k6(raw, json));
     }
 
     @Test void partialResultsExposeMissingOrResetCounters() throws Exception {

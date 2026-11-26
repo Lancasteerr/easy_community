@@ -18,9 +18,9 @@ import tools.jackson.databind.ObjectMapper;
 /** 统一从原始请求与 k6 采样计算汇总，聚合分位数始终使用原始值。 */
 final class BaselineStats {
     record Route(long total, long success, long throttled, double rps, long p50, long p95, long p99,
-                 long responseBytes, Map<Integer, Long> statuses) { }
+                 Long responseBytes, Map<Integer, Long> statuses) { }
     record K6(long iterations, long dropped, long journeys, long successfulJourneys, long peakVus,
-              long startedJourneys) { }
+              long startedJourneys, Long dataReceivedBytes) { }
     private record Edge(long at, int change, long user) { }
 
     private BaselineStats() { }
@@ -34,9 +34,12 @@ final class BaselineStats {
             var statuses = new TreeMap<Integer, Long>();
             requests.forEach(event -> statuses.merge(event.status(), 1L, Long::sum));
             var latency = requests.stream().map(event -> event.end() - event.start()).sorted().toList();
+            // 新日志省略正文大小，历史日志只有在该路由样本齐全时才汇总。
+            Long responseBytes = requests.stream().anyMatch(event -> event.bytes() == null) ? null
+                    : requests.stream().mapToLong(BaselineJournal.Event::bytes).sum();
             result.put(name, new Route(requests.size(), success, statuses.getOrDefault(429, 0L), success / seconds,
                     percentile(latency, .5), percentile(latency, .95), percentile(latency, .99),
-                    requests.stream().mapToLong(BaselineJournal.Event::bytes).sum(), statuses));
+                    responseBytes, statuses));
         });
         return result;
     }
@@ -79,6 +82,7 @@ final class BaselineStats {
 
     static K6 k6(Path raw, ObjectMapper json) throws IOException {
         long iterations = 0, dropped = 0, journeys = 0, success = 0, vus = 0, startedJourneys = 0;
+        Long received = null;
         try (var reader = new BufferedReader(new InputStreamReader(new GZIPInputStream(Files.newInputStream(raw)),
                 StandardCharsets.UTF_8))) {
             for (String line; (line = reader.readLine()) != null;) {
@@ -91,11 +95,12 @@ final class BaselineStats {
                     case "journey_completed" -> { journeys++; success += value; }
                     case "journey_started" -> startedJourneys += value;
                     case "vus" -> vus = Math.max(vus, value);
+                    case "data_received" -> received = (received == null ? 0L : received) + value;
                     default -> { /* 延迟和状态使用可与业务对账关联的请求记录。 */ }
                 }
             }
         }
-        return new K6(iterations, dropped, journeys, success, vus, startedJourneys);
+        return new K6(iterations, dropped, journeys, success, vus, startedJourneys, received);
     }
 
     static Long delta(long first, long last) { return last < first ? null : last - first; }

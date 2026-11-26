@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { distributedArticle, randomFor, searchPath, sessionFor, utf8Bytes, validDetail, validLike, validSearch } from './workload.mjs';
+import { distributedArticle, randomFor, searchPath, sessionFor, validDetail, validLike, validSearch } from './workload.mjs';
 import {
   commentListPath, commentPayload, commentReadArticle, commentSubmissionPath, commentWriteArticle,
   validCommentPage, validReplySubmission, validRootSubmission,
@@ -32,7 +32,6 @@ test('详情按业务字段判断，点赞版本始终按字符串传递', () =>
   assert.equal(validLike(response, 'op', true), true);
   assert.equal(validLike({ ...response, version: Number(response.version) }, 'op', true), false);
   assert.equal(validLike(response, 'other', true), false);
-  assert.equal(utf8Bytes('一🐱x'), 8);
 });
 
 test('每个 VU 只读自己的会话', () => {

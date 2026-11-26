@@ -3,7 +3,7 @@ import exec from 'k6/execution';
 import { check, sleep } from 'k6';
 import { Counter, Rate } from 'k6/metrics';
 import {
-  choose, detailArticle, distributedArticle, randomFor, searchPath, sessionFor, utf8Bytes, validDetail, validLike, validSearch,
+  choose, detailArticle, distributedArticle, randomFor, searchPath, sessionFor, validDetail, validLike, validSearch,
 } from './workload.mjs';
 import {
   commentListPath, commentPayload, commentReadArticle, commentSubmissionPath, commentWriteArticle,
@@ -60,7 +60,6 @@ function send(name, method, path, session, validator, details = {}) {
     name, start, end, status: response.status, ok, user: session?.user ?? 0,
     article: details.article ?? 0, liked: details.liked ?? false,
     version: ok && details.operation ? body.version : null,
-    bytes: typeof response.body === 'string' ? utf8Bytes(response.body) : 0,
     variant: details.variant ?? '',
     ...(details.submission ? { submission: details.submission, sample: details.sample ?? false, outcome } : {}),
   }));
