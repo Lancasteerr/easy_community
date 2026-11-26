@@ -1,7 +1,6 @@
 package com.febrie.backend.article.comment.infrastructure.messaging;
 
 import com.febrie.backend.article.comment.application.CommentErrors;
-import com.febrie.backend.article.comment.application.command.CommentCommand;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentCountOutbox;
 import com.febrie.backend.article.search.infrastructure.messaging.IndexPublisher;
 import java.util.concurrent.TimeUnit;
@@ -21,7 +20,6 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class CommentBroker {
     public static final int PARTITIONS = 4;
-    public static final int BATCH_SIZE = 20;
 
     private final RabbitTemplate rabbit;
     private final ObjectMapper json;
@@ -34,9 +32,7 @@ public class CommentBroker {
         this.prefix = prefix + ".comment";
     }
 
-    public String writeQueue(int partition) { return prefix + ".write." + partition + ".q"; }
-    String writeDeadQueue() { return prefix + ".write.dead.q"; }
-    public String countQueue(int partition) { return prefix + ".count." + partition + ".q"; }
+    String countQueue(int partition) { return prefix + ".count." + partition + ".q"; }
     String countDeadQueue() { return prefix + ".count.dead.q"; }
     public String indexQueue() { return prefix + ".index.q"; }
     String indexDeadQueue() { return prefix + ".index.dead.q"; }
@@ -68,9 +64,8 @@ public class CommentBroker {
         return IndexPublisher.awaitConfirmation(confirmation, deadline);
     }
 
-    public int replay(boolean write, int limit) {
-        return replay(write ? writeDeadQueue() : indexDeadQueue(), limit, message -> write
-                ? writeQueue(partition(decode(message, CommentCommand.class).articleId())) : indexQueue());
+    public int replayIndex(int limit) {
+        return replay(indexDeadQueue(), limit, message -> indexQueue());
     }
 
     public int replayCounts(int limit) {

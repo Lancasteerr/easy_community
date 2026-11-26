@@ -15,7 +15,7 @@ final class BaselineJournal {
         boolean accepted() { return name.equals("like") && status == 202; }
         boolean viewed() { return name.equals("detail") && status == 200; }
         boolean commentSubmit() { return name.equals("comment-submit"); }
-        boolean auxiliary() { return name.equals("comment-status") || name.equals("comment-visible"); }
+        boolean auxiliary() { return name.equals("comment-visible"); }
         // 其他场景和既有请求日志没有该字段。
         boolean sampled() { return Boolean.TRUE.equals(sample); }
     }

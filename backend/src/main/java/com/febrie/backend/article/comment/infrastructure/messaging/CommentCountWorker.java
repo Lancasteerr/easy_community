@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
 /** Outbox 只发布已提交的计数事件，分片单活保证同一文章的重算顺序。 */
 @Component
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+@ConditionalOnProperty(name = "app.comment.count-sync", havingValue = "true", matchIfMissing = true)
 class CommentCountWorker {
     static final int BATCH_SIZE = 128;
     private static final Logger log = LoggerFactory.getLogger(CommentCountWorker.class);

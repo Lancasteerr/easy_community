@@ -38,7 +38,7 @@ final class BaselineProbe implements AutoCloseable {
         long redeliver() { return partitions.stream().mapToLong(Queue::redeliver).sum(); }
     }
     record Mysql(long waits, long waitMs, List<Map<String, Object>> blocking) { }
-    record CommentWork(Mq mq, long outbox, long oldestOutboxMs) { }
+    record CommentWork(Mq mq, long indexOutbox, long oldestIndexOutboxMs, long countOutbox) { }
     record Sample(long at, String phase, Mq mq, Mysql mysql, Map<String, Object> es, Map<String, Number> app,
                   Map<String, Object> pv, Map<String, Object> coverage, CommentWork comment,
                   double hostCpu, List<String> missing) { }
@@ -61,7 +61,7 @@ final class BaselineProbe implements AutoCloseable {
         output = Files.newBufferedWriter(file);
         var like = site.app.getBean(LikeProperties.class);
         queues = new LikePartitionRouter(like).queues(); dead = like.name("dead.q");
-        commentQueues = new ArrayList<>(BaselineCommentFixture.writeQueues(site.prefix));
+        commentQueues = new ArrayList<>(BaselineCommentFixture.countQueues(site.prefix));
         commentQueues.add(BaselineCommentFixture.indexQueue(site.prefix));
         commentDead = BaselineCommentFixture.deadQueues(site.prefix);
         rabbitAuth = basic("resume_test"); esAuth = basic("elastic");
@@ -99,9 +99,9 @@ final class BaselineProbe implements AutoCloseable {
         // available_at 会被重试改写，因此任务年龄以评论实际创建时间计算。
         return site.jdbc.queryForObject("""
                 SELECT COUNT(*), COALESCE(GREATEST(0, TIMESTAMPDIFF(MICROSECOND,
-                    MIN(c.created_at), UTC_TIMESTAMP(3)) DIV 1000), 0)
+                    MIN(c.created_at), UTC_TIMESTAMP(3)) DIV 1000), 0), (SELECT COUNT(*) FROM comment_count_outbox)
                 FROM comment_index_outbox o JOIN article_comment c ON c.id=o.comment_id
-                """, (rs, row) -> new CommentWork(mq, rs.getLong(1), rs.getLong(2)));
+                """, (rs, row) -> new CommentWork(mq, rs.getLong(1), rs.getLong(2), rs.getLong(3)));
     }
 
     private static Mq mq(JsonNode response, List<String> queues, List<String> dead) {

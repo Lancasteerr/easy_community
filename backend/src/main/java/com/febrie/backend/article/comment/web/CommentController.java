@@ -26,7 +26,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -88,55 +87,21 @@ public class CommentController {
         return lists.page(key, 10, cursor, user(principal));
     }
 
-    @PostMapping(consumes = "application/json")
-    public ResponseEntity<?> create(@PathVariable String articleId, @RequestBody JsonNode body,
-                                    @RequestHeader(value = "X-Operation-Id", required = false) String operation,
-                                    @AuthenticationPrincipal SessionPrincipal principal) {
-        var actor = actor(principal);
-        var input = CommentRequest.read(body);
-        long article = ArticleIds.parse(articleId);
-        return switch (writes.create(article, actor, principal.username(), operation, input)) {
-            case CommentWriteService.Accepted accepted -> ResponseEntity.accepted().body(accepted);
-            case CommentWriteService.CreatedReply reply -> ResponseEntity.status(HttpStatus.CREATED).body(reply.item());
-        };
-    }
-
     @PutMapping(value = "/submissions/{submissionId}", consumes = "application/json")
     public ResponseEntity<CommentSubmissions.View> submit(@PathVariable String articleId, @PathVariable String submissionId,
                                                           @RequestBody JsonNode body,
                                                           @AuthenticationPrincipal SessionPrincipal principal) {
-        return submission(submissions.submit(ArticleIds.parse(articleId), actor(principal), principal.username(),
-                submissionId, CommentRequest.read(body)));
-    }
-
-    @GetMapping("/submissions/{submissionId}")
-    public ResponseEntity<CommentSubmissions.View> submissionStatus(@PathVariable String articleId, @PathVariable String submissionId,
-                                                                    @AuthenticationPrincipal SessionPrincipal principal) {
-        return submission(submissions.status(ArticleIds.parse(articleId), actor(principal), submissionId));
-    }
-
-    private static ResponseEntity<CommentSubmissions.View> submission(CommentSubmissions.View view) {
-        var status = view.state() == CommentSubmissions.State.PUBLISHING ? HttpStatus.ACCEPTED : HttpStatus.OK;
-        return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).body(view);
+        var result = submissions.submit(ArticleIds.parse(articleId), actor(principal), principal.username(),
+                submissionId, CommentRequest.read(body));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(result);
     }
 
     @DeleteMapping("/{commentId}")
-    public ResponseEntity<?> delete(@PathVariable String articleId, @PathVariable String commentId,
-                                    @RequestHeader(value = "X-Operation-Id", required = false) String operation,
-                                    @AuthenticationPrincipal SessionPrincipal principal) {
-        var actor = actor(principal);
-        long article = ArticleIds.parse(articleId);
-        long id = ArticleIds.parse(commentId);
-        return writes.delete(article, id, actor, operation)
-                .<ResponseEntity<?>>map(accepted -> ResponseEntity.accepted().body(accepted))
-                .orElseGet(() -> ResponseEntity.noContent().build());
-    }
-
-    @GetMapping("/operations/{operationId}")
-    public CommentWriteService.Status operation(@PathVariable String articleId, @PathVariable String operationId,
-                                            @RequestHeader("X-Operation-Receipt") String receipt,
-                                            @AuthenticationPrincipal SessionPrincipal principal) {
-        return writes.status(ArticleIds.parse(articleId), actor(principal), operationId, receipt);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable String articleId, @PathVariable String commentId,
+                       @RequestHeader(value = "X-Operation-Id", required = false) String operation,
+                       @AuthenticationPrincipal SessionPrincipal principal) {
+        writes.delete(ArticleIds.parse(articleId), ArticleIds.parse(commentId), actor(principal), operation);
     }
 
     @PutMapping("/{commentId}/like")

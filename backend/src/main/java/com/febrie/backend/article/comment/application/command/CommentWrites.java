@@ -2,6 +2,7 @@ package com.febrie.backend.article.comment.application.command;
 
 import com.febrie.backend.article.comment.application.CommentAccess;
 import com.febrie.backend.article.comment.application.CommentErrors;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentCountOutbox;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentMaintenance;
@@ -20,17 +21,23 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 class CommentWrites {
     private final CommentStore store;
     private final CommentMaintenance maintenance;
+    private final CommentCountOutbox counts;
     private final Clock clock;
 
-    CommentWrites(CommentStore store, CommentMaintenance maintenance, Clock clock) {
+    CommentWrites(CommentStore store, CommentMaintenance maintenance, CommentCountOutbox counts, Clock clock) {
         this.store = store;
         this.maintenance = maintenance;
+        this.counts = counts;
         this.clock = clock;
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)
-    public CreatedReply createReply(long article, UserActor actor, long replyToId, String supplied) {
-        return insertReply(article, actor, replyToId, content(supplied));
+    /** 新增不更新文章行，文章共享锁足以校验可见性并允许同篇并发发布。 */
+    CommentRow insertRoot(long article, UserActor actor, String content) {
+        if (!store.lockPublicArticle(article, false)) throw CommentErrors.missing();
+        var row = store.insert(article, 0, null, actor.userId(), content,
+                clock.instant().truncatedTo(ChronoUnit.MILLIS));
+        appendRootEvents(row);
+        return row;
     }
 
     /** 调用方先校验文字，并在 READ COMMITTED 事务中持有共享锁直至提交。 */
@@ -45,6 +52,19 @@ class CommentWrites {
 
     /** 携带已经校验的目标作者，供事务外组装发布响应。 */
     record CreatedReply(CommentRow row, long targetAuthorId) { }
+
+    /** 先锁文章，避免和持有文章共享锁的回复写入交叉；条件更新处理重复删除。 */
+    boolean deleteRoot(CommentRow row) {
+        if (!store.lockPublicArticle(row.articleId(), true)) throw CommentErrors.missing();
+        if (!store.deleteIfActive(row)) return false;
+        appendRootEvents(row);
+        return true;
+    }
+
+    private void appendRootEvents(CommentRow row) {
+        store.appendIndex(row.id());
+        counts.append(row.articleId());
+    }
 
     /** 调用方已校验归属和删除权限，并确认目标是二级评论。 */
     @Transactional(isolation = Isolation.READ_COMMITTED, timeout = 5)

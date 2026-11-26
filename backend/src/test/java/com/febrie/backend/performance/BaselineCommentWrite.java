@@ -11,7 +11,7 @@ import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
-/** 将每笔已受理请求与幂等结果、一级评论、文章计数及 ES 可见文档逐一关联。 */
+/** 将每笔已发布请求与幂等结果、一级评论、文章计数及 ES 可见文档逐一关联。 */
 final class BaselineCommentWrite {
     record Audit(long accepted, long persisted, long unexpectedResults, long untrackedRoots, long wrongCounts,
                  BaselineCommentFixture.IndexAudit index) {
@@ -22,7 +22,8 @@ final class BaselineCommentWrite {
     }
 
     record Observation(long samples, int published, int visible, long publishedP95Ms, long visibleP95Ms) { }
-    record Result(Audit audit, Observation observation, long outboxPeak, long oldestOutboxMs, long deadPeak,
+    record Result(Audit audit, Observation observation, long indexOutboxPeak, long oldestIndexOutboxMs,
+                  long countOutboxPeak, long deadPeak,
                   long mqPeak, boolean growing, Long drainMs, List<BaselineProbe.Queue> endQueues) { }
 
     private record Stored(String submission, long article, long actor, Long id, String error,
@@ -41,7 +42,7 @@ final class BaselineCommentWrite {
                 throw new IllegalStateException("评论发压目标超出写档文章范围");
             }
             if (event.submission() == null || accepted.putIfAbsent(event.submission(), event) != null) {
-                throw new IllegalStateException("评论受理记录缺少唯一提交 ID");
+                throw new IllegalStateException("评论发布记录缺少唯一提交 ID");
             }
         }
     }
@@ -74,8 +75,9 @@ final class BaselineCommentWrite {
         var measured = samples.stream().filter(sample -> sample.phase().equals("measure"))
                 .map(BaselineProbe.Sample::comment).filter(Objects::nonNull).toList();
         return new Result(audit, observation(events),
-                observed.stream().mapToLong(BaselineProbe.CommentWork::outbox).max().orElse(0),
-                observed.stream().mapToLong(BaselineProbe.CommentWork::oldestOutboxMs).max().orElse(0),
+                observed.stream().mapToLong(BaselineProbe.CommentWork::indexOutbox).max().orElse(0),
+                observed.stream().mapToLong(BaselineProbe.CommentWork::oldestIndexOutboxMs).max().orElse(0),
+                observed.stream().mapToLong(BaselineProbe.CommentWork::countOutbox).max().orElse(0),
                 observed.stream().mapToLong(value -> value.mq().dead()).max().orElse(0),
                 observed.stream().mapToLong(value -> value.mq().pending()).max().orElse(0),
                 backlogGrowing(measured), drainedMs, latestQueues);
@@ -83,15 +85,16 @@ final class BaselineCommentWrite {
 
     private boolean drained(BaselineProbe.CommentWork first, BaselineProbe.CommentWork current) {
         long indexAck = current.mq().partitions().getLast().ack() - first.mq().partitions().getLast().ack();
-        long writeAck = current.mq().ack() - first.mq().ack() - indexAck;
-        return current.outbox() == 0 && current.mq().pending() == 0
-                && writeAck >= accepted.size() && indexAck >= accepted.size();
+        long countAck = current.mq().ack() - first.mq().ack() - indexAck;
+        return current.indexOutbox() == 0 && current.countOutbox() == 0 && current.mq().pending() == 0
+                && countAck >= accepted.size() && indexAck >= accepted.size();
     }
 
     private static boolean backlogGrowing(List<BaselineProbe.CommentWork> measured) {
         if (measured.isEmpty()) { return false; }
-        if (BaselineStats.growing(measured.stream().map(BaselineProbe.CommentWork::outbox).toList())
-                || BaselineStats.growing(measured.stream().map(value -> value.oldestOutboxMs() / 1000).toList())) {
+        if (BaselineStats.growing(measured.stream().map(BaselineProbe.CommentWork::indexOutbox).toList())
+                || BaselineStats.growing(measured.stream().map(BaselineProbe.CommentWork::countOutbox).toList())
+                || BaselineStats.growing(measured.stream().map(value -> value.oldestIndexOutboxMs() / 1000).toList())) {
             return true;
         }
         for (int i = 0; i < measured.getFirst().mq().partitions().size(); i++) {
@@ -145,15 +148,17 @@ final class BaselineCommentWrite {
 
     static Observation observation(List<BaselineJournal.Event> events) {
         var samples = events.stream().filter(event -> event.commentSubmit() && event.ok() && event.sampled())
-                .collect(Collectors.toMap(BaselineJournal.Event::submission, BaselineJournal.Event::start));
-        var published = new HashMap<String, Long>();
+                .collect(Collectors.toMap(BaselineJournal.Event::submission, event -> event));
+        // PUT 成功已经确认事务提交，列表请求仅用于测量索引可见延迟。
+        var published = samples.values().stream().collect(Collectors.toMap(
+                BaselineJournal.Event::submission, event -> event.end() - event.start()));
         var visible = new HashMap<String, Long>();
         for (var event : events) {
             if (!event.auxiliary() || !event.ok() || event.submission() == null) { continue; }
-            Long started = samples.get(event.submission());
-            if (started == null) { continue; }
-            if ("PUBLISHED".equals(event.outcome())) { published.merge(event.submission(), event.end() - started, Math::min); }
-            if ("VISIBLE".equals(event.outcome())) { visible.merge(event.submission(), event.end() - started, Math::min); }
+            var sample = samples.get(event.submission());
+            if (sample != null && "VISIBLE".equals(event.outcome())) {
+                visible.merge(event.submission(), event.end() - sample.start(), Math::min);
+            }
         }
         return new Observation(samples.size(), published.size(), visible.size(), p95(published), p95(visible));
     }

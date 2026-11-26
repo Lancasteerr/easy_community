@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, getCsrf } from '../../api/client';
-import { getCommentSubmission, submitComment, type CommentSubmission } from '../../api/comments';
+import { submitComment, type CommentSubmission } from '../../api/comments';
 
 export interface ReplyTarget {
   id: string;
@@ -28,19 +28,9 @@ export function validCommentText(text: string) {
   return length > 0 && length <= MAX_COMMENT_LENGTH;
 }
 
-async function confirm(articleId: string, id: string, signal: AbortSignal): Promise<CommentSubmission | undefined> {
-  const checking = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
-  while (!checking.aborted) {
-    await new Promise((resolve) => setTimeout(resolve, 650));
-    if (checking.aborted) break;
-    const result = await getCommentSubmission(articleId, id, checking);
-    if (result.state !== 'PUBLISHING') return result;
-  }
-}
-
 /** 按被回复的评论保存草稿，只有成功的对应提交才能清空它。 */
 export function useCommentDrafts(articleId: string, enabled: boolean, userId: string | undefined,
-  onPublished: (target: ReplyTarget | null, result: CommentSubmission) => void) {
+  onPublished: (result: CommentSubmission) => void) {
   const [drafts, setDrafts] = useState<Record<string, CommentDraft>>({});
   const [target, setTarget] = useState<ReplyTarget | null>(null);
   const pending = useRef(new Map<string, AbortController>());
@@ -63,46 +53,36 @@ export function useCommentDrafts(articleId: string, enabled: boolean, userId: st
     update(reply?.id ?? ROOT_DRAFT, { text, state: 'editing' });
   }
 
-  async function publish(reply: ReplyTarget | null, mode: 'submit' | 'check') {
+  async function publish(reply: ReplyTarget | null) {
     const key = reply?.id ?? ROOT_DRAFT;
     const draft = getDraft(reply);
-    if (!enabled || pending.current.has(key) || !validCommentText(draft.text) || (mode === 'check' && !draft.submissionId)) return;
+    if (!enabled || pending.current.has(key) || !validCommentText(draft.text)) return;
     const id = draft.submissionId ?? crypto.randomUUID();
     const controller = new AbortController();
     const { signal } = controller;
     pending.current.set(key, controller);
     update(key, { ...draft, submissionId: id, state: 'publishing' });
     let sent = false;
-    let checking = mode === 'check';
     try {
-      let result: CommentSubmission | undefined;
-      if (mode === 'check') {
-        result = await getCommentSubmission(articleId, id, signal);
-      } else {
-        const csrf = await getCsrf(signal);
-        if (signal.aborted) return;
-        sent = true;
-        result = await submitComment(articleId, id, draft.text, reply?.id ?? null, csrf, signal);
-        if (result.state === 'PUBLISHING') {
-          checking = true;
-          result = await confirm(articleId, id, signal);
-        }
-      }
+      const csrf = await getCsrf(signal);
       if (signal.aborted) return;
-      if (result?.state === 'PUBLISHED') {
+      sent = true;
+      // 重试沿用上次提交编号、原正文和回复目标，由同一个 PUT 确认落库结果。
+      const result = await submitComment(articleId, id, draft.text, reply?.id ?? null, csrf, signal);
+      if (signal.aborted) return;
+      if (result.state === 'PUBLISHED') {
         update(key, emptyDraft);
         if (reply) setTarget((active) => active?.id === reply.id ? null : active);
-        onPublished(reply, result);
-      } else if (result?.state === 'FAILED') {
-        update(key, { text: draft.text, state: 'failed' });
+        onPublished(result);
       } else {
-        update(key, { ...draft, submissionId: id, state: 'uncertain' });
+        update(key, { text: draft.text, state: 'failed' });
       }
     } catch (error) {
       if (signal.aborted) return;
-      // 只有提交前的错误或明确的首次拒绝才能释放编号，未知结果继续沿用原编号。
       const rejected = error instanceof ApiError && error.status >= 400 && error.status < 500;
-      if (!checking && !draft.submissionId && (!sent || rejected)) {
+      const conflict = error instanceof ApiError && error.code === 'COMMENT_OPERATION_CONFLICT';
+      // 明确拒绝可以重新编辑，曾经发出且结果未知的请求继续沿用原编号。
+      if (conflict || (!draft.submissionId && (!sent || rejected))) {
         update(key, { text: draft.text, state: 'failed' });
       } else {
         update(key, { ...draft, submissionId: id, state: 'uncertain' });

@@ -1,7 +1,7 @@
 package com.febrie.backend.article.comment.application.command;
 
-import com.febrie.backend.article.comment.application.CommentAccess;
-import com.febrie.backend.article.comment.application.query.CommentViews;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentCountOutbox;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentRow;
 import com.febrie.backend.article.comment.infrastructure.persistence.CommentStore;
 import com.febrie.backend.article.comment.infrastructure.redis.CommentMaintenance;
@@ -21,9 +21,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 class CommentWritesTests {
     private final CommentStore store = mock(CommentStore.class);
     private final CommentMaintenance maintenance = mock(CommentMaintenance.class);
-    private final CommentWrites writes = new CommentWrites(store, maintenance, Clock.systemUTC());
+    private final CommentWrites writes = new CommentWrites(store, maintenance, mock(CommentCountOutbox.class), Clock.systemUTC());
     private final CommentWriteService service = new CommentWriteService(
-            mock(CommentAccess.class), mock(CommentCommands.class), writes, mock(CommentViews.class));
+            writes, mock(CommentSubmissionTransactions.class), mock(CommentCommandResults.class), maintenance);
     private final UserActor author = new UserActor(2, Role.USER, 1);
 
     @Test
@@ -43,8 +43,8 @@ class CommentWritesTests {
         when(store.deleteIfActive(active)).thenReturn(true);
         TransactionSynchronizationManager.initSynchronization();
         try {
-            assertTrue(service.delete(1, 3, author, null).isEmpty());
-            assertTrue(service.delete(1, 3, author, null).isEmpty());
+            service.delete(1, 3, author, null);
+            service.delete(1, 3, author, null);
             // 每次只读取一次目标和文章，不查询楼层，也不执行加锁查询。
             verify(store, times(2)).find(3, false);
             verify(store, times(2)).isPublicArticle(1);
@@ -69,7 +69,7 @@ class CommentWritesTests {
         when(store.deleteIfActive(active)).thenReturn(false);
         TransactionSynchronizationManager.initSynchronization();
         try {
-            assertTrue(service.delete(1, 3, author, null).isEmpty());
+            service.delete(1, 3, author, null);
             verify(store).deleteIfActive(active);
             assertTrue(TransactionSynchronizationManager.getSynchronizations().isEmpty());
             verifyNoInteractions(maintenance);
@@ -94,7 +94,7 @@ class CommentWritesTests {
         // 主库查询未找到属于当前文章的可见目标。
         when(store.lockReplyTargetAndFindRoot(1, 3)).thenReturn(null);
         assertEquals("COMMENT_NOT_FOUND", assertThrows(ApiException.class,
-                () -> writes.createReply(1, author, 3L, "正文")).code());
+                () -> writes.insertReply(1, author, 3L, "正文")).code());
         verify(store).lockReplyTargetAndFindRoot(1, 3);
         verify(store, never()).insert(anyLong(), anyLong(), anyLong(), anyLong(), anyString(), any());
     }

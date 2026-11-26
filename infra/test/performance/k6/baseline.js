@@ -7,7 +7,7 @@ import {
 } from './workload.mjs';
 import {
   commentListPath, commentPayload, commentReadArticle, commentSubmissionPath, commentWriteArticle,
-  validCommentPage, validCommentStatus, validReplySubmission,
+  validCommentPage, validReplySubmission, validRootSubmission,
 } from './comments.mjs';
 
 const config = JSON.parse(open(__ENV.EC_BASELINE_INPUT));
@@ -93,25 +93,16 @@ function like(id, session, startingLike, random) {
   return result.ok;
 }
 
-function observeComment(article, submission, session, content, submittedAt) {
+function observeComment(article, submission, session, commentId, submittedAt) {
   const deadline = submittedAt + 10000;
-  const path = commentSubmissionPath(article, submission);
-  let published = false;
   while (Date.now() + 650 < deadline) {
     sleep(0.65);
     const remaining = deadline - Date.now();
     if (remaining <= 0) return;
     const details = { article, submission, timeout: Math.min(4000, remaining) + 'ms' };
-    if (!published) {
-      const status = send('comment-status', 'GET', path, session, validCommentStatus,
-        { ...details, statuses: [200, 202], outcome: (body, ok) => ok || body?.state === 'FAILED' ? body.state : null });
-      if (status.body?.state === 'FAILED') return;
-      published = status.outcome === 'PUBLISHED';
-      continue;
-    }
     const latest = send('comment-visible', 'GET', commentListPath(article, 'latest', 50), session,
       body => validCommentPage(body, 50, false),
-      { ...details, outcome: (body, ok) => ok && body.items.some(item => item.content === content) ? 'VISIBLE' : null });
+      { ...details, outcome: (body, ok) => ok && body.items.some(item => item.id === commentId) ? 'VISIBLE' : null });
     if (latest.outcome === 'VISIBLE') return;
   }
 }
@@ -119,11 +110,11 @@ function observeComment(article, submission, session, content, submittedAt) {
 function submitComment(article, session, iteration) {
   const submission = operationId();
   const payload = commentPayload(submission);
-  // 每个计划中的五秒窗口只安排一个确认样本，主请求仍使用固定到达率。
+  // PUT 已确认落库，每五秒只安排一个通过正式列表观察索引可见性的样本。
   const sample = __ENV.EC_BASELINE_PHASE === 'measure' && iteration % (load * 5) === 0;
-  const result = send('comment-submit', 'PUT', commentSubmissionPath(article, submission), session, validCommentStatus,
-    { article, submission, payload, sample, statuses: [202] });
-  if (result.ok && sample) observeComment(article, submission, session, payload.content, result.start);
+  const result = send('comment-submit', 'PUT', commentSubmissionPath(article, submission), session,
+    body => validRootSubmission(body, session.user, payload.content), { article, submission, payload, sample });
+  if (result.ok && sample) observeComment(article, submission, session, result.body.comment.id, result.start);
 }
 
 function submitReply(session, iteration) {

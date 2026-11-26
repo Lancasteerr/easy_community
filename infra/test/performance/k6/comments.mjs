@@ -7,7 +7,7 @@ export function commentReadArticle(count, random) {
 }
 
 export function commentWriteArticle(first, count, iteration, hot) {
-  // 连续 ID 在四个 RabbitMQ 写分区间轮转，低速档也会触达全部分区。
+  // 连续 ID 在四个计数分片间轮转，低速档也会触达全部分片。
   return first + (hot ? 0 : iteration % count);
 }
 
@@ -53,9 +53,11 @@ export function validCommentPage(body, size, hot) {
   });
 }
 
-export function validCommentStatus(body, status) {
-  return status === 202 && body?.state === 'PUBLISHING' ||
-    status === 200 && body?.state === 'PUBLISHED' && Number.isSafeInteger(body.commentCount) && body.commentCount > 0;
+/** 一级发布成功时正文已落库，异步计数由读接口提供。 */
+export function validRootSubmission(body, authorId, content) {
+  const item = body?.comment;
+  return body?.state === 'PUBLISHED' && body.commentCount === undefined && validRoot(item) &&
+    item.author.id === String(authorId) && item.content === content;
 }
 
 /** 回复楼主的发布响应须携带可立即展示的回复，一级计数保持独立。 */

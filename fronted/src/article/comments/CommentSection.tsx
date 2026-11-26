@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import type { CommentItem, CommentSort } from '../../api/comments';
 import type { PublicUserProfile } from '../../api/types';
 import { useAuth } from '../../auth/AuthContext';
@@ -24,8 +24,7 @@ interface CommentSectionProps {
 /** 评论卡片先挂载定位锚点，列表请求独立于文章阅读。 */
 export function CommentSection({ articleId, authorId, count, viewerProfile, anchor, onCount, onLogin }: CommentSectionProps) {
   const [sort, setSort] = useState<CommentSort>('hot');
-  const countRevision = useRef(0);
-  const { page, loading, failure, load } = useComments(articleId, sort, onCount, countRevision);
+  const { page, loading, failure, load } = useComments(articleId, sort, onCount);
   const auth = useAuth();
   const userId = auth.identity?.userId;
   const { byRoot, remember, reconcile } = usePublishedComments(articleId, userId);
@@ -39,11 +38,14 @@ export function CommentSection({ articleId, authorId, count, viewerProfile, anch
   const notify = useToast();
   const canPublish = auth.status === 'authenticated' && !auth.refreshing && !auth.error;
   const canReply = auth.status === 'guest' || canPublish;
-  const drafts = useCommentDrafts(articleId, canPublish, userId, (target, result) => {
-    if (result.comment) remember(result.comment);
-    if (!target && typeof result.commentCount === 'number') {
-      countRevision.current++;
-      onCount(result.commentCount);
+  const drafts = useCommentDrafts(articleId, canPublish, userId, (result) => {
+    if (result.comment) {
+      const comment = result.comment;
+      // 发布回显使用已加载的本人头像，正式列表仍以接口返回为准。
+      const avatarUrl = comment.rootId === null && viewerProfile?.userId === comment.author.id
+        ? viewerProfile.avatarUrl : null;
+      remember(avatarUrl && !comment.author.avatarUrl
+        ? { ...comment, author: { ...comment.author, avatarUrl } } : comment);
     }
     notify('已发布');
   });
@@ -55,7 +57,7 @@ export function CommentSection({ articleId, authorId, count, viewerProfile, anch
 
   function composer(target: ReplyTarget | null) {
     return <CommentComposer draft={drafts.getDraft(target)} target={target ?? undefined} viewerProfile={viewerProfile} enabled={canPublish}
-      onChange={(text) => drafts.edit(target, text)} onPublish={(mode) => { void drafts.publish(target, mode); }}
+      onChange={(text) => drafts.edit(target, text)} onPublish={() => { void drafts.publish(target); }}
       onCancel={target ? () => drafts.setTarget(null) : undefined} />;
   }
 

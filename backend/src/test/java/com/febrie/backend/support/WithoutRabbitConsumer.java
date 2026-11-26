@@ -6,7 +6,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
-import org.springframework.context.SmartLifecycle;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -15,7 +14,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @Retention(RetentionPolicy.RUNTIME)
 @MockitoBean(name = "likeListener", types = LikeListenerGroup.class)
 @MockitoBean(name = "commentRefreshListener", types = SimpleMessageListenerContainer.class)
-@MockitoBean(name = "commentWriteListeners", types = SmartLifecycle.class)
 @WithoutSearchIndexing
-@TestPropertySource(properties = {"spring.rabbitmq.dynamic=false", "app.comment.index-sync=false"})
+@TestPropertySource(properties = {"spring.rabbitmq.dynamic=false", "app.comment.index-sync=false", "app.comment.count-sync=false"})
 public @interface WithoutRabbitConsumer { }

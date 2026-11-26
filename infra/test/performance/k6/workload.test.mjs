@@ -3,7 +3,7 @@ import test from 'node:test';
 import { distributedArticle, randomFor, searchPath, sessionFor, utf8Bytes, validDetail, validLike, validSearch } from './workload.mjs';
 import {
   commentListPath, commentPayload, commentReadArticle, commentSubmissionPath, commentWriteArticle,
-  validCommentPage, validCommentStatus, validReplySubmission,
+  validCommentPage, validReplySubmission, validRootSubmission,
 } from './comments.mjs';
 
 test('固定种子可重放，并分散到各点赞分区', () => {
@@ -53,7 +53,7 @@ test('评论读写使用不同目标池，分散写按四个分区轮转', () =>
   assert.deepEqual(commentPayload('op'), { content: '基线评论 op', replyToId: null });
 });
 
-test('评论首页校验排序、游标和回复归属，状态响应区分受理与发布', () => {
+test('评论首页校验排序、游标和回复归属，发布成功携带一级评论', () => {
   const root = id => ({
     id, rootId: null, author: { id: '1' }, content: '基线评论', status: 'ACTIVE',
     likeCount: 10, likedByMe: false,
@@ -68,10 +68,11 @@ test('评论首页校验排序、游标和回复归属，状态响应区分受�
   assert.equal(validCommentPage({ ...body, nextCursor: null }, 2, true), false);
   assert.equal(validCommentPage({ ...body, items: [first, { ...second, replies: first.replies }] }, 2, true), false);
   assert.equal(validCommentPage({ items: [], hasMore: false, nextCursor: null, commentCount: 0 }, 50, false), true);
-  assert.equal(validCommentStatus({ state: 'PUBLISHING' }, 202), true);
-  assert.equal(validCommentStatus({ state: 'PUBLISHING' }, 200), false);
-  assert.equal(validCommentStatus({ state: 'PUBLISHED', commentCount: 1 }, 200), true);
-  assert.equal(validCommentStatus({ state: 'FAILED' }, 200), false);
+  const response = { state: 'PUBLISHED', comment: first };
+  assert.equal(validRootSubmission(response, 1, first.content), true);
+  assert.equal(validRootSubmission(response, 2, first.content), false);
+  assert.equal(validRootSubmission({ ...response, commentCount: 1 }, 1, first.content), false);
+  assert.equal(validRootSubmission({ state: 'FAILED' }, 1, first.content), false);
 });
 
 test('二级写只有返回已提交且归属正确的回复才计为成功', () => {
@@ -81,6 +82,6 @@ test('二级写只有返回已提交且归属正确的回复才计为成功', ()
   assert.equal(validReplySubmission(response, replyToId, 1, content), true);
   assert.equal(validReplySubmission(response, '24', 1, content), false);
   assert.equal(validReplySubmission(response, replyToId, 2, content), false);
-  assert.equal(validReplySubmission({ state: 'PUBLISHING' }, replyToId, 1, content), false);
+  assert.equal(validReplySubmission({ state: 'FAILED' }, replyToId, 1, content), false);
   assert.equal(validReplySubmission({ ...response, commentCount: 32 }, replyToId, 1, content), false);
 });

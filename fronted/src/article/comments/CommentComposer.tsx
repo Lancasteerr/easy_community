@@ -9,7 +9,7 @@ interface ComposerProps {
   viewerProfile: Pick<PublicUserProfile, 'username' | 'avatarUrl'> | null;
   enabled: boolean;
   onChange: (text: string) => void;
-  onPublish: (mode: 'submit' | 'check') => void;
+  onPublish: () => void;
   onCancel?: () => void;
 }
 
@@ -49,7 +49,7 @@ export function CommentComposer({ draft, target, viewerProfile, enabled, onChang
   const overLimit = count > MAX_COMMENT_LENGTH;
   const label = target ? `回复 @${target.username}` : '写下你的想法，参与讨论';
   const [initial] = Array.from(viewerProfile?.username.trim() ?? '');
-  return <form className="comment-composer" onSubmit={(event) => { event.preventDefault(); onPublish('submit'); }}>
+  return <form className="comment-composer" onSubmit={(event) => { event.preventDefault(); onPublish(); }}>
     <Avatar src={viewerProfile?.avatarUrl} size={36}
       fallback={<span className="comment-avatar" aria-hidden="true">{initial}</span>} />
     <div className="comment-editor">
@@ -58,13 +58,12 @@ export function CommentComposer({ draft, target, viewerProfile, enabled, onChang
         placeholder={target ? '写下你的回复' : label} rows={3} readOnly={publishing || uncertain}
         onChange={(event) => onChange(event.target.value)} />
       {draft.state === 'failed' && <p className="comment-feedback" role="status">发布失败，请重试。已保留你输入的内容。</p>}
-      {uncertain && <p className="comment-feedback" role="status">暂未确认发布结果，已保留你输入的内容。</p>}
+      {uncertain && <p className="comment-feedback" role="status">暂未确认发布，请重试。</p>}
       {overLimit && <p className="comment-feedback">评论最多 {MAX_COMMENT_LENGTH} 个字符。</p>}
       <div className="comment-editor-footer">
         <span id={countId} className="comment-count" data-over-limit={overLimit}>{count}/{MAX_COMMENT_LENGTH}</span>
         <div className="comment-editor-actions">
           {onCancel && <button type="button" className="comment-action" onClick={onCancel}>取消</button>}
-          {uncertain && <button type="button" className="comment-action" disabled={!enabled} onClick={() => onPublish('check')}>查询结果</button>}
           <button type="submit" className="comment-primary" disabled={!enabled || publishing || count === 0 || overLimit}>
             {publishing ? '发布中…' : uncertain ? '重试提交' : '发布'}
           </button>

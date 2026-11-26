@@ -47,15 +47,13 @@ class BaselineToolTests {
         assertTrue(new BaselineCommentReplyWrite.Audit(2, 2, 0, 0, 0).passed());
         assertFalse(new BaselineCommentReplyWrite.Audit(2, 2, 0, 1, 0).passed());
 
-        var submit = new BaselineJournal.Event("comment-submit", 0, 20, 202, true, 1, 2, false, null, 0, "", "a", true, null);
-        var pending = new BaselineJournal.Event("comment-status", 650, 660, 202, true, 1, 2, false, null, 0, "", "a", false, "PUBLISHING");
-        var published = new BaselineJournal.Event("comment-status", 1310, 1320, 200, true, 1, 2, false, null, 0, "", "a", false, "PUBLISHED");
+        var submit = new BaselineJournal.Event("comment-submit", 0, 20, 200, true, 1, 2, false, null, 0, "", "a", true, null);
         var latest = new BaselineJournal.Event("comment-visible", 1970, 1980, 200, true, 1, 2, false, null, 0, "", "a", false, "VISIBLE");
-        var events = List.of(submit, pending, published, latest);
+        var events = List.of(submit, latest);
         assertEquals(1, events.stream().filter(event -> !event.auxiliary()).count());
-        assertEquals(new BaselineCommentWrite.Observation(1, 1, 1, 1320, 1980), BaselineCommentWrite.observation(events));
-        assertEquals(new BaselineCommentWrite.Observation(1, 1, 0, 1320, 0),
-                BaselineCommentWrite.observation(List.of(submit, published)));
+        assertEquals(new BaselineCommentWrite.Observation(1, 1, 1, 20, 1980), BaselineCommentWrite.observation(events));
+        assertEquals(new BaselineCommentWrite.Observation(1, 1, 0, 20, 0),
+                BaselineCommentWrite.observation(List.of(submit)));
     }
 
     @Test void preservesPreciseVersionsAndRequiresFinalState() {

@@ -60,7 +60,7 @@ class CommentHttpIntegrationTests {
     }
 
     @Test
-    void replyRefreshAndQueuedRootDeletion() throws Exception {
+    void replyRefreshAndSynchronousRootDeletion() throws Exception {
         String authorName = "comment_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         sql.update("INSERT INTO users(username, role) VALUES (?, 'USER')", authorName);
         long owner = sql.queryForObject("SELECT id FROM users WHERE username = ?", Long.class, authorName);
@@ -81,17 +81,21 @@ class CommentHttpIntegrationTests {
             send(ownerBrowser, "POST", "/api/auth/login", Map.of("username", authorName, "password", password), csrf, 200);
             csrf = get(ownerBrowser, "/api/auth/csrf", 200).path("token").asString();
 
-            // 用真实的受理回执轮询一级评论，回复仍应由同一次请求返回。
+            // 首次发布和同号重试都直接返回同一条一级评论。
             String createOperation = UUID.randomUUID().toString();
-            var accepted = json.readTree(send(ownerBrowser, "POST", route, Map.of("content", "楼层"),
-                    csrf, createOperation, 202));
-            assertEquals(createOperation, accepted.path("operationId").asString());
-            var completed = awaitOperation(ownerBrowser, route, createOperation, accepted.path("receipt").asString());
-            long root = Long.parseLong(completed.path("commentId").asString());
+            String submissionPath = route + "/submissions/" + createOperation;
+            var createdRoot = json.readTree(send(ownerBrowser, "PUT", submissionPath, Map.of("content", "楼层"), csrf, 200));
+            assertEquals("PUBLISHED", createdRoot.path("state").asString());
+            assertFalse(createdRoot.has("commentCount"));
+            long root = Long.parseLong(createdRoot.at("/comment/id").asString());
+            var replay = putComment(ownerBrowser, submissionPath, Map.of("content", "楼层"), csrf);
+            assertEquals(Long.toString(root), replay.path("id").asString());
+            send(ownerBrowser, "PUT", submissionPath, Map.of("content", "不同正文"), csrf, 409);
+            awaitCount(article, 1);
             var key = new CommentListKey(article, root, CommentListKey.Sort.REPLIES);
             String replyRoute = route + "/" + root + "/replies";
-            var first = json.readTree(send(ownerBrowser, "POST", route,
-                    Map.of("content", "旧回复", "replyToId", Long.toString(root)), csrf, 201));
+            var first = putComment(ownerBrowser, submission(route),
+                    Map.of("content", "旧回复", "replyToId", Long.toString(root)), csrf);
             assertFalse(first.has("replyToUsername"));
             assertFalse(first.has("replyToId"));
             var old = get(http, replyRoute, 200);
@@ -99,7 +103,7 @@ class CommentHttpIntegrationTests {
             assertFalse(old.at("/items/0").has("replyToUsername"));
             assertFalse(old.path("hasMore").asBoolean());
             var oldSnapshot = cache.current(key);
-            send(ownerBrowser, "POST", route, Map.of("content", "新回复", "replyToId", Long.toString(root)), null, 403);
+            send(ownerBrowser, "PUT", submission(route), Map.of("content", "新回复", "replyToId", Long.toString(root)), null, 403);
             String firstId = first.path("id").asString();
             var created = replyWhileRowsAreLocked(ownerBrowser, route, csrf, root, firstId);
             assertEquals(Long.toString(root), created.path("rootId").asString());
@@ -120,20 +124,24 @@ class CommentHttpIntegrationTests {
 
             String replyId = created.path("id").asString();
             assertEquals("", send(ownerBrowser, "DELETE", route + "/" + replyId, null, csrf, 204));
-            send(ownerBrowser, "POST", route, Map.of("content", "回复", "replyToId", replyId), csrf, 404);
+            var rejectedReply = json.readTree(send(ownerBrowser, "PUT", submission(route),
+                    Map.of("content", "回复", "replyToId", replyId), csrf, 200));
+            assertEquals("FAILED", rejectedReply.path("state").asString());
 
             String operation = UUID.randomUUID().toString();
-            send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
-            awaitNotVisible(http, replyRoute);
-            var rejected = json.readTree(send(ownerBrowser, "PUT", route + "/submissions/" + UUID.randomUUID(),
+            send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 204);
+            get(http, replyRoute, 404);
+            var rejected = json.readTree(send(ownerBrowser, "PUT", submission(route),
                     Map.of("content", "回复", "replyToId", firstId), csrf, 200));
             assertEquals("FAILED", rejected.path("state").asString());
-            send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 202);
+            send(ownerBrowser, "DELETE", route + "/" + root, null, csrf, operation, 204);
+            awaitCount(article, 0);
             assertEquals(0L, get(http, "/api/articles/" + article, 200).path("commentCount").asLong());
             get(http, route + "/" + root, 401);
         } finally {
             sql.update("DELETE o FROM comment_index_outbox o JOIN article_comment c ON c.id=o.comment_id WHERE c.article_id=?", article);
             sql.update("DELETE o FROM comment_like_index_outbox o JOIN article_comment c ON c.id=o.comment_id WHERE c.article_id=?", article);
+            sql.update("DELETE FROM comment_count_outbox WHERE article_id=?", article);
             sql.update("DELETE l FROM comment_like_state l JOIN article_comment c ON c.id=l.comment_id WHERE c.article_id=?", article);
             sql.update("DELETE l FROM comment_like_count l JOIN article_comment c ON c.id=l.comment_id WHERE c.article_id=?", article);
             sql.update("DELETE FROM comment_write_result WHERE article_id=?", article);
@@ -157,8 +165,7 @@ class CommentHttpIntegrationTests {
             try (var rootRow = lockRoot.executeQuery(); var targetRow = lockTarget.executeQuery()) {
                 assertTrue(rootRow.next());
                 assertTrue(targetRow.next());
-                return json.readTree(send(client, "POST", route,
-                        Map.of("content", "新回复", "replyToId", target), csrf, 201));
+                return putComment(client, submission(route), Map.of("content", "新回复", "replyToId", target), csrf);
             } finally {
                 connection.rollback();
             }
@@ -196,30 +203,23 @@ class CommentHttpIntegrationTests {
         throw new AssertionError("评论刷新监听器未发布新版本");
     }
 
-    private JsonNode awaitOperation(HttpClient http, String route, String operation, String receipt) throws Exception {
-        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + route + "/operations/" + operation))
-                .timeout(Duration.ofSeconds(8)).header("X-Operation-Receipt", receipt).GET().build();
-        long deadline = System.nanoTime() + Duration.ofSeconds(6).toNanos();
-        while (System.nanoTime() < deadline) {
-            var response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            assertEquals(200, response.statusCode(), response.body());
-            var body = json.readTree(response.body());
-            assertEquals(operation, body.path("operationId").asString());
-            if ("SUCCEEDED".equals(body.path("status").asString())) return body;
-            assertEquals("PENDING", body.path("status").asString(), response.body());
-            Thread.sleep(25);
-        }
-        throw new AssertionError("一级评论创建命令未完成");
+    private static String submission(String route) {
+        return route + "/submissions/" + UUID.randomUUID();
     }
 
-    private void awaitNotVisible(HttpClient http, String path) throws Exception {
+    private JsonNode putComment(HttpClient http, String path, Object input, String csrf) throws Exception {
+        var result = json.readTree(send(http, "PUT", path, input, csrf, 200));
+        assertEquals("PUBLISHED", result.path("state").asString());
+        return result.path("comment");
+    }
+
+    private void awaitCount(long article, long expected) throws InterruptedException {
         long deadline = System.nanoTime() + Duration.ofSeconds(6).toNanos();
-        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).build();
         while (System.nanoTime() < deadline) {
-            if (http.send(request, HttpResponse.BodyHandlers.discarding()).statusCode() == 404) return;
+            if (sql.queryForObject("SELECT comment_count FROM article WHERE id=?", Long.class, article) == expected) return;
             Thread.sleep(25);
         }
-        throw new AssertionError("一级删除命令未完成");
+        throw new AssertionError("文章评论数未完成投影");
     }
 
     private JsonNode get(HttpClient http, String path, int status) throws Exception {

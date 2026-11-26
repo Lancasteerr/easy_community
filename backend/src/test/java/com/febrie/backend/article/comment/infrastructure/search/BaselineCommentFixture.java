@@ -126,9 +126,10 @@ public final class BaselineCommentFixture {
     public static void resetWrites(ConfigurableApplicationContext app, long seedMax, int first, int last) {
         var sql = app.getBean(JdbcTemplate.class);
         new TransactionTemplate(app.getBean(PlatformTransactionManager.class)).executeWithoutResult(status -> {
-            // 专用库中只有发压新增行超过种子边界。清空上档的幂等结果与索引生命周期任务。
+            // 专用库中只有发压新增行超过种子边界，清空上档的结果和两条投影链路。
             sql.update("DELETE FROM comment_index_outbox WHERE comment_id>?", seedMax);
             sql.update("DELETE FROM comment_like_index_outbox WHERE comment_id>?", seedMax);
+            sql.update("DELETE FROM comment_count_outbox WHERE article_id BETWEEN ? AND ?", first, last);
             // 回复写在读种子文章，一级写在尾部预留文章。两者的提交结果都属于本次压测。
             sql.update("DELETE FROM comment_write_result WHERE article_id BETWEEN 1 AND ?", last);
             sql.update("DELETE FROM comment_like_state WHERE comment_id>?", seedMax);
@@ -138,23 +139,24 @@ public final class BaselineCommentFixture {
         });
     }
 
-    public static List<String> writeQueues(String prefix) {
-        return LongStream.range(0, CommentBroker.PARTITIONS).mapToObj(i -> prefix + ".comment.write." + i + ".q").toList();
+    public static List<String> countQueues(String prefix) {
+        return LongStream.range(0, CommentBroker.PARTITIONS).mapToObj(i -> prefix + ".comment.count." + i + ".q").toList();
     }
 
     public static String indexQueue(String prefix) { return prefix + ".comment.index.q"; }
 
     public static List<String> deadQueues(String prefix) {
-        return List.of(prefix + ".comment.write.dead.q", prefix + ".comment.index.dead.q");
+        return List.of(prefix + ".comment.count.dead.q", prefix + ".comment.index.dead.q");
     }
 
     public static void cleanupQueues(ConfigurableApplicationContext app, String prefix) {
         app.getBean("commentIndexScheduler", ThreadPoolTaskScheduler.class).shutdown();
-        app.getBean("commentWriteListeners", SmartLifecycle.class).stop();
+        app.getBean("commentCountScheduler", ThreadPoolTaskScheduler.class).shutdown();
+        app.getBean("commentCountListeners", SmartLifecycle.class).stop();
         app.getBean("commentIndexListener", SimpleMessageListenerContainer.class).stop();
         app.getBean("commentRefreshListener", SimpleMessageListenerContainer.class).stop();
         var admin = app.getBean(AmqpAdmin.class);
-        writeQueues(prefix).forEach(admin::deleteQueue);
+        countQueues(prefix).forEach(admin::deleteQueue);
         admin.deleteQueue(indexQueue(prefix));
         deadQueues(prefix).forEach(admin::deleteQueue);
         admin.deleteQueue(prefix + ".comment.refresh.q");

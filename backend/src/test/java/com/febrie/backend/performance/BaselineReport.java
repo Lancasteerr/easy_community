@@ -105,7 +105,7 @@ final class BaselineReport {
     private static void commentWrite(StringBuilder report, BaselineCommentWrite.Result result) {
         var audit = result.audit();
         var seen = result.observation();
-        report.append("- 含预热受理 ").append(audit.accepted()).append(" 笔，落库匹配 ").append(audit.persisted())
+        report.append("- 含预热发布 ").append(audit.accepted()).append(" 笔，落库匹配 ").append(audit.persisted())
                 .append(" 笔，额外或错误结果 ").append(audit.unexpectedResults())
                 .append("，无对应结果的评论 ").append(audit.untrackedRoots()).append("，文章计数差异 ")
                 .append(audit.wrongCounts()).append("，ES 可见 ").append(audit.index().visibleTotal())
@@ -115,8 +115,9 @@ final class BaselineReport {
                 .append("，在最新首页观测到 ").append(seen.visible()).append(" 笔（P95 ")
                 .append(format(seen.visible() == 0 ? null : seen.visibleP95Ms())).append(" ms），首页未观测到 ")
                 .append(seen.samples() - seen.visible()).append(" 笔。\n");
-        report.append("- 索引 Outbox 峰值 ").append(result.outboxPeak()).append("，最老任务 ")
-                .append(result.oldestOutboxMs()).append(" ms，死信峰值 ").append(result.deadPeak())
+        report.append("- 索引 Outbox 峰值 ").append(result.indexOutboxPeak()).append("，最老索引任务 ")
+                .append(result.oldestIndexOutboxMs()).append(" ms，计数 Outbox 峰值 ").append(result.countOutboxPeak())
+                .append("，死信峰值 ").append(result.deadPeak())
                 .append("，排空并完成对账 ").append(format(result.drainMs())).append(" ms。\n");
     }
 

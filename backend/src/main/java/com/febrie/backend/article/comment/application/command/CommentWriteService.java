@@ -1,56 +1,42 @@
 package com.febrie.backend.article.comment.application.command;
 
-import com.febrie.backend.article.comment.application.CommentAccess;
-import com.febrie.backend.article.comment.application.query.CommentViews;
+import com.febrie.backend.article.comment.infrastructure.persistence.CommentCommandResults;
+import com.febrie.backend.article.comment.infrastructure.redis.CommentMaintenance;
 import com.febrie.backend.user.application.dto.UserActor;
-import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
-/** 旧版接口共用的写入入口，一级评论异步受理，回复同步写入。 */
+/** 删除先校验归属和权限，再按评论层级选择锁范围。 */
 @Service
 public class CommentWriteService {
-    private final CommentAccess access;
-    private final CommentCommands commands;
     private final CommentWrites writes;
-    private final CommentViews views;
+    private final CommentSubmissionTransactions transactions;
+    private final CommentCommandResults results;
+    private final CommentMaintenance maintenance;
 
-    CommentWriteService(CommentAccess access, CommentCommands commands, CommentWrites writes, CommentViews views) {
-        this.access = access;
-        this.commands = commands;
+    CommentWriteService(CommentWrites writes, CommentSubmissionTransactions transactions,
+                        CommentCommandResults results, CommentMaintenance maintenance) {
         this.writes = writes;
-        this.views = views;
+        this.transactions = transactions;
+        this.results = results;
+        this.maintenance = maintenance;
     }
 
-    public Creation create(long article, UserActor actor, String username, String operation, CommentInput input) {
-        if (input.replyToId() == null) {
-            access.article(article);
-            return commands.submit(new CommentCommand(article, actor, operation, null, input.content()));
-        }
-        var created = writes.createReply(article, actor, input.replyToId(), input.content());
-        return new CreatedReply(views.createdReply(created.row(), username, created.targetAuthorId()));
-    }
-
-    /** 一级评论返回异步凭证，回复删除完成后返回空结果。 */
-    public Optional<Accepted> delete(long article, long comment, UserActor actor, String operation) {
+    public void delete(long article, long comment, UserActor actor, String operation) {
         var target = writes.deletionTarget(article, comment, actor);
-        if (target.rootId() == 0) {
-            access.article(article);
-            return Optional.of(commands.submit(new CommentCommand(article, actor, operation, comment, null)));
+        if (target.rootId() != 0) {
+            writes.deleteReply(target);
+            return;
         }
-        writes.deleteReply(target);
-        return Optional.empty();
+        String id = CommentOperation.id(operation);
+        String fingerprint = CommentOperation.deletion(comment);
+        try {
+            if (transactions.deleteRoot(target, actor.userId(), id, fingerprint)) maintenance.visibility(target);
+        } catch (DuplicateKeyException concurrent) {
+            // 事务已回滚，同号删除共享结果；同号发布仍按摘要判定冲突。
+            var existing = results.find(article, actor.userId(), id);
+            if (existing == null) throw concurrent;
+            existing.requireFingerprint(fingerprint);
+        }
     }
-
-    public Status status(long article, UserActor actor, String operation, String receipt) {
-        return commands.status(article, actor, operation, receipt);
-    }
-
-    /** 创建结果区分异步受理与已生成的回复。 */
-    public sealed interface Creation permits Accepted, CreatedReply { }
-
-    public record Accepted(String operationId, String receipt) implements Creation { }
-
-    public record CreatedReply(CommentViews.Item item) implements Creation { }
-
-    public record Status(String operationId, String status, String commentId, String errorCode) { }
 }

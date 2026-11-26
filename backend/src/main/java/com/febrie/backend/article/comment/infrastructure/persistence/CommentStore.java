@@ -125,10 +125,6 @@ public class CommentStore {
         return new CommentRow(id, article, root, replyTo, author, content, now, false);
     }
 
-    public void delete(CommentRow row) {
-        if (!deleteIfActive(row)) throw new IllegalStateException("评论删除状态发生变化");
-    }
-
     /** 只有首次软删除返回成功，一级评论同时递增索引版本。 */
     public boolean deleteIfActive(CommentRow row) {
         return sql.update("""
@@ -143,12 +139,6 @@ public class CommentStore {
                 INSERT INTO comment_index_outbox(comment_id, index_version)
                 SELECT id, index_version FROM article_comment WHERE id = ? AND root_id = 0
                 """, id) != 1) throw new IllegalStateException("一级评论索引事件写入失败");
-    }
-
-    public void changeCount(long article, int delta) {
-        if (sql.update("UPDATE article SET comment_count = comment_count + ? WHERE id = ?", delta, article) != 1) {
-            throw new IllegalStateException("文章评论计数缺失");
-        }
     }
 
     /** 调用方已去重并按 ID 排序，同一批次按固定顺序取得文章行锁。 */

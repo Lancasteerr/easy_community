@@ -25,8 +25,7 @@ export interface CommentPage {
 
 /** 浏览器只处理发布结果，提交编号在第一次发送前生成。 */
 export interface CommentSubmission {
-  state: 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
-  commentCount?: number;
+  state: 'PUBLISHED' | 'FAILED';
   comment?: CommentItem;
 }
 
@@ -54,10 +53,6 @@ export function submitComment(articleId: string, id: string, content: string, re
     headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
     body: JSON.stringify({ content, replyToId }),
   });
-}
-
-export function getCommentSubmission(articleId: string, id: string, signal: AbortSignal) {
-  return request<CommentSubmission>(`${commentsPath(articleId)}/submissions/${id}`, { signal });
 }
 
 /** 请求层只提取可用于更新点赞按钮的受理字段。 */

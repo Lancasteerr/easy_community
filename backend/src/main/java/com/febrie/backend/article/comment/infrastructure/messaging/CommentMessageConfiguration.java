@@ -17,67 +17,27 @@ import org.springframework.amqp.rabbit.listener.api.ChannelAwareBatchMessageList
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
-/** 写分片与 ES 投影独立限流及死信，楼层刷新继续使用现有队列。 */
+/** 评论数和 ES 投影各自限流及处理死信，楼层刷新继续使用现有队列。 */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 class CommentMessageConfiguration {
     @Bean
     Declarables commentBusinessQueues(CommentBroker broker) {
         var queues = new ArrayList<Declarable>();
-        queues.add(dead(broker.writeDeadQueue()));
         queues.add(dead(broker.countDeadQueue()));
         queues.add(dead(broker.indexDeadQueue()));
         queues.add(work(broker.indexQueue(), broker.indexDeadQueue(), false));
         for (int partition = 0; partition < CommentBroker.PARTITIONS; partition++) {
-            queues.add(work(broker.writeQueue(partition), broker.writeDeadQueue(), true));
             queues.add(work(broker.countQueue(partition), broker.countDeadQueue(), true));
         }
         return new Declarables(queues);
-    }
-
-    @Bean
-    ThreadPoolTaskExecutor commentArticleExecutor() {
-        var executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(CommentBroker.PARTITIONS);
-        executor.setMaxPoolSize(CommentBroker.PARTITIONS);
-        executor.setQueueCapacity(CommentBroker.PARTITIONS * CommentBroker.BATCH_SIZE);
-        executor.setThreadNamePrefix("comment-article-");
-        return executor;
-    }
-
-    @Bean
-    WriteListeners commentWriteListeners(ConnectionFactory factory, CommentBroker broker, CommentCommandConsumer consumer) {
-        var listeners = new ArrayList<SimpleMessageListenerContainer>();
-        for (int index = 0; index < CommentBroker.PARTITIONS; index++) {
-            int partition = index;
-            var listener = new SimpleMessageListenerContainer(factory);
-            listener.setBeanName("commentWrite-" + partition);
-            listener.setQueueNames(broker.writeQueue(partition));
-            listener.setAcknowledgeMode(AcknowledgeMode.MANUAL);
-            listener.setPrefetchCount(CommentBroker.BATCH_SIZE);
-            listener.setConsumerBatchEnabled(true);
-            listener.setBatchSize(CommentBroker.BATCH_SIZE);
-            listener.setReceiveTimeout(100);
-            listener.setBatchReceiveTimeout(100);
-            listener.setForceStop(true);
-            listener.setMessageListener((ChannelAwareBatchMessageListener)
-                    (messages, channel) -> {
-                        try {
-                            consumer.consume(partition, messages, channel);
-                        } catch (java.io.IOException failure) {
-                            throw new org.springframework.amqp.ImmediateRequeueAmqpException("评论确认失败", failure);
-                        }
-                    });
-            listeners.add(listener);
-        }
-        return new WriteListeners(List.copyOf(listeners));
     }
 
     @Bean
@@ -96,7 +56,8 @@ class CommentMessageConfiguration {
     }
 
     @Bean
-    WriteListeners commentCountListeners(ConnectionFactory factory, CommentBroker broker, CommentCountWorker worker) {
+    @ConditionalOnProperty(name = "app.comment.count-sync", havingValue = "true", matchIfMissing = true)
+    CountListeners commentCountListeners(ConnectionFactory factory, CommentBroker broker, CommentCountWorker worker) {
         var listeners = new ArrayList<SimpleMessageListenerContainer>();
         for (int index = 0; index < CommentBroker.PARTITIONS; index++) {
             int partition = index;
@@ -111,11 +72,11 @@ class CommentMessageConfiguration {
             });
             listeners.add(listener);
         }
-        return new WriteListeners(List.copyOf(listeners));
+        return new CountListeners(List.copyOf(listeners));
     }
 
     @Bean
-    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+    @ConditionalOnProperty(
             name = "app.comment.index-sync", havingValue = "true", matchIfMissing = true)
     SimpleMessageListenerContainer commentIndexListener(ConnectionFactory factory, CommentBroker broker,
                                                          CommentIndexWorker worker,
@@ -160,7 +121,7 @@ class CommentMessageConfiguration {
                 "x-overflow", "reject-publish", "x-delivery-limit", -1));
     }
 
-    record WriteListeners(List<SimpleMessageListenerContainer> listeners)
+    record CountListeners(List<SimpleMessageListenerContainer> listeners)
             implements SmartLifecycle, InitializingBean, DisposableBean {
         @Override public void afterPropertiesSet() { listeners.forEach(SimpleMessageListenerContainer::afterPropertiesSet); }
         @Override public boolean isRunning() { return listeners.stream().allMatch(SimpleMessageListenerContainer::isRunning); }

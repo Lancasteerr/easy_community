@@ -76,7 +76,14 @@ public class CommentViews {
         return view(row, author, targetUsername, null);
     }
 
-    /** 确认或重放时，调用方已经校验该评论当前可见。 */
+    /** 首次发布使用事务结果，避免为刚创建的一级评论查询资料和点赞。 */
+    public Item submitted(CommentRow row, String username) {
+        var author = new Author(text(row.authorId()), username, null);
+        var likes = row.rootId() == 0 ? new LikeQueryService.Summary(0, false) : null;
+        return view(row, author, null, likes);
+    }
+
+    /** 重放时，调用方已经校验该评论当前可见。 */
     public Item published(CommentRow row, long user) {
         return items(List.of(row), user).getFirst();
     }
